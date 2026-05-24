@@ -16,6 +16,7 @@ from .models import (
     Show,
     ShowTag,
     Tag,
+    UserProfile,
     WatchHistory,
     Watchlist,
 )
@@ -152,3 +153,10 @@ class RecommendationAdmin(admin.ModelAdmin):
     list_display = ("user", "show", "score", "algorithm", "seen", "generated_at")
     list_filter = ("algorithm", "seen")
     readonly_fields = ("generated_at",)
+
+
+@admin.register(UserProfile)
+class UserProfileAdmin(admin.ModelAdmin):
+    list_display = ("user", "joined_at")
+    search_fields = ("user__username",)
+    readonly_fields = ("joined_at",)

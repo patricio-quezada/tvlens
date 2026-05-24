@@ -1,5 +1,5 @@
 """
-TVLens data models — 15 tables for a MovieLens-inspired TV recommendation platform.
+TVLens data models — 16 tables for a MovieLens-inspired TV recommendation platform.
 
 Tables:
   1. Genre              9. Rating
@@ -9,12 +9,14 @@ Tables:
   5. Episode           13. Tag
   6. Person            14. ShowTag
   7. CastMember        15. Recommendation
-  8. CrewMember
+  8. CrewMember        16. UserProfile
 """
 
 from django.conf import settings
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.db.models.signals import post_save
+from django.dispatch import receiver
 
 
 # ── 1. Genre ──────────────────────────────────────────────────────────────────
@@ -321,3 +323,25 @@ class Recommendation(models.Model):
 
     def __str__(self):
         return f"Rec: {self.show.name} for {self.user.username} ({self.algorithm})"
+
+
+# ── 16. UserProfile ──────────────────────────────────────────────────────────
+
+class UserProfile(models.Model):
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="profile",
+    )
+    bio = models.TextField(blank=True)
+    avatar_url = models.CharField(max_length=500, blank=True)
+    joined_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Profile of {self.user.username}"
+
+
+@receiver(post_save, sender=settings.AUTH_USER_MODEL)
+def create_user_profile(sender, instance, created, **kwargs):
+    if created:
+        UserProfile.objects.create(user=instance)
