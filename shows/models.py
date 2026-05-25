@@ -90,7 +90,7 @@ class Show(models.Model):
     @property
     def poster_url(self):
         if self.poster_path:
-            return f"{settings.TMDB_IMAGE_BASE_URL}/w500{self.poster_path}"
+            return f"{settings.TMDB_IMAGE_BASE_URL}/w342{self.poster_path}"
         return ""
 
     @property

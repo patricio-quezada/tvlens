@@ -38,6 +38,21 @@
         .card h3 { font-size: 0.9rem; margin-top: 0.5rem; }
         .card .rating { color: #fbbf24; font-size: 0.85rem; }
 
+        .row { margin-bottom: 2.5rem; }
+        .row-title { font-size: 1.2rem; margin-bottom: 0.75rem; color: #e0e0e0; font-weight: 600; }
+        .row-scroller { display: flex; gap: 1rem; overflow-x: auto; padding-bottom: 0.5rem; scroll-snap-type: x mandatory; scrollbar-width: thin; }
+        .row-scroller .card { flex: 0 0 180px; scroll-snap-align: start; }
+        .poster-placeholder { width: 100%; aspect-ratio: 2/3; border-radius: 8px; background: #1a1a1a; }
+        .card-meta { display: flex; flex-direction: column; align-items: center; gap: 0.25rem; margin-top: 0.25rem; }
+        .card-year { color: #666; font-size: 0.75rem; }
+        .card-genres { display: flex; gap: 0.25rem; flex-wrap: wrap; justify-content: center; }
+        .card-genre { background: #1a1a1a; color: #888; font-size: 0.65rem; padding: 0.1rem 0.4rem; border-radius: 4px; white-space: nowrap; }
+
+        .genre-pills { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+        .genre-pill { padding: 0.4rem 0.8rem; background: #1a1a1a; border: 1px solid #333; border-radius: 999px; font-size: 0.85rem; color: #00b4d8; display: inline-flex; align-items: center; gap: 0.4rem; }
+        .genre-pill:hover { background: #222; text-decoration: none; }
+        .genre-pill span { color: #666; font-size: 0.75rem; }
+
         .page-header { text-align: center; margin-bottom: 2rem; }
         .page-header h1 { font-size: 2rem; color: #00b4d8; }
         .page-header p { color: #888; margin-top: 0.5rem; }

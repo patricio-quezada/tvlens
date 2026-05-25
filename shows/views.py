@@ -2,15 +2,33 @@
 
 from django.contrib import messages
 from django.contrib.auth import login
+from django.db.models import Count
 from django.shortcuts import redirect, render
 
 from .forms import RegistrationForm
-from .models import Show
+from .models import Genre, Show
 
 
 def index(request):
-    shows = Show.objects.all()[:24]
-    return render(request, "shows/index.html", {"shows": shows})
+    base_qs = Show.objects.prefetch_related("genres")
+    popular = base_qs.all()[:12]
+    top_rated = base_qs.filter(vote_count__gte=50).order_by("-vote_average")[:12]
+    recently_added = base_qs.order_by("-created_at")[:12]
+    genres = (
+        Genre.objects.annotate(n=Count("shows"))
+        .filter(n__gt=0)
+        .order_by("-n")
+    )
+    return render(
+        request,
+        "shows/index.html",
+        {
+            "popular": popular,
+            "top_rated": top_rated,
+            "recently_added": recently_added,
+            "genres": genres,
+        },
+    )
 
 
 def register(request):

@@ -1,0 +1,26 @@
+{% if shows %}
+<section class="row">
+    <h2 class="row-title">{{ title }}</h2>
+    <div class="row-scroller">
+        {% for show in shows %}
+        <div class="card">
+            {% if show.poster_url %}
+            <img src="{{ show.poster_url }}" alt="{{ show.name }}" loading="lazy">
+            {% else %}
+            <div class="poster-placeholder"></div>
+            {% endif %}
+            <h3>{{ show.name }}</h3>
+            <div class="card-meta">
+                {% if show.first_air_date %}<span class="card-year">{{ show.first_air_date.year }}</span>{% endif %}
+                <div class="card-genres">
+                    {% for g in show.genres.all|slice:":2" %}
+                    <span class="card-genre">{{ g.name }}</span>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="rating">★ {{ show.vote_average|floatformat:1 }}</div>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}

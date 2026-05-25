@@ -5,23 +5,19 @@
     <h1>TVLens</h1>
     <p>MovieLens-inspired TV show recommendations</p>
 </div>
-{% if shows %}
-<div class="grid">
-    {% for show in shows %}
-    <div class="card">
-        {% if show.poster_url %}
-        <img src="{{ show.poster_url }}" alt="{{ show.name }}">
-        {% else %}
-        <img src="" alt="{{ show.name }}">
-        {% endif %}
-        <h3>{{ show.name }}</h3>
-        <div class="rating">★ {{ show.vote_average|floatformat:1 }}</div>
+
+{% include "shows/_row.html" with title="Popular" shows=popular %}
+{% include "shows/_row.html" with title="Highest rated" shows=top_rated %}
+{% include "shows/_row.html" with title="Recently added" shows=recently_added %}
+
+{% if genres %}
+<section class="row">
+    <h2 class="row-title">Browse by genre</h2>
+    <div class="genre-pills">
+        {% for g in genres %}
+        <a href="#" class="genre-pill">{{ g.name }} <span>{{ g.n }}</span></a>
+        {% endfor %}
     </div>
-    {% endfor %}
-</div>
-{% else %}
-<div class="empty">
-    <p>No shows yet. Run <code>python manage.py ingest_shows</code> to get started.</p>
-</div>
+</section>
 {% endif %}
 {% endblock %}
