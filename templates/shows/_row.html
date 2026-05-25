@@ -4,22 +4,24 @@
     <div class="row-scroller">
         {% for show in shows %}
         <div class="card">
-            {% if show.poster_url %}
-            <img src="{{ show.poster_url }}" alt="{{ show.name }}" loading="lazy">
-            {% else %}
-            <div class="poster-placeholder"></div>
-            {% endif %}
-            <h3>{{ show.name }}</h3>
+            <div class="card-poster">
+                {% if show.poster_url %}
+                <img src="{{ show.poster_url }}" alt="{{ show.name }}" loading="lazy">
+                {% else %}
+                <div class="poster-placeholder"></div>
+                {% endif %}
+                <div class="poster-rating{% if show.vote_count == 0 %} empty{% endif %}">
+                    {% if show.vote_count > 0 %}★ {{ show.vote_average|floatformat:1 }}{% else %}—{% endif %}
+                </div>
+            </div>
+            <div class="card-title"><h3>{{ show.name }}</h3></div>
             <div class="card-meta">
                 {% if show.first_air_date %}<span class="card-year">{{ show.first_air_date.year }}</span>{% endif %}
                 <div class="card-genres">
                     {% for g in show.genres.all|slice:":2" %}
-                    <span class="card-genre">{{ g.name }}</span>
+                    <span class="card-genre{% if g.id in favorite_genre_ids %} favorite{% endif %}">{{ g.name }}</span>
                     {% endfor %}
                 </div>
-            </div>
-            <div class="rating">
-                {% if show.vote_count > 0 %}★ {{ show.vote_average|floatformat:1 }}{% else %}<span class="rating-empty">Not rated</span>{% endif %}
             </div>
         </div>
         {% endfor %}

@@ -3,19 +3,33 @@
 {% block content %}
 <div class="page-header">
     <h1>TVLens</h1>
-    <p>MovieLens-inspired TV show recommendations</p>
+    <p>Watch what fits you, not just what's popular.</p>
 </div>
 
-{% include "shows/_row.html" with title="Popular" shows=popular %}
-{% include "shows/_row.html" with title="Highest rated" shows=top_rated %}
-{% include "shows/_row.html" with title="Recently added" shows=recently_added %}
+{% if user.is_authenticated %}
+    {% if top_picks %}
+        {% include "shows/_row.html" with title=top_picks_title shows=top_picks favorite_genre_ids=favorite_genre_ids %}
+    {% else %}
+        {% include "shows/_row_empty.html" with title=top_picks_title message="Rate a few shows and we'll surface picks tailored to you here." cta_label="Start rating" cta_url="#" %}
+    {% endif %}
+{% endif %}
+
+{% include "shows/_row.html" with title="Recently added" shows=recently_added favorite_genre_ids=favorite_genre_ids %}
+
+{% if user.is_authenticated %}
+    {% if side_quests %}
+        {% include "shows/_row.html" with title="Side Quests" shows=side_quests favorite_genre_ids=favorite_genre_ids %}
+    {% else %}
+        {% include "shows/_row_empty.html" with title="Side Quests" message="Off-the-beaten-path picks based on what you rate highly. Unlocks once you've rated a handful of shows." cta_label=None cta_url=None %}
+    {% endif %}
+{% endif %}
 
 {% if genres %}
 <section class="row">
     <h2 class="row-title">Browse by genre</h2>
     <div class="genre-pills">
         {% for g in genres %}
-        <a href="#" class="genre-pill">{{ g.name }} <span>{{ g.n }}</span></a>
+        <a href="#" class="genre-pill{% if g.id in favorite_genre_ids %} favorite{% endif %}">{{ g.name }} <span>{{ g.n }}</span></a>
         {% endfor %}
     </div>
 </section>

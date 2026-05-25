@@ -11,8 +11,18 @@ from .models import Genre, Show
 
 def index(request):
     base_qs = Show.objects.prefetch_related("genres")
-    popular = base_qs.all()[:12]
-    top_rated = base_qs.filter(vote_count__gte=50).order_by("-vote_average")[:12]
+
+    top_picks: list = []
+    side_quests: list = []
+    favorite_genre_ids: set = set()
+    top_picks_title = None
+
+    if request.user.is_authenticated:
+        top_picks_title = f"Top Picks for {request.user.username}"
+        # TODO(Q-17/Q-18): populate top_picks from personalized recommender
+        # TODO(Q-20): populate side_quests from cross-genre neighborhood walk
+        # TODO(Q-10 follow-up): compute favorite_genre_ids from user's ≥4-star ratings
+
     recently_added = base_qs.order_by("-created_at")[:12]
     genres = (
         Genre.objects.annotate(n=Count("shows"))
@@ -23,10 +33,12 @@ def index(request):
         request,
         "shows/index.html",
         {
-            "popular": popular,
-            "top_rated": top_rated,
+            "top_picks": top_picks,
+            "top_picks_title": top_picks_title,
+            "side_quests": side_quests,
             "recently_added": recently_added,
             "genres": genres,
+            "favorite_genre_ids": favorite_genre_ids,
         },
     )
 
