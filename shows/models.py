@@ -333,8 +333,6 @@ class UserProfile(models.Model):
         on_delete=models.CASCADE,
         related_name="profile",
     )
-    bio = models.TextField(blank=True)
-    avatar_url = models.CharField(max_length=500, blank=True)
     joined_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
