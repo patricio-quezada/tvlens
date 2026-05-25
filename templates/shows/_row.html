@@ -18,7 +18,9 @@
                     {% endfor %}
                 </div>
             </div>
-            <div class="rating">★ {{ show.vote_average|floatformat:1 }}</div>
+            <div class="rating">
+                {% if show.vote_count > 0 %}★ {{ show.vote_average|floatformat:1 }}{% else %}<span class="rating-empty">Not rated</span>{% endif %}
+            </div>
         </div>
         {% endfor %}
     </div>
