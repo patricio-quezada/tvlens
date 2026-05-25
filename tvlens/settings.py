@@ -118,3 +118,14 @@ TMDB_IMAGE_BASE_URL = "https://image.tmdb.org/t/p"
 
 SHOWS_PER_PAGE = 24
 REVIEWS_PER_PAGE = 10
+
+# Email (console backend in dev — emails print to terminal)
+
+EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "noreply@tvlens.org")
+
+# Authentication
+
+LOGIN_URL = "/accounts/login/"
+LOGIN_REDIRECT_URL = "/"
+LOGOUT_REDIRECT_URL = "/"

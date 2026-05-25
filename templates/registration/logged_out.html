@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block title %}Logged out — TVLens{% endblock %}
+{% block content %}
+<div class="form-card">
+    <h1>You've been logged out</h1>
+    <p><a href="{% url 'login' %}">Log back in</a> or <a href="{% url 'shows:index' %}">return home</a>.</p>
+</div>
+{% endblock %}

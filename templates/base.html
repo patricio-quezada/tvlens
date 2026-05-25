@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}TVLens{% endblock %}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: system-ui, sans-serif; background: #0f0f0f; color: #e0e0e0; line-height: 1.5; }
+        a { color: #00b4d8; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        code { background: #1a1a1a; padding: 0.1rem 0.4rem; border-radius: 4px; font-size: 0.9rem; }
+
+        nav { padding: 1rem 2rem; border-bottom: 1px solid #222; display: flex; gap: 1.5rem; align-items: center; }
+        nav .brand { font-weight: 700; color: #00b4d8; margin-right: auto; font-size: 1.1rem; }
+        nav .user { color: #888; }
+        nav form { display: inline; }
+        nav button { background: none; border: none; color: #00b4d8; cursor: pointer; font-family: inherit; font-size: inherit; padding: 0; }
+        nav button:hover { text-decoration: underline; }
+
+        main { max-width: 1200px; margin: 0 auto; padding: 2rem; }
+
+        .form-card { max-width: 400px; margin: 2rem auto; }
+        .form-card h1 { margin-bottom: 1rem; }
+        .form-card p { margin-top: 0.75rem; }
+        .form-card label { color: #888; font-size: 0.85rem; display: block; margin-top: 0.5rem; }
+        .form-card input, .form-card textarea { width: 100%; padding: 0.5rem; margin-top: 0.25rem; background: #1a1a1a; border: 1px solid #333; color: #e0e0e0; border-radius: 4px; font-family: inherit; font-size: 1rem; }
+        .form-card button[type=submit] { margin-top: 1.5rem; padding: 0.6rem 1.2rem; background: #00b4d8; border: none; color: #0f0f0f; border-radius: 4px; cursor: pointer; font-weight: 600; font-size: 0.95rem; }
+        .form-card .errorlist { color: #f87171; font-size: 0.85rem; margin: 0.25rem 0; padding-left: 1rem; }
+        .form-card .helptext { color: #666; font-size: 0.75rem; display: block; margin-top: 0.25rem; }
+
+        .messages { list-style: none; margin-bottom: 1rem; }
+        .messages li { padding: 0.5rem 1rem; background: #1a3a4a; border-left: 3px solid #00b4d8; border-radius: 4px; margin-bottom: 0.5rem; }
+
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 1.5rem; }
+        .card { text-align: center; }
+        .card img { width: 100%; border-radius: 8px; aspect-ratio: 2/3; object-fit: cover; background: #1a1a1a; }
+        .card h3 { font-size: 0.9rem; margin-top: 0.5rem; }
+        .card .rating { color: #fbbf24; font-size: 0.85rem; }
+
+        .page-header { text-align: center; margin-bottom: 2rem; }
+        .page-header h1 { font-size: 2rem; color: #00b4d8; }
+        .page-header p { color: #888; margin-top: 0.5rem; }
+
+        .empty { text-align: center; padding: 4rem 2rem; color: #666; }
+    </style>
+</head>
+<body>
+    <nav>
+        <a href="{% url 'shows:index' %}" class="brand">TVLens</a>
+        {% if user.is_authenticated %}
+            <span class="user">{{ user.username }}</span>
+            <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit">Logout</button></form>
+        {% else %}
+            <a href="{% url 'login' %}">Login</a>
+            <a href="{% url 'register' %}">Register</a>
+        {% endif %}
+    </nav>
+    <main>
+        {% if messages %}
+        <ul class="messages">
+            {% for message in messages %}<li>{{ message }}</li>{% endfor %}
+        </ul>
+        {% endif %}
+        {% block content %}{% endblock %}
+    </main>
+</body>
+</html>

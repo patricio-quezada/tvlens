@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Sign up — TVLens{% endblock %}
+{% block content %}
+<div class="form-card">
+    <h1>Create your account</h1>
+    <form method="post">{% csrf_token %}{{ form.as_p }}<button type="submit">Sign up</button></form>
+    <p>Already have an account? <a href="{% url 'login' %}">Log in</a>.</p>
+</div>
+{% endblock %}
