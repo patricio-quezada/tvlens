@@ -1,118 +1,89 @@
 # TVLens
 
-A **MovieLens-inspired** TV show recommendation platform built with Django and powered by [TMDB](https://www.themoviedb.org/).
+MovieLens-style TV show recommendation platform. Django + TMDb API.
 
-TVLens lets users discover TV shows, rate them on a 0.5–5 star scale, write reviews, tag shows with descriptive labels, and receive personalized recommendations — all backed by real data from The Movie Database.
+Privacy-first profiles (no public surface, matching MovieLens). Personalization stack: explicit ratings (0.5–5.0, half-star) + implicit signals (completion, drop point, watch velocity) + community tags + content-based fallbacks. Cold-start via popularity until rating volume is sufficient.
 
-## Features
+## Data model
 
-- **Discover & Search** — Browse trending and popular TV shows ingested from TMDB
-- **Ratings** — Rate shows on a 0.5–5.0 scale (MovieLens-style)
-- **Reviews** — Write and read reviews with spoiler flags
-- **Tagging** — Apply community-driven tags with relevance scores (inspired by MovieLens genome tags)
-- **Watchlist** — Save shows for later with priority levels
-- **Watch History** — Track episode-level viewing progress
-- **Recommendations** — Pluggable recommendation engine (collaborative, content-based, hybrid, popularity)
-- **Rich Data Model** — 15 tables covering shows, seasons, episodes, cast, crew, and more
-- **Admin Dashboard** — Full Django admin with inlines, filters, and autocomplete
-
-## Data Model (15 Tables)
+16 tables in `shows/models.py`:
 
 | # | Table | Description |
 |---|-------|-------------|
-| 1 | Genre | TV genres from TMDB |
+| 1 | Genre | TMDb genres |
 | 2 | Network | Broadcast/streaming networks |
-| 3 | Show | Core show metadata |
-| 4 | Season | Season-level details |
-| 5 | Episode | Episode-level details |
-| 6 | Person | Actors, directors, writers |
-| 7 | CastMember | Show ↔ Person (acting roles) |
-| 8 | CrewMember | Show ↔ Person (crew jobs) |
-| 9 | Rating | User ratings (0.5–5.0) |
-| 10 | Review | User reviews with spoiler flags |
-| 11 | Watchlist | User watchlist with priority |
-| 12 | WatchHistory | Episode-level watch tracking |
-| 13 | Tag | Community tag labels |
-| 14 | ShowTag | User-applied tags with relevance |
-| 15 | Recommendation | Generated show recommendations |
+| 3 | Show | Series metadata |
+| 4 | Season | Per-season detail |
+| 5 | Episode | Per-episode detail |
+| 6 | Person | Cast and crew |
+| 7 | CastMember | Show ↔ Person (acting) |
+| 8 | CrewMember | Show ↔ Person (crew) |
+| 9 | Rating | User ratings 0.5–5.0 |
+| 10 | Review | User reviews + spoiler flag |
+| 11 | Watchlist | User watchlist + priority |
+| 12 | WatchHistory | Episode-level viewing |
+| 13 | Tag | Community tag vocabulary |
+| 14 | ShowTag | User-applied tags + relevance |
+| 15 | Recommendation | Generated picks (collab / content / hybrid / popular) |
+| 16 | UserProfile | OneToOne extension on `auth.User` |
 
-## Quick Start
+## Run
+
+Requires Python 3.12+, a TMDb v3 API key, Django 6.0+.
 
 ```bash
-# 1. Clone and enter the project
-git clone https://github.com/YOUR_USERNAME/tvlens.git
-cd tvlens
-
-# 2. Create a virtual environment
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-
-# 3. Install dependencies
+python -m venv venv && source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-
-# 4. Configure environment
-cp .env.example .env
-# Edit .env — add your TMDB_API_KEY and a SECRET_KEY
-
-# 5. Run migrations
+cp .env.example .env  # fill SECRET_KEY and TMDB_API_KEY
 python manage.py migrate
-
-# 6. Create a superuser
 python manage.py createsuperuser
-
-# 7. (Optional) Ingest shows from TMDB
 python manage.py ingest_shows --pages 5
-
-# 8. Start the development server
 python manage.py runserver
 ```
 
-Visit **http://127.0.0.1:8000/admin/** to explore the data.
+App: `/`. Admin: `/admin/`. Auth: `/accounts/{login,register,password_reset}/`.
 
-## Management Commands
+## Management commands
 
-| Command | Description |
-|---------|-------------|
-| `python manage.py ingest_shows` | Ingest 5 pages of popular shows |
-| `python manage.py ingest_shows --pages 20` | Ingest 20 pages (~400 shows) |
-| `python manage.py ingest_shows --show 1396` | Ingest a single show by TMDB ID |
+| Command | Effect |
+|---------|--------|
+| `ingest_shows` | Pull discover pages from TMDb (default 5) |
+| `ingest_shows --pages N` | N pages × 20 shows |
+| `ingest_shows --show <tmdb_id>` | Single show |
+| `ingest_shows --sort-by <field>` | Override discover sort |
 
-## Project Structure
+Pipeline is idempotent; reruns update via `update_or_create`.
+
+## Layout
 
 ```
 tvlens/
 ├── manage.py
 ├── requirements.txt
-├── .env.example
-├── .gitignore
-├── README.md
-├── tvlens/
-│   ├── __init__.py
-│   ├── settings.py
-│   ├── urls.py
-│   └── wsgi.py
 ├── shows/
-│   ├── __init__.py
-│   ├── apps.py
-│   ├── models.py          # 15 tables
-│   ├── admin.py            # Full admin config
-│   ├── views.py
+│   ├── models.py              # 16 tables
+│   ├── admin.py
+│   ├── forms.py               # RegistrationForm (UserCreationForm + email)
+│   ├── views.py               # index, register
 │   ├── urls.py
-│   ├── tmdb_client.py      # TMDB API wrapper
-│   ├── ingestion.py        # Data ingestion pipeline
+│   ├── tmdb_client.py         # TMDb v3 client (api_key query param)
+│   ├── ingestion.py           # Ingestor: discover → shows → seasons → episodes → credits
 │   ├── migrations/
-│   └── management/
-│       └── commands/
-│           └── ingest_shows.py
+│   └── management/commands/
+│       └── ingest_shows.py
 ├── templates/
-│   └── shows/
-│       └── index.html
-└── static/
+│   ├── base.html              # Cloud Dancer warm-dark theme
+│   ├── shows/
+│   │   ├── index.html
+│   │   ├── _row.html          # Horizontal card carousel
+│   │   └── _row_empty.html    # Cold-start empty-state row
+│   └── registration/          # Django auth + custom register
+└── tvlens/                    # Project config (settings, urls, wsgi)
 ```
 
-## TMDB API Key
+## Stack
 
-TVLens uses the free [TMDB API](https://developer.themoviedb.org/docs/getting-started) for show data. Sign up at [themoviedb.org](https://www.themoviedb.org/signup) and generate an API key under **Settings → API**.
+Django 6.0, SQLite (dev) / PostgreSQL (planned), `django-extensions`, `python-dotenv`, `requests`. No JS framework — server-rendered with progressive enhancement planned via HTMX.
 
 ## License
 
