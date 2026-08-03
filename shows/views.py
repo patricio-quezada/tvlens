@@ -3,10 +3,11 @@
 from django.contrib import messages
 from django.contrib.auth import login
 from django.db.models import Count
-from django.shortcuts import redirect, render
+from django.shortcuts import get_object_or_404, redirect, render
 
 from .forms import RegistrationForm
 from .models import Genre, Show
+from .recommenders import similar_by_cast
 
 
 def index(request):
@@ -40,6 +41,16 @@ def index(request):
             "genres": genres,
             "favorite_genre_ids": favorite_genre_ids,
         },
+    )
+
+
+def similar(request, pk):
+    """Shows connected to this one by shared cast. Layer 1, first edge."""
+    show = get_object_or_404(Show, pk=pk)
+    return render(
+        request,
+        "shows/similar.html",
+        {"show": show, "similar_shows": similar_by_cast(show)},
     )
 
 

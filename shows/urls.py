@@ -8,4 +8,5 @@ app_name = "shows"
 
 urlpatterns = [
     path("", views.index, name="index"),
+    path("shows/<int:pk>/similar/", views.similar, name="similar"),
 ]
