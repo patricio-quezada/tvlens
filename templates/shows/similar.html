@@ -4,9 +4,10 @@
 <section class="row">
     <h2 class="row-title">Shows like {{ show.name }}</h2>
 
-    {% if similar_shows %}
+    <h3 class="edge-title">By shared cast</h3>
+    {% if by_cast %}
     <ol class="similar-list">
-        {% for s in similar_shows %}
+        {% for s in by_cast %}
         <li>
             <span class="similar-count">{{ s.shared_cast }}</span>
             <span class="similar-name">{{ s.name }}</span>
@@ -17,6 +18,22 @@
     <p class="similar-note">Ranked by how many cast members each show shares with {{ show.name }}.</p>
     {% else %}
     <p class="similar-note">Nothing shares a cast member with this one yet.</p>
+    {% endif %}
+
+    <h3 class="edge-title">By shared crew</h3>
+    {% if by_crew %}
+    <ol class="similar-list">
+        {% for s in by_crew %}
+        <li>
+            <span class="similar-count">{{ s.shared_crew }}</span>
+            <span class="similar-name">{{ s.name }}</span>
+            {% if s.first_air_date %}<span class="similar-year">{{ s.first_air_date.year }}</span>{% endif %}
+        </li>
+        {% endfor %}
+    </ol>
+    <p class="similar-note">Ranked by how many crew members each show shares with {{ show.name }}. Casting roles do not count.</p>
+    {% else %}
+    <p class="similar-note">Nothing shares a crew member with this one yet.</p>
     {% endif %}
 </section>
 {% endblock %}

@@ -7,7 +7,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 
 from .forms import RegistrationForm
 from .models import Genre, Show
-from .recommenders import similar_by_cast
+from .recommenders import similar_by_cast, similar_by_crew
 
 
 def index(request):
@@ -45,12 +45,16 @@ def index(request):
 
 
 def similar(request, pk):
-    """Shows connected to this one by shared cast. Layer 1, first edge."""
+    """Shows connected to this one by shared people. Layer 1, both edges."""
     show = get_object_or_404(Show, pk=pk)
     return render(
         request,
         "shows/similar.html",
-        {"show": show, "similar_shows": similar_by_cast(show)},
+        {
+            "show": show,
+            "by_cast": similar_by_cast(show),
+            "by_crew": similar_by_crew(show),
+        },
     )
 
 
