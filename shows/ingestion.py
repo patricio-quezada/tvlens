@@ -106,10 +106,13 @@ class Ingestor:
             )
             show.networks.add(network)
 
-        # Credits
+        # Credits. Series-level first, then the episode rollup on top, so
+        # aggregate fills episode_count on rows the series pass created
+        # rather than the other way round.
         credits = data.get("credits", {})
         self._upsert_cast(show, credits.get("cast", []))
         self._upsert_crew(show, credits.get("crew", []))
+        self.ingest_aggregate_credits(show)
 
         # Seasons & episodes
         for s in data.get("seasons", []):
@@ -118,10 +121,77 @@ class Ingestor:
         logger.info("Ingested show: %s (tmdb_id=%s)", show.name, tmdb_id)
         return show
 
+    # ── aggregate credits ─────────────────────────────────────────────────
+
+    @transaction.atomic
+    def ingest_aggregate_credits(self, show):
+        """Pull the episode rollup for one show and fill in episode counts.
+
+        Fetches only /tv/{id}/aggregate_credits, so this is safe to run on its
+        own against an already-ingested catalog. It does not touch seasons or
+        episodes, which is what makes a backfill cheap.
+
+        Returns (cast_rows, crew_rows) touched.
+        """
+        agg = self.client.get_tv_aggregate_credits(show.tmdb_id)
+        if not agg:
+            logger.warning(
+                "No aggregate credits for %s (tmdb_id=%s)", show.name, show.tmdb_id
+            )
+            return 0, 0
+
+        cast_rows = self._upsert_aggregate_cast(show, agg.get("cast", []))
+        crew_rows = self._upsert_aggregate_crew(show, agg.get("crew", []))
+        logger.info(
+            "Aggregate credits for %s: %d cast rows, %d crew rows",
+            show.name,
+            cast_rows,
+            crew_rows,
+        )
+        return cast_rows, crew_rows
+
+    def _upsert_aggregate_cast(self, show, cast_list):
+        """One row per (person, character). A person may hold several roles."""
+        rows = 0
+        for entry in cast_list:
+            person = self._get_or_create_person(entry)
+            for role in entry.get("roles", []):
+                CastMember.objects.update_or_create(
+                    show=show,
+                    person=person,
+                    character=role.get("character", ""),
+                    defaults={
+                        "order": entry.get("order", 0),
+                        "episode_count": role.get("episode_count"),
+                    },
+                )
+                rows += 1
+        return rows
+
+    def _upsert_aggregate_crew(self, show, crew_list):
+        """One row per (person, job). Department sits on the person here,
+        not on the individual job, which differs from series-level credits."""
+        rows = 0
+        for entry in crew_list:
+            person = self._get_or_create_person(entry)
+            department = entry.get("department", "") or ""
+            for job in entry.get("jobs", []):
+                CrewMember.objects.update_or_create(
+                    show=show,
+                    person=person,
+                    job=job.get("job", ""),
+                    defaults={
+                        "department": department,
+                        "episode_count": job.get("episode_count"),
+                    },
+                )
+                rows += 1
+        return rows
+
     # ── private helpers ───────────────────────────────────────────────────
 
     def _upsert_cast(self, show, cast_list):
-        for entry in cast_list[:25]:  # top 25 billed
+        for entry in cast_list:
             person = self._get_or_create_person(entry)
             CastMember.objects.update_or_create(
                 show=show,

@@ -167,6 +167,12 @@ class CastMember(models.Model):
     person = models.ForeignKey(Person, on_delete=models.CASCADE, related_name="cast_roles")
     character = models.CharField(max_length=300, blank=True)
     order = models.IntegerField(default=0)
+    episode_count = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="Episodes this person appeared in. Null means a series-level "
+                  "credit with no episode rollup.",
+    )
 
     class Meta:
         ordering = ["order"]
@@ -183,6 +189,12 @@ class CrewMember(models.Model):
     person = models.ForeignKey(Person, on_delete=models.CASCADE, related_name="crew_roles")
     job = models.CharField(max_length=200)
     department = models.CharField(max_length=200, blank=True)
+    episode_count = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="Episodes this person worked on. Null means a series-level "
+                  "credit with no episode rollup.",
+    )
 
     class Meta:
         unique_together = ["show", "person", "job"]

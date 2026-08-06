@@ -69,6 +69,15 @@ class TMDBClient:
             params={"append_to_response": append_to_response},
         )
 
+    def get_tv_aggregate_credits(self, tv_id):
+        """Credits rolled up across every episode, with per-role episode counts.
+
+        Differs from the `credits` append on get_tv_details, which returns only
+        series-level billing. Cast entries carry `roles: [{character,
+        episode_count}]` and crew carry `jobs: [{job, episode_count}]`.
+        """
+        return self._get(f"/tv/{tv_id}/aggregate_credits")
+
     def get_tv_season(self, tv_id, season_number):
         """Season details with episode list."""
         return self._get(f"/tv/{tv_id}/season/{season_number}")
