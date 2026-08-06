@@ -9,7 +9,7 @@
     <ol class="similar-list">
         {% for s in by_people %}
         <li>
-            <span class="similar-count">{{ forloop.counter }}</span>
+            <span class="similar-rank">{{ forloop.counter }}</span>
             <span class="similar-name">{{ s.name }}</span>
             {% if s.first_air_date %}<span class="similar-year">{{ s.first_air_date.year }}</span>{% endif %}
             <span class="similar-shared">{{ s.shared_people }} shared {{ s.shared_people|pluralize:"person,people" }}</span>

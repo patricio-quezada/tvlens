@@ -26,6 +26,13 @@ from .models import CastMember, CrewMember, Show
 # unrelated shows look related. On the 100-show catalog it linked The Boys to
 # Grey's Anatomy on four shared people, every one of them a casting director.
 # Excluding these costs two shows of coverage and removes thirteen false pairs.
+#
+# Exact titles by choice (2026-08-06 review): the list is auditable, but a new
+# TMDb import can mint a variant that slips past it. When touching ingest,
+# re-run: CrewMember.objects.filter(job__icontains="casting")
+#             .exclude(job__in=SERVICE_JOBS)
+# and add whatever it finds. Every catalog job containing "casting" so far IS
+# a casting service.
 SERVICE_JOBS = [
     "Casting",
     "Original Casting",
@@ -34,6 +41,15 @@ SERVICE_JOBS = [
     "Casting Director",
     "Local Casting",
     "Voice Casting",
+    # Variants found leaking in the 2026-08-06 review, 45 rows:
+    "Additional Casting",
+    "Background Casting Director",
+    "Casting Coordinator",
+    "Casting Researcher",
+    "Extras Casting",
+    "Extras Casting Assistant",
+    "Extras Casting Coordinator",
+    "Location Casting",
 ]
 
 
@@ -59,7 +75,10 @@ def similar_by_people(show, limit=12):
     episode_count is a series-level credit with no episode rollup, so it
     weighs zero; the person still counts as shared, they just add no score.
     A missing number_of_episodes also yields zero rather than a division
-    error, though every show in the catalog has one today.
+    error, though every show in the catalog has one today. Ratios cap at 1.0:
+    credit rollups drift ahead of the episode total on returning series
+    (162 rows in the catalog, e.g. 595 credited episodes of a 594-episode
+    run), and nobody made more than all of a show.
 
     Each result carries `score` and `shared_people`. The page sorts by score
     and displays the count. Ties break on popularity, matching the other
@@ -72,9 +91,11 @@ def similar_by_people(show, limit=12):
     """
 
     def fold_best(best, person_id, episode_count):
-        # Null weighs zero but still registers the person as shared.
+        # Null weighs zero but still registers the person as shared. Explicit
+        # membership check rather than a sentinel default, so no conceivable
+        # count value can keep a shared person out of the dict.
         count = episode_count or 0
-        if count > best.get(person_id, -1):
+        if person_id not in best or count > best[person_id]:
             best[person_id] = count
 
     own_best = {}
@@ -113,12 +134,12 @@ def similar_by_people(show, limit=12):
 
     own_episodes = show.number_of_episodes or 0
     results = []
-    for other in Show.objects.filter(pk__in=best_by_show).prefetch_related("genres"):
+    for other in Show.objects.filter(pk__in=best_by_show):
         other_episodes = other.number_of_episodes or 0
         score = 0.0
         for person_id, other_count in best_by_show[other.pk].items():
-            own_ratio = own_best[person_id] / own_episodes if own_episodes else 0.0
-            other_ratio = other_count / other_episodes if other_episodes else 0.0
+            own_ratio = min(own_best[person_id] / own_episodes, 1.0) if own_episodes else 0.0
+            other_ratio = min(other_count / other_episodes, 1.0) if other_episodes else 0.0
             score += min(own_ratio, other_ratio)
         other.score = score
         other.shared_people = len(best_by_show[other.pk])
