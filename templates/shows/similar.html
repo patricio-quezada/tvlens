@@ -4,6 +4,23 @@
 <section class="row">
     <h2 class="row-title">Shows like {{ show.name }}</h2>
 
+    <h3 class="edge-title">By shared people</h3>
+    {% if by_people %}
+    <ol class="similar-list">
+        {% for s in by_people %}
+        <li>
+            <span class="similar-count">{{ forloop.counter }}</span>
+            <span class="similar-name">{{ s.name }}</span>
+            {% if s.first_air_date %}<span class="similar-year">{{ s.first_air_date.year }}</span>{% endif %}
+            <span class="similar-shared">{{ s.shared_people }} shared {{ s.shared_people|pluralize:"person,people" }}</span>
+        </li>
+        {% endfor %}
+    </ol>
+    <p class="similar-note">Cast and crew together, weighted by how much of each show the shared people actually made. Casting roles do not count.</p>
+    {% else %}
+    <p class="similar-note">Nothing shares a person with this one yet.</p>
+    {% endif %}
+
     <h3 class="edge-title">By shared cast</h3>
     {% if by_cast %}
     <ol class="similar-list">

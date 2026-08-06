@@ -8,6 +8,10 @@ The second edge is crew, which is denser than cast and catches franchise
 structure that cast cannot. It needs one correction: not every job on a
 production says something about the show. See SERVICE_JOBS below.
 
+The merged edge weights every shared person by episode share, so a lead who
+carried a whole run outranks a crowd of one-episode guests. See
+similar_by_people and QUE-9 for the four decisions behind it.
+
 Later layers stack genre and learned weights on top of these edges.
 See QUE-5 for the full design.
 """
@@ -31,6 +35,97 @@ SERVICE_JOBS = [
     "Local Casting",
     "Voice Casting",
 ]
+
+
+def similar_by_people(show, limit=12):
+    """Return shows ranked by episode-weighted shared people, cast and crew merged.
+
+    The rule, decided on QUE-9:
+
+        score(A, B) = sum over shared people of
+            min(episode_count on A / A.number_of_episodes,
+                episode_count on B / B.number_of_episodes)
+
+    Relative counts make cast and crew the same unit, episode share, so the
+    two edges merge without a cast-versus-crew exchange rate. `min` means the
+    edge takes the weaker end: a Breaking Bad lead who did three episodes of
+    Better Call Saul does not create a strong edge. No floor: every shared
+    person contributes their share, however small. Service jobs stay excluded
+    on both sides because a casting office links productions, not shows, and
+    sixty episodes of casting credit does not change that.
+
+    A person can hold several roles on one show, across cast and crew. They
+    count once per show pair, at their best episode_count on each show. A null
+    episode_count is a series-level credit with no episode rollup, so it
+    weighs zero; the person still counts as shared, they just add no score.
+    A missing number_of_episodes also yields zero rather than a division
+    error, though every show in the catalog has one today.
+
+    Each result carries `score` and `shared_people`. The page sorts by score
+    and displays the count. Ties break on popularity, matching the other
+    edges. Computed in Python after fetching rows: the source-side ratio does
+    not inject cleanly into a single ORM annotation, and at catalog scale a
+    materialised edge table is not yet worth its upkeep.
+
+    Returns a list of Show objects, empty when the show has no qualifying
+    people recorded.
+    """
+
+    def fold_best(best, person_id, episode_count):
+        # Null weighs zero but still registers the person as shared.
+        count = episode_count or 0
+        if count > best.get(person_id, -1):
+            best[person_id] = count
+
+    own_best = {}
+    for person_id, count in CastMember.objects.filter(show=show).values_list(
+        "person_id", "episode_count"
+    ):
+        fold_best(own_best, person_id, count)
+    for person_id, count in (
+        CrewMember.objects.filter(show=show)
+        .exclude(job__in=SERVICE_JOBS)
+        .values_list("person_id", "episode_count")
+    ):
+        fold_best(own_best, person_id, count)
+    if not own_best:
+        return []
+
+    # Unlike the Show-side join in similar_by_crew, these filters run on the
+    # credit tables directly, so .exclude() drops casting rows and nothing else.
+    person_ids = list(own_best)
+    best_by_show = {}
+    for show_id, person_id, count in (
+        CastMember.objects.filter(person_id__in=person_ids)
+        .exclude(show=show)
+        .values_list("show_id", "person_id", "episode_count")
+    ):
+        fold_best(best_by_show.setdefault(show_id, {}), person_id, count)
+    for show_id, person_id, count in (
+        CrewMember.objects.filter(person_id__in=person_ids)
+        .exclude(show=show)
+        .exclude(job__in=SERVICE_JOBS)
+        .values_list("show_id", "person_id", "episode_count")
+    ):
+        fold_best(best_by_show.setdefault(show_id, {}), person_id, count)
+    if not best_by_show:
+        return []
+
+    own_episodes = show.number_of_episodes or 0
+    results = []
+    for other in Show.objects.filter(pk__in=best_by_show).prefetch_related("genres"):
+        other_episodes = other.number_of_episodes or 0
+        score = 0.0
+        for person_id, other_count in best_by_show[other.pk].items():
+            own_ratio = own_best[person_id] / own_episodes if own_episodes else 0.0
+            other_ratio = other_count / other_episodes if other_episodes else 0.0
+            score += min(own_ratio, other_ratio)
+        other.score = score
+        other.shared_people = len(best_by_show[other.pk])
+        results.append(other)
+
+    results.sort(key=lambda s: (-s.score, -s.popularity))
+    return results[:limit]
 
 
 def similar_by_cast(show, limit=12):
