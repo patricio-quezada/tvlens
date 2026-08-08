@@ -95,15 +95,39 @@ class SimilarByPeopleTests(TestCase):
     def test_show_with_no_qualifying_people_returns_empty_list(self):
         self.assertEqual(similar_by_people(self.a), [])
 
-    def test_zero_episode_source_falls_back_to_rating_order(self):
-        # Decided on QUE-11 (2026-08-07): when every candidate scores 0.0 the
-        # order falls back to TMDb rating, vote_average descending with
-        # vote_count as tie-break, never popularity. The three candidates are
-        # rigged so popularity order (Loud, Ties, Grail), score order (all
-        # 0.0), and rating order (Grail, Ties, Loud) all disagree, and the
-        # Ties/Loud pair shares a vote_average so only vote_count separates
-        # them. A 10.0 on three votes losing to lower-rated-but-vouched shows
-        # is the other half of the rule, so Grail keeps a huge count.
+    def test_zero_episode_source_estimates_from_candidate_side(self):
+        # Revised on QUE-11 (2026-08-07): a zero-episode source still knows
+        # half of every edge, the candidate's side, so the list ranks by that
+        # estimate. The three candidates are rigged so estimate order (Lead,
+        # Half, Cameo), popularity order (Cameo first), and rating order
+        # (Cameo first) all disagree; only the estimate explains the result.
+        self.a.number_of_episodes = 0
+        self.a.save()
+        lead = Show.objects.create(
+            tmdb_id=3, name="Lead", number_of_episodes=10,
+            vote_average=6.0, vote_count=100, popularity=1.0,
+        )
+        half = Show.objects.create(
+            tmdb_id=4, name="Half", number_of_episodes=10,
+            vote_average=7.0, vote_count=100, popularity=50.0,
+        )
+        cameo = Show.objects.create(
+            tmdb_id=5, name="Cameo", number_of_episodes=10,
+            vote_average=9.9, vote_count=9000, popularity=99.0,
+        )
+        CastMember.objects.create(show=self.a, person=self.p, episode_count=5)
+        CastMember.objects.create(show=lead, person=self.p, episode_count=10)
+        CastMember.objects.create(show=half, person=self.p, episode_count=5)
+        CastMember.objects.create(show=cameo, person=self.p, episode_count=1)
+        results = similar_by_people(self.a)
+        self.assertEqual([s.name for s in results], ["Lead", "Half", "Cameo"])
+        self.assertEqual(results.mode, "estimated")
+
+    def test_estimate_ties_break_on_rating_then_votes(self):
+        # Equal estimates fall to the rating tie-break: vote_average
+        # descending, then vote_count so a 10.0 on three votes cannot beat
+        # an 8.9 on ten thousand. Popularity would order it Loud, Ties,
+        # Grail; the rule orders it Grail, Ties, Loud.
         self.a.number_of_episodes = 0
         self.a.save()
         grail = Show.objects.create(
@@ -123,12 +147,32 @@ class SimilarByPeopleTests(TestCase):
             CastMember.objects.create(show=other, person=self.p, episode_count=5)
         results = similar_by_people(self.a)
         self.assertEqual([s.name for s in results], ["Grail", "Ties", "Loud"])
-        self.assertTrue(results.rating_fallback)
+        self.assertEqual(results.mode, "estimated")
+
+    def test_rating_mode_when_no_edge_carries_any_signal(self):
+        # Every shared edge is a null-count series credit, so neither the
+        # weighted score nor the candidate-side estimate has signal. The last
+        # rung ranks by TMDb rating, per the original QUE-11 decision.
+        ghost = Person.objects.create(tmdb_id=2, name="Ghost")
+        low = Show.objects.create(
+            tmdb_id=3, name="Low", number_of_episodes=10,
+            vote_average=6.0, vote_count=100, popularity=99.0,
+        )
+        high = Show.objects.create(
+            tmdb_id=4, name="High", number_of_episodes=10,
+            vote_average=9.0, vote_count=100, popularity=1.0,
+        )
+        CastMember.objects.create(show=self.a, person=ghost, episode_count=None)
+        CastMember.objects.create(show=low, person=ghost, episode_count=None)
+        CastMember.objects.create(show=high, person=ghost, episode_count=None)
+        results = similar_by_people(self.a)
+        self.assertEqual([s.name for s in results], ["High", "Low"])
+        self.assertEqual(results.mode, "rating")
 
     def test_weighted_path_ignores_rating_when_any_score_is_real(self):
-        # The fallback must not leak into the normal path: one real edge on
-        # the board and the order is score then popularity, even when the
-        # zero-scored candidate has the better rating.
+        # The ladder must not leak upward: one real edge on the board and the
+        # order is score then popularity, even when the zero-scored candidate
+        # has the better rating.
         rated = Show.objects.create(
             tmdb_id=3, name="Rated", number_of_episodes=10,
             vote_average=9.9, vote_count=10000, popularity=99.0,
@@ -140,4 +184,4 @@ class SimilarByPeopleTests(TestCase):
         CastMember.objects.create(show=rated, person=ghost, episode_count=None)
         results = similar_by_people(self.a)
         self.assertEqual([s.name for s in results], ["B", "Rated"])
-        self.assertFalse(results.rating_fallback)
+        self.assertEqual(results.mode, "weighted")

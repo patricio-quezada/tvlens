@@ -56,15 +56,18 @@ SERVICE_JOBS = [
 class RankedShows(list):
     """similar_by_people's return value: shows plus one fact about the order.
 
-    rating_fallback is True when the graph had no signal, every candidate
-    scored 0.0, and the list fell back to TMDb rating order. The template
-    reads it to caption the list honestly. A plain list plus one attribute,
-    so callers that expect a list keep working.
+    mode names which rung of the fallback ladder ranked the list, so the
+    template can caption it honestly. A plain list plus one attribute, so
+    callers that expect a list keep working.
+
+        weighted   both sides of every edge known, the normal ranking
+        estimated  source side unknown, ranked by the candidate-side share
+        rating     no edge carries any signal, ranked by TMDb rating
     """
 
-    def __init__(self, shows=(), rating_fallback=False):
+    def __init__(self, shows=(), mode="weighted"):
         super().__init__(shows)
-        self.rating_fallback = rating_fallback
+        self.mode = mode
 
 
 def similar_by_people(show, limit=12):
@@ -103,13 +106,20 @@ def similar_by_people(show, limit=12):
     When every candidate scores 0.0 the weighted order carries no signal.
     That happens when the source show has no episodes recorded yet (TMDb
     "Planned" and "In Production" shows legitimately carry 0) or when every
-    shared edge is a null-count series-level credit. Decided on QUE-11
-    (2026-08-07): the order, and only the order, falls back to TMDb rating,
-    vote_average descending with vote_count breaking ties so a 10.0 on three
-    votes cannot beat an 8.9 on ten thousand. Rating is a quality signal;
-    popularity is the engagement metric this recommender exists to avoid.
-    The candidate set does not change, still only shows sharing at least one
-    qualifying person.
+    shared edge is a null-count series-level credit. Decided on QUE-11 and
+    revised the same day (2026-08-07), the order falls down a ladder, and
+    only the order, the candidate set never changes:
+
+        1. weighted   sum of min(source share, candidate share)
+        2. estimated  the source side is unknowable, so rank by the half we
+                      can see: the sum of candidate-side shares. A candidate
+                      whose shared person carried their whole show outranks
+                      one where they were a one-episode guest.
+        3. rating     nothing measurable on any edge, so rank by TMDb rating,
+                      vote_average then vote_count so a 10.0 on three votes
+                      cannot beat an 8.9 on ten thousand. Rating is a quality
+                      signal; popularity is the engagement metric this
+                      recommender exists to avoid, and it is never used here.
 
     Returns a RankedShows list of Show objects, empty when the show has no
     qualifying people recorded.
@@ -162,21 +172,29 @@ def similar_by_people(show, limit=12):
     for other in Show.objects.filter(pk__in=best_by_show):
         other_episodes = other.number_of_episodes or 0
         score = 0.0
+        estimate = 0.0
         for person_id, other_count in best_by_show[other.pk].items():
             own_ratio = min(own_best[person_id] / own_episodes, 1.0) if own_episodes else 0.0
             other_ratio = min(other_count / other_episodes, 1.0) if other_episodes else 0.0
             score += min(own_ratio, other_ratio)
+            estimate += other_ratio
         other.score = score
+        other.estimate = estimate
         other.shared_people = len(best_by_show[other.pk])
         results.append(other)
 
-    # results is non-empty here, so all() means real zeros, not vacuous truth.
-    rating_fallback = all(s.score == 0.0 for s in results)
-    if rating_fallback:
-        results.sort(key=lambda s: (-s.vote_average, -s.vote_count))
-    else:
+    # results is non-empty here, so any() decides between real signal and
+    # real zeros, never vacuous truth. Rung by rung down the ladder.
+    if any(s.score > 0.0 for s in results):
+        mode = "weighted"
         results.sort(key=lambda s: (-s.score, -s.popularity))
-    return RankedShows(results[:limit], rating_fallback=rating_fallback)
+    elif any(s.estimate > 0.0 for s in results):
+        mode = "estimated"
+        results.sort(key=lambda s: (-s.estimate, -s.vote_average, -s.vote_count))
+    else:
+        mode = "rating"
+        results.sort(key=lambda s: (-s.vote_average, -s.vote_count))
+    return RankedShows(results[:limit], mode=mode)
 
 
 def similar_by_cast(show, limit=12):
