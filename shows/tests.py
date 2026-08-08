@@ -94,3 +94,50 @@ class SimilarByPeopleTests(TestCase):
 
     def test_show_with_no_qualifying_people_returns_empty_list(self):
         self.assertEqual(similar_by_people(self.a), [])
+
+    def test_zero_episode_source_falls_back_to_rating_order(self):
+        # Decided on QUE-11 (2026-08-07): when every candidate scores 0.0 the
+        # order falls back to TMDb rating, vote_average descending with
+        # vote_count as tie-break, never popularity. The three candidates are
+        # rigged so popularity order (Loud, Ties, Grail), score order (all
+        # 0.0), and rating order (Grail, Ties, Loud) all disagree, and the
+        # Ties/Loud pair shares a vote_average so only vote_count separates
+        # them. A 10.0 on three votes losing to lower-rated-but-vouched shows
+        # is the other half of the rule, so Grail keeps a huge count.
+        self.a.number_of_episodes = 0
+        self.a.save()
+        grail = Show.objects.create(
+            tmdb_id=3, name="Grail", number_of_episodes=10,
+            vote_average=9.5, vote_count=9000, popularity=1.0,
+        )
+        ties = Show.objects.create(
+            tmdb_id=4, name="Ties", number_of_episodes=10,
+            vote_average=8.9, vote_count=10000, popularity=50.0,
+        )
+        loud = Show.objects.create(
+            tmdb_id=5, name="Loud", number_of_episodes=10,
+            vote_average=8.9, vote_count=3, popularity=99.0,
+        )
+        CastMember.objects.create(show=self.a, person=self.p, episode_count=5)
+        for other in (grail, ties, loud):
+            CastMember.objects.create(show=other, person=self.p, episode_count=5)
+        results = similar_by_people(self.a)
+        self.assertEqual([s.name for s in results], ["Grail", "Ties", "Loud"])
+        self.assertTrue(results.rating_fallback)
+
+    def test_weighted_path_ignores_rating_when_any_score_is_real(self):
+        # The fallback must not leak into the normal path: one real edge on
+        # the board and the order is score then popularity, even when the
+        # zero-scored candidate has the better rating.
+        rated = Show.objects.create(
+            tmdb_id=3, name="Rated", number_of_episodes=10,
+            vote_average=9.9, vote_count=10000, popularity=99.0,
+        )
+        ghost = Person.objects.create(tmdb_id=2, name="Ghost")
+        CastMember.objects.create(show=self.a, person=self.p, episode_count=5)
+        CastMember.objects.create(show=self.b, person=self.p, episode_count=5)
+        CastMember.objects.create(show=self.a, person=ghost, episode_count=None)
+        CastMember.objects.create(show=rated, person=ghost, episode_count=None)
+        results = similar_by_people(self.a)
+        self.assertEqual([s.name for s in results], ["B", "Rated"])
+        self.assertFalse(results.rating_fallback)

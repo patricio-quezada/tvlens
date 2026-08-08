@@ -16,7 +16,11 @@
         </li>
         {% endfor %}
     </ol>
+    {% if by_people.rating_fallback %}
+    <p class="similar-note">These shows share people with {{ show.name }}, but {{ show.name }} has no episode data yet, so this list is ranked by TMDb rating until it does. Casting roles do not count.</p>
+    {% else %}
     <p class="similar-note">Cast and crew together, weighted by how much of each show the shared people actually made. Casting roles do not count.</p>
+    {% endif %}
     {% else %}
     <p class="similar-note">Nothing shares a person with this one yet.</p>
     {% endif %}

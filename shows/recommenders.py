@@ -53,6 +53,20 @@ SERVICE_JOBS = [
 ]
 
 
+class RankedShows(list):
+    """similar_by_people's return value: shows plus one fact about the order.
+
+    rating_fallback is True when the graph had no signal, every candidate
+    scored 0.0, and the list fell back to TMDb rating order. The template
+    reads it to caption the list honestly. A plain list plus one attribute,
+    so callers that expect a list keep working.
+    """
+
+    def __init__(self, shows=(), rating_fallback=False):
+        super().__init__(shows)
+        self.rating_fallback = rating_fallback
+
+
 def similar_by_people(show, limit=12):
     """Return shows ranked by episode-weighted shared people, cast and crew merged.
 
@@ -86,8 +100,19 @@ def similar_by_people(show, limit=12):
     not inject cleanly into a single ORM annotation, and at catalog scale a
     materialised edge table is not yet worth its upkeep.
 
-    Returns a list of Show objects, empty when the show has no qualifying
-    people recorded.
+    When every candidate scores 0.0 the weighted order carries no signal.
+    That happens when the source show has no episodes recorded yet (TMDb
+    "Planned" and "In Production" shows legitimately carry 0) or when every
+    shared edge is a null-count series-level credit. Decided on QUE-11
+    (2026-08-07): the order, and only the order, falls back to TMDb rating,
+    vote_average descending with vote_count breaking ties so a 10.0 on three
+    votes cannot beat an 8.9 on ten thousand. Rating is a quality signal;
+    popularity is the engagement metric this recommender exists to avoid.
+    The candidate set does not change, still only shows sharing at least one
+    qualifying person.
+
+    Returns a RankedShows list of Show objects, empty when the show has no
+    qualifying people recorded.
     """
 
     def fold_best(best, person_id, episode_count):
@@ -110,7 +135,7 @@ def similar_by_people(show, limit=12):
     ):
         fold_best(own_best, person_id, count)
     if not own_best:
-        return []
+        return RankedShows()
 
     # Unlike the Show-side join in similar_by_crew, these filters run on the
     # credit tables directly, so .exclude() drops casting rows and nothing else.
@@ -130,7 +155,7 @@ def similar_by_people(show, limit=12):
     ):
         fold_best(best_by_show.setdefault(show_id, {}), person_id, count)
     if not best_by_show:
-        return []
+        return RankedShows()
 
     own_episodes = show.number_of_episodes or 0
     results = []
@@ -145,8 +170,13 @@ def similar_by_people(show, limit=12):
         other.shared_people = len(best_by_show[other.pk])
         results.append(other)
 
-    results.sort(key=lambda s: (-s.score, -s.popularity))
-    return results[:limit]
+    # results is non-empty here, so all() means real zeros, not vacuous truth.
+    rating_fallback = all(s.score == 0.0 for s in results)
+    if rating_fallback:
+        results.sort(key=lambda s: (-s.vote_average, -s.vote_count))
+    else:
+        results.sort(key=lambda s: (-s.score, -s.popularity))
+    return RankedShows(results[:limit], rating_fallback=rating_fallback)
 
 
 def similar_by_cast(show, limit=12):
