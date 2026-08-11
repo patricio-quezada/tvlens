@@ -14,3 +14,7 @@ Copy `0000-adr-template.md` to start a new one.
 
 ## Index
 - [0001 — Recommend by episode-weighted shared people](0001-episode-weighted-people-recommender.md)
+- [0002 — Fall back down a ladder when the people graph has no signal](0002-no-signal-fallback-ladder.md)
+- [0003 — Three identities: surrogate pk, tmdb_id, slug](0003-identifiers.md)
+- [0004 — Ingest aggregate_credits, and record episode counts](0004-aggregate-credits-ingest.md)
+- [0005 — Exclude casting roles from the crew edge](0005-exclude-casting-roles.md)
