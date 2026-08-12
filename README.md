@@ -1,8 +1,10 @@
 # TVLens
 
-**Connect TV shows through the people who made them, cast and crew, not through what keeps you watching.** Think MovieLens, for television.
+**TVLens is a MovieLens-style TV show recommendation platform.** Rate the shows you
+have seen, track what you are watching, and get recommendations for what to watch next.
 
-TVLens is an open project I am building in public to learn engineering and coding, one day at a time. It runs on Django and the TMDb API, and there is no recommendation black box: every suggestion can be traced back to the people that two shows share.
+I am building it in public to learn engineering and coding, one day at a time, on
+Django and the TMDb API. The code and the decisions behind it all live here.
 
 - **Live site:** [tvlens.org](https://tvlens.org)
 - **Follow the build:** [The 80-Day Project](https://patricioquezada.com/80p), one post a day, from the code to what I am learning
@@ -17,8 +19,9 @@ records below.
 
 ## How it works: the content graph
 
-The heart of TVLens is a content graph. Two shows are connected when they share
-people, and the strength of the connection is weighted by how much of each show the
+The recommender is the heart of TVLens, and its first layer is a content graph. Two
+shows are connected when they share people, and the strength of the connection is
+weighted by how much of each show the
 shared person actually made. A series lead counts for a whole show; a one-episode
 guest counts for a sliver. Cast and crew merge into one ranked list, and it works with
 no ratings at all, so even a brand new catalog still recommends.
