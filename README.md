@@ -23,8 +23,7 @@ The recommender is the heart of TVLens, and its first layer is a content graph. 
 shows are connected when they share people, and the strength of the connection is
 weighted by how much of each show the
 shared person actually made. A series lead counts for a whole show; a one-episode
-guest counts for a sliver. Cast and crew merge into one ranked list, and it works with
-no ratings at all, so even a brand new catalog still recommends.
+guest counts for a sliver. Cast and crew merge into one ranked list.
 
 The significant, contested decisions each carry a short record:
 
