@@ -38,5 +38,3 @@ decision, revised the same day to add the estimate rung).
   each edge that is known, instead of a popularity list or a blank.
 - Three modes, each frozen by tests in `shows/tests.py` (13 total after this).
 - Extends ADR-0001.
-
-Decided in Linear (QUE-11), migrated here 2026-08-11.

@@ -28,5 +28,3 @@ Keep three separate identifiers, each with one job:
   a key. The meaningless pk is the thing nothing external can force us to change.
 - The model already carries pk and tmdb_id; slug is a small addition at detail-page
   time.
-
-Decided in Linear (QUE-5 comment), migrated here 2026-08-11.

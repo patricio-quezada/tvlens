@@ -29,5 +29,3 @@ substring-matching "casting" (rejected in favour of an auditable explicit list).
   promoting real ones: Westworld ↔ Person of Interest surfaces (J.J. Abrams, Jonathan
   Nolan, Ramin Djawadi), and the Law & Order / Chicago franchise links appear.
 - `SERVICE_JOBS` survives into the weighted recommender (ADR-0001) unchanged.
-
-Decided in Linear (QUE-7), migrated here 2026-08-11.

@@ -48,6 +48,3 @@ lists (no single answer to "most similar").
 - Frozen by tests in `shows/tests.py`.
 - Extended by the no-signal fallback ladder (weighted, then candidate-side estimate,
   then TMDb rating) for shows with no episode data yet; that will get its own ADR.
-
-Decided originally in Linear (QUE-9), migrated here on 2026-08-11 when the build lane
-moved to GitHub.
