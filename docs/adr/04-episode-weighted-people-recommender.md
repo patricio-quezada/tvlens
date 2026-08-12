@@ -1,4 +1,4 @@
-# 1. Recommend by episode-weighted shared people
+# 4. Recommend by episode-weighted shared people
 
 ## Context
 We wanted to start building the recommendation algorithm, the part of TVLens that,
@@ -76,5 +76,5 @@ so a later change cannot quietly undo them.
 the database, because the per-show share does not fit neatly into a single database
 query. That is fine at 100 shows; at real scale the better answer is a table of
 connections computed ahead of time, which is logged as an open item. The weighting also
-does nothing for a show that has no episodes recorded yet; a separate decision (ADR-0002)
+does nothing for a show that has no episodes recorded yet; a separate decision ([ADR-05](05-no-signal-fallback-ladder.md))
 covers that.

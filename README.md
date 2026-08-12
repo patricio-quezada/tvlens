@@ -27,11 +27,11 @@ guest counts for a sliver. Cast and crew merge into one ranked list.
 
 The significant, contested decisions each carry a short record:
 
-- [ADR-0001, Episode-weighted people recommender](docs/adr/0001-episode-weighted-people-recommender.md)
-- [ADR-0002, No-signal fallback ladder](docs/adr/0002-no-signal-fallback-ladder.md)
-- [ADR-0003, Identifiers: pk, tmdb_id, slug](docs/adr/0003-identifiers.md)
-- [ADR-0004, Ingest aggregate_credits](docs/adr/0004-aggregate-credits-ingest.md)
-- [ADR-0005, Exclude casting roles](docs/adr/0005-exclude-casting-roles.md)
+- [ADR-01, Exclude casting roles](docs/adr/01-exclude-casting-roles.md)
+- [ADR-02, Ingest aggregate_credits](docs/adr/02-aggregate-credits-ingest.md)
+- [ADR-03, Identifiers: pk, tmdb_id, slug](docs/adr/03-identifiers.md)
+- [ADR-04, Episode-weighted people recommender](docs/adr/04-episode-weighted-people-recommender.md)
+- [ADR-05, No-signal fallback ladder](docs/adr/05-no-signal-fallback-ladder.md)
 
 The recommender lives in [`shows/recommenders.py`](shows/recommenders.py); ingestion
 in [`shows/ingestion.py`](shows/ingestion.py); the data model in
