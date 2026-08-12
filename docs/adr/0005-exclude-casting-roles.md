@@ -1,28 +1,38 @@
 # 5. Exclude casting roles from crew matching
 
 ## Context
-Recommending by shared crew connects shows through the people who made them. But a
-**casting office works a studio's whole slate**, so counting casting credits links
-productions that have nothing to do with each other. On the catalog, The Boys and
-Grey's Anatomy came back sharing four crew members, and every one was a casting
-director from the same office, a superhero satire tied to a medical melodrama by the
-office that hired the actors. Casting produced the second most connections of any role,
-behind only Executive Producer.
+When we looked at the data model, we found that casting directors, the people a studio
+hires to pick actors, were being counted by the recommendation engine as a reason two
+shows are similar. They should not be. A casting office works across many of a studio's
+shows, so two shows can share the same casting director without being anything alike.
+
+For example, The Boys and Grey's Anatomy came back as similar because they shared four
+crew members, and all four were casting directors from the same office: a superhero
+satire tied to a medical drama by nothing more than the office that hired their actors.
+Casting turned out to be the second most common source of these false matches, behind
+only executive producers.
 
 ## Decision
-Maintain a `SERVICE_JOBS` list of casting-type jobs and exclude them from **both
-sides** of the crew comparison. Exact titles by choice (auditable), with the caveat
-documented in code that a new TMDb import can mint a variant that slips the list;
-the 2026-08-06 review found eight such variants leaking 45 rows ("Extras Casting",
-"Location Casting", ...) and extended the list. Re-audit query lives in the comment.
+Remove casting roles from both shows before comparing their crew, so a shared casting
+director never counts toward two shows being similar.
 
-Alternatives rejected: weighting casting down instead of excluding (a casting
-director on 60 episodes still says nothing about the show, so `episode_count` does
-not fix this, it is a different problem that stacks with the weighting in ADR-0001);
-substring-matching "casting" (rejected in favour of an auditable explicit list).
+We keep an explicit list of the casting job titles to exclude rather than matching on the
+word "casting," so the list is easy to check by hand. TMDb occasionally adds a new title
+that slips the list (a later review caught eight, such as "Extras Casting" and "Location
+Casting," and we added them).
 
-## Consequences
-- Excluding casting costs 2 shows of coverage and removes 13 false pairs, while
-  promoting real ones: Westworld ↔ Person of Interest surfaces (J.J. Abrams, Jonathan
-  Nolan, Ramin Djawadi), and the Law & Order / Chicago franchise links appear.
-- `SERVICE_JOBS` survives into the weighted recommender (ADR-0001) unchanged.
+We considered lowering casting's weight instead of removing it, but a casting director
+credited on 60 episodes still says nothing about the show, so the episode weighting in
+[ADR-0001](0001-episode-weighted-people-recommender.md) does not fix this. It is a
+separate problem.
+
+## After Action Review
+A show's similar-shows list is now built only from the people who actually made both
+shows, not from the back-office staff a studio reuses across unrelated titles. The
+obviously wrong matches disappear and the genuine ones take their place, shows that
+really do share a creator, a director, and a composer. The only cost is that a couple of
+shows whose single link was a shared casting office now show no match, which is the
+honest answer.
+
+The same exclusion carries into the full weighted recommender,
+[ADR-0001](0001-episode-weighted-people-recommender.md).
