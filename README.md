@@ -4,11 +4,11 @@
 have seen, track what you are watching, and get recommendations for what to watch next.
 
 I am building it in public to learn engineering and coding, one day at a time, on
-Django and the TMDb API. The code and the decisions behind it all live here.
+Django and the TMDb API. The site is live at [tvlens.org](https://tvlens.org), and
+[I logged the build for the first 80 days of TVLens](https://patricioquezada.com/80p).
 
-- **Live site:** [tvlens.org](https://tvlens.org)
-- **Follow the build:** [The 80-Day Project](https://patricioquezada.com/80p), one post a day, from the code to what I am learning
-- **Why it is built this way:** the [Architecture Decision Records](docs/adr/)
+If you want to understand the why behind certain choices for TVLens, you can
+[browse the ADRs](docs/adr/).
 
 ## What is being built now
 
