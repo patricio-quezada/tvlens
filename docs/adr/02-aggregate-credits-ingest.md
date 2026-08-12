@@ -1,4 +1,4 @@
-# 4. Ingest aggregate_credits, and record episode counts
+# 2. Ingest aggregate_credits, and record episode counts
 
 ## Context
 The recommender read `/tv/{id}?append_to_response=credits`, which returns only
@@ -29,6 +29,6 @@ Expanding the ingest grew the data enormously. Cast credits went from about 700 
 But more data made the recommender worse, not better. Most of those new credits are
 single-episode appearances, so counting everyone equally buried the real matches under
 guest actors that two shows happened to share. This is what forced the episode weighting
-in [ADR-0001](0001-episode-weighted-people-recommender.md): the deeper data and the
+in [ADR-04](04-episode-weighted-people-recommender.md): the deeper data and the
 weighting had to ship together, because the deeper data on its own made the product
 worse.

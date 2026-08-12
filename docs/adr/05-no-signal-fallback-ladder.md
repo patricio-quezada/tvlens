@@ -1,7 +1,7 @@
-# 2. Fall back down a ladder when the people graph has no signal
+# 5. Fall back down a ladder when the people graph has no signal
 
 ## Context
-The weighted recommender (ADR-0001) scores by episode share. A show with **no
+The weighted recommender ([ADR-04](04-episode-weighted-people-recommender.md)) scores by episode share. A show with **no
 episodes recorded yet** (TMDb "Planned" / "In Production" legitimately carry 0), or
 one whose every shared edge is a null-count series credit, produces an all-zero
 score. Left alone, the merged list would silently fall back to popularity order
@@ -34,4 +34,4 @@ decision, revised the same day to add the estimate rung).
 - A brand-new show with no episodes still gets a sensible ranking from the half of
   each edge that is known, instead of a popularity list or a blank.
 - Three modes, each frozen by tests in `shows/tests.py` (13 total after this).
-- Extends ADR-0001.
+- Extends [ADR-04](04-episode-weighted-people-recommender.md).

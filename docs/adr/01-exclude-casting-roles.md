@@ -1,4 +1,4 @@
-# 5. Exclude casting roles from crew matching
+# 1. Exclude casting roles from crew matching
 
 ## Context
 When we looked at the data model, we found that casting directors, the people a studio
@@ -23,7 +23,7 @@ Casting," and we added them).
 
 We considered lowering casting's weight instead of removing it, but a casting director
 credited on 60 episodes still says nothing about the show, so the episode weighting in
-[ADR-0001](0001-episode-weighted-people-recommender.md) does not fix this. It is a
+[ADR-04](04-episode-weighted-people-recommender.md) does not fix this. It is a
 separate problem.
 
 ## After Action Review
@@ -35,4 +35,4 @@ shows whose single link was a shared casting office now show no match, which is 
 honest answer.
 
 The same exclusion carries into the full weighted recommender,
-[ADR-0001](0001-episode-weighted-people-recommender.md).
+[ADR-04](04-episode-weighted-people-recommender.md).

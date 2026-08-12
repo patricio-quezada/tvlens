@@ -1,4 +1,4 @@
-# NNNN. Short title of the decision
+# NN. Short title of the decision
 
 ## Context
 What was the situation, and what problem or need drove this? Tell the story of how we
