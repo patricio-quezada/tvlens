@@ -31,5 +31,3 @@ directors.
 - **This made the recommender worse on its own**, 84% of cast rows are single-episode,
   so equal counting became guest-actor churn. That is what forced ADR-0001 (weighting);
   the ingest and the weighting had to land together.
-
-Decided in Linear (QUE-8), migrated here 2026-08-11.
