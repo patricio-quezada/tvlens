@@ -1,8 +1,5 @@
 # 3. Three identities: surrogate pk, tmdb_id, slug
 
-Status: Accepted
-Date: 2026-08-07
-
 ## Context
 A show needs to be identified in three different places: internally (for foreign
 keys), on ingest (matching TMDb), and in public URLs. It is tempting to make one

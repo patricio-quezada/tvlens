@@ -1,16 +1,15 @@
 # NNNN. Short title of the decision
 
-Status: Proposed | Accepted | Superseded by ADR-XXXX
-Date: YYYY-MM-DD
-
 ## Context
-What is the situation and the forces at play? What problem or need drives this?
-State the facts and constraints, not the decision yet.
+What was the situation, and what problem or need drove this? Tell the story of how we
+got here in plain language, the facts and constraints, not the decision yet.
 
 ## Decision
-What we are doing, stated plainly. Include the rule or the shape of the change,
-and the alternatives considered with why they lost.
+What we are doing, explained so someone still learning could follow it. Define any term
+the first time it appears and skip insider shorthand. Include the rule or the shape of
+the change, and the alternatives we considered with why they lost.
 
-## Consequences
-What becomes easier, what becomes harder, what we now have to live with. Include
-the numbers it was measured on and where it is tested.
+## After Action Review
+Did we get the result we wanted? If yes, what shows it. If not, what happened and how we
+get better. Note where it is tested and any open item to revisit later. (Named after the
+Army's after action review.)

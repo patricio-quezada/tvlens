@@ -1,8 +1,5 @@
 # 4. Ingest aggregate_credits, and record episode counts
 
-Status: Accepted
-Date: 2026-08-06
-
 ## Context
 The recommender read `/tv/{id}?append_to_response=credits`, which returns only
 **series-level** billing, a short curated list. It cannot see per-episode credits.
