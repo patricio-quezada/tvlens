@@ -4,7 +4,7 @@
 The recommender read `/tv/{id}?append_to_response=credits`, which returns only
 **series-level** billing, a short curated list. It cannot see per-episode credits.
 The clearest symptom: television directors are credited per episode, so the whole
-100-show catalog held 13 director rows and not one created an edge. Breaking Bad
+100-show catalog held only 13 director rows, and not one of them connected two shows. Breaking Bad
 returned 8 cast from this endpoint; TMDb's `aggregate_credits` returns 348, plus 25
 directors.
 
@@ -21,10 +21,14 @@ directors.
 - Backfill via a `--show <tmdb_id>`-scoped management command that fetches only
   aggregate_credits (not seasons/episodes), so a catalog pass is one API call per show.
 
-## Consequences
-- Cast rows 728 → ~128k, crew 1,665 → ~24k, Director rows 13 → 3,270, directors on
-  2+ shows 0 → 480 (Félix Alcalá on Breaking Bad and CSI; John Dahl on Breaking Bad,
-  Dexter, Outlander).
-- **This made the recommender worse on its own**, 84% of cast rows are single-episode,
-  so equal counting became guest-actor churn. That is what forced ADR-0001 (weighting);
-  the ingest and the weighting had to land together.
+## After Action Review
+Expanding the ingest grew the data enormously. Cast credits went from about 700 to over
+128,000, crew from about 1,700 to 24,000, and recorded directors from 13 to more than
+3,000.
+
+But more data made the recommender worse, not better. Most of those new credits are
+single-episode appearances, so counting everyone equally buried the real matches under
+guest actors that two shows happened to share. This is what forced the episode weighting
+in [ADR-0001](0001-episode-weighted-people-recommender.md): the deeper data and the
+weighting had to ship together, because the deeper data on its own made the product
+worse.
