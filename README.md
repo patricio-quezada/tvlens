@@ -1,39 +1,35 @@
 # TVLens
 
-A TV show recommendation platform that connects shows through **the people who made
-them**, cast and crew, not through what keeps you watching. Think MovieLens, for
-television. Built in public, one day at a time.
+**Connect TV shows through the people who made them, cast and crew, not through what keeps you watching.** Think MovieLens, for television.
 
-Django + the TMDb API.
+TVLens is an open project I am building in public to learn engineering and coding, one day at a time. It runs on Django and the TMDb API, and there is no recommendation black box: every suggestion can be traced back to the people that two shows share.
 
-## Start here
+- **Live site:** [tvlens.org](https://tvlens.org)
+- **Follow the build:** [The 80-Day Project](https://patricioquezada.com/80p), one post a day, from the code to what I am learning
+- **Why it is built this way:** the [Architecture Decision Records](docs/adr/)
 
-New to the project? These four links get you oriented.
+## What is being built now
 
-- **[The 80-Day Project build log](https://patricioquezada.com/80p)** — the daily
-  story of building this: what got built each day and what I learned. Start here to
-  follow the narrative from Day 0.
-- **[Architecture Decision Records](docs/adr/)** — *why* the project is built the way
-  it is. The significant, contested decisions, each with its reasoning. Start here if
-  you are reading the code and wondering "why this way?"
-- **[Open issues](https://github.com/patricio-quezada/tvlens/issues)** and the
-  **[current milestone](https://github.com/patricio-quezada/tvlens/milestone/1)** —
-  what is being worked on right now.
-- **[tvlens.org](https://tvlens.org)** — the landing page for the product.
+The current focus is the first layer of the recommender, the people graph:
+**[Recommender: Layer 1](https://github.com/patricio-quezada/tvlens/milestone/1)**. That
+milestone is the active bet, and the reasoning behind it lives in the decision
+records below.
 
-## How the recommender works
+## How it works: the content graph
 
 The heart of TVLens is a content graph. Two shows are connected when they share
 people, and the strength of the connection is weighted by how much of each show the
 shared person actually made. A series lead counts for a whole show; a one-episode
-guest counts for a sliver. Cast and crew merge into one ranked list. The full
-reasoning is in the ADRs:
+guest counts for a sliver. Cast and crew merge into one ranked list, and it works with
+no ratings at all, so even a brand new catalog still recommends.
 
-- [ADR-0001 — Episode-weighted people recommender](docs/adr/0001-episode-weighted-people-recommender.md)
-- [ADR-0002 — No-signal fallback ladder](docs/adr/0002-no-signal-fallback-ladder.md)
-- [ADR-0003 — Identifiers: pk, tmdb_id, slug](docs/adr/0003-identifiers.md)
-- [ADR-0004 — Ingest aggregate_credits](docs/adr/0004-aggregate-credits-ingest.md)
-- [ADR-0005 — Exclude casting roles](docs/adr/0005-exclude-casting-roles.md)
+The significant, contested decisions each carry a short record:
+
+- [ADR-0001, Episode-weighted people recommender](docs/adr/0001-episode-weighted-people-recommender.md)
+- [ADR-0002, No-signal fallback ladder](docs/adr/0002-no-signal-fallback-ladder.md)
+- [ADR-0003, Identifiers: pk, tmdb_id, slug](docs/adr/0003-identifiers.md)
+- [ADR-0004, Ingest aggregate_credits](docs/adr/0004-aggregate-credits-ingest.md)
+- [ADR-0005, Exclude casting roles](docs/adr/0005-exclude-casting-roles.md)
 
 The recommender lives in [`shows/recommenders.py`](shows/recommenders.py); ingestion
 in [`shows/ingestion.py`](shows/ingestion.py); the data model in
@@ -42,21 +38,21 @@ in [`shows/ingestion.py`](shows/ingestion.py); the data model in
 ## Data model
 
 Sixteen tables in `shows/models.py`. TMDb-sourced metadata covers shows, seasons,
-episodes, genres, networks, and people (with separate cast and crew join tables that
-carry per-episode counts). User interactions span ratings, reviews with spoiler flags,
+episodes, genres, networks, and people, with separate cast and crew join tables that
+carry per-episode counts. User interactions span ratings, reviews with spoiler flags,
 watchlists with priority, and episode-level watch history. Community tagging uses a
 shared vocabulary plus per-user applied tags with relevance scores. Generated
 recommendations are stored per user per algorithm type. A `UserProfile` extends
 `auth.User` one-to-one for future personalization.
 
-Profiles are privacy-first (no public surface, matching MovieLens). Personalization
+Profiles are privacy-first, with no public surface, matching MovieLens. Personalization
 will combine explicit half-star ratings, implicit signals (completion, drop point,
 watch velocity), and community tags, with a popularity cold-start.
 
-## Stack
+## Built with
 
-Django 6.0, SQLite, `django-extensions`, `python-dotenv`, `requests`. Server-rendered,
-no JS framework.
+Django 6.0 and SQLite, server-rendered with no JS framework. Data from the TMDb API.
+Dependencies: `django-extensions`, `python-dotenv`, `requests`.
 
 ## License
 
