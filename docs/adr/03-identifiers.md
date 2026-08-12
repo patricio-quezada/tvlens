@@ -20,8 +20,8 @@ Keep three separate identifiers, each with one job:
   raw numeric id for readability and because slugs survive a database rebuild while
   pks do not. Added when the show detail page is built.
 
-## Consequences
-- Consistency is enforced by the uniqueness constraint, not by encoding meaning into
-  a key. The meaningless pk is the thing nothing external can force us to change.
-- The model already carries pk and tmdb_id; slug is a small addition at detail-page
-  time.
+## After Action Review
+I use the TMDb identifier that comes with the data rather than minting one of my own,
+to avoid issues in the graph. Matching every show on that stable identifier means a
+re-import updates the show I already have instead of creating a duplicate, so the
+connections between shows never split across two copies of the same title.
