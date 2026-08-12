@@ -1,7 +1,4 @@
-# 5. Exclude casting roles from the crew edge
-
-Status: Accepted
-Date: 2026-08-04
+# 5. Exclude casting roles from crew matching
 
 ## Context
 Recommending by shared crew connects shows through the people who made them. But a
@@ -9,7 +6,7 @@ Recommending by shared crew connects shows through the people who made them. But
 productions that have nothing to do with each other. On the catalog, The Boys and
 Grey's Anatomy came back sharing four crew members, and every one was a casting
 director from the same office, a superhero satire tied to a medical melodrama by the
-office that hired the actors. Casting was the second largest edge creator overall,
+office that hired the actors. Casting produced the second most connections of any role,
 behind only Executive Producer.
 
 ## Decision

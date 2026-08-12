@@ -1,8 +1,5 @@
 # 2. Fall back down a ladder when the people graph has no signal
 
-Status: Accepted
-Date: 2026-08-08
-
 ## Context
 The weighted recommender (ADR-0001) scores by episode share. A show with **no
 episodes recorded yet** (TMDb "Planned" / "In Production" legitimately carry 0), or
