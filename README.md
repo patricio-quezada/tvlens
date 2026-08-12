@@ -40,8 +40,7 @@ in [`shows/ingestion.py`](shows/ingestion.py); the data model in
 
 ## Data model
 
-Sixteen tables in `shows/models.py`. TMDb-sourced metadata covers shows, seasons,
-episodes, genres, networks, and people, with separate cast and crew join tables that
+TMDb-sourced metadata covers shows, seasons, episodes, genres, networks, and people, with separate cast and crew join tables that
 carry per-episode counts. User interactions span ratings, reviews with spoiler flags,
 watchlists with priority, and episode-level watch history. Community tagging uses a
 shared vocabulary plus per-user applied tags with relevance scores. Generated
