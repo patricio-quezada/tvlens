@@ -6,9 +6,15 @@ data, fails loudly here instead of silently reranking the catalog.
 """
 
 from django.test import TestCase
+from django.urls import reverse
 
 from .models import CastMember, CrewMember, Person, Show
-from .recommenders import similar_by_people
+from .recommenders import (
+    name_connections,
+    role_index,
+    shared_connections,
+    similar_by_people,
+)
 
 
 class SimilarByPeopleTests(TestCase):
@@ -185,3 +191,145 @@ class SimilarByPeopleTests(TestCase):
         results = similar_by_people(self.a)
         self.assertEqual([s.name for s in results], ["B", "Rated"])
         self.assertEqual(results.mode, "weighted")
+
+
+class SlugTests(TestCase):
+    """The public identifier decided on ADR-03: filled from the name, unique,
+    and stable once set so a link never rots."""
+
+    def test_slug_autofilled_from_name_on_save(self):
+        s = Show.objects.create(tmdb_id=100, name="Breaking Bad")
+        self.assertEqual(s.slug, "breaking-bad")
+
+    def test_slug_collision_gets_numeric_suffix(self):
+        a = Show.objects.create(tmdb_id=101, name="The Office")
+        b = Show.objects.create(tmdb_id=102, name="The Office")
+        c = Show.objects.create(tmdb_id=103, name="The Office")
+        self.assertEqual([a.slug, b.slug, c.slug],
+                         ["the-office", "the-office-2", "the-office-3"])
+
+    def test_slug_is_stable_when_name_changes(self):
+        s = Show.objects.create(tmdb_id=104, name="Original Name")
+        original = s.slug
+        s.name = "A Completely Different Name"
+        s.save()
+        self.assertEqual(s.slug, original)
+
+
+class SharedConnectionsTests(TestCase):
+    """The show-detail page's "why": the shared people, named and ordered by
+    the same episode-share that ranked them (QUE-2 wireframe)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.source = Show.objects.create(tmdb_id=1, name="Source", number_of_episodes=10)
+        cls.cand = Show.objects.create(tmdb_id=2, name="Cand", number_of_episodes=10)
+        cls.lead = Person.objects.create(tmdb_id=1, name="Lead Actor")
+        cls.maker = Person.objects.create(tmdb_id=2, name="The Maker")
+        cls.extra = Person.objects.create(tmdb_id=3, name="Bit Player")
+
+    def _connections(self):
+        return shared_connections(
+            self.source, role_index(self.source),
+            self.cand, role_index(self.cand),
+        )
+
+    def test_contribution_orders_edges_and_count_matches_recommender(self):
+        # Lead is in all of both (1.0); the extra shares one episode (0.1).
+        CastMember.objects.create(show=self.source, person=self.lead, order=0,
+                                  character="Hero", episode_count=10)
+        CastMember.objects.create(show=self.cand, person=self.lead, order=0,
+                                  character="Hero", episode_count=10)
+        CastMember.objects.create(show=self.source, person=self.extra, order=600,
+                                  character="Waiter", episode_count=1)
+        CastMember.objects.create(show=self.cand, person=self.extra, order=600,
+                                  character="Waiter", episode_count=1)
+        conns = self._connections()
+        self.assertEqual([c.name for c in conns], ["Lead Actor", "Bit Player"])
+        self.assertAlmostEqual(conns[0].contribution, 1.0)
+        # len equals the recommender's shared_people, both dedupe by person.
+        [ranked] = similar_by_people(self.source)
+        self.assertEqual(len(conns), ranked.shared_people)
+
+    def test_named_leads_with_cast_names_marquee_and_counts_the_rest(self):
+        CastMember.objects.create(show=self.source, person=self.lead, order=0,
+                                  character="Hero", episode_count=10)
+        CastMember.objects.create(show=self.cand, person=self.lead, order=0,
+                                  character="Hero", episode_count=10)
+        CrewMember.objects.create(show=self.source, person=self.maker,
+                                  job="Creator", episode_count=10)
+        CrewMember.objects.create(show=self.cand, person=self.maker,
+                                  job="Creator", episode_count=10)
+        CastMember.objects.create(show=self.source, person=self.extra, order=600,
+                                  character="Waiter", episode_count=1)
+        CastMember.objects.create(show=self.cand, person=self.extra, order=600,
+                                  character="Waiter", episode_count=1)
+        named, others = name_connections(self._connections())
+        # Recognizable actor first (by character), then the marquee creator.
+        self.assertEqual([c.name for c in named], ["Lead Actor", "The Maker"])
+        self.assertEqual(named[0].kind, "cast")
+        self.assertEqual(named[0].role, "Hero")
+        self.assertEqual(named[1].role, "Creator")
+        # The bit player collapses into the count.
+        self.assertEqual(others, 1)
+
+    def test_recognizable_actor_named_by_character_even_when_also_crew(self):
+        # A lead who also directed an episode is still named by their role,
+        # not the directing credit (pitch by cast).
+        CastMember.objects.create(show=self.source, person=self.lead, order=0,
+                                  character="Hero", episode_count=10)
+        CrewMember.objects.create(show=self.source, person=self.lead,
+                                  job="Director", episode_count=2)
+        CastMember.objects.create(show=self.cand, person=self.lead, order=0,
+                                  character="Hero", episode_count=10)
+        [c] = self._connections()
+        self.assertEqual((c.kind, c.role), ("cast", "Hero"))
+
+    def test_falls_back_to_strongest_edges_when_nothing_is_prominent(self):
+        # Only a shared bit player: no recognizable cast, no marquee crew.
+        # The callout still names someone rather than a bare count.
+        CastMember.objects.create(show=self.source, person=self.extra, order=600,
+                                  character="Waiter", episode_count=5)
+        CastMember.objects.create(show=self.cand, person=self.extra, order=600,
+                                  character="Waiter", episode_count=5)
+        named, others = name_connections(self._connections())
+        self.assertEqual([c.name for c in named], ["Bit Player"])
+        self.assertEqual(others, 0)
+
+
+class ShowDetailViewTests(TestCase):
+    """The route, the 404, and that the page surfaces the named connection."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.source = Show.objects.create(
+            tmdb_id=1, name="Source Show", number_of_episodes=10,
+            tagline="A tagline.", vote_average=8.9, vote_count=1234,
+        )
+        cls.cand = Show.objects.create(tmdb_id=2, name="Candidate Show",
+                                       number_of_episodes=10)
+        lead = Person.objects.create(tmdb_id=1, name="Jane Star")
+        CastMember.objects.create(show=cls.source, person=lead, order=0,
+                                  character="The Detective", episode_count=10)
+        CastMember.objects.create(show=cls.cand, person=lead, order=0,
+                                  character="The Detective", episode_count=10)
+
+    def test_detail_page_renders_show_and_named_connection(self):
+        resp = self.client.get(self.source.get_absolute_url())
+        self.assertEqual(resp.status_code, 200)
+        body = resp.content.decode()
+        self.assertIn("Source Show", body)
+        self.assertIn("A tagline.", body)
+        self.assertIn("1,234 votes", body)
+        self.assertIn("Ranked by shared cast and crew.", body)
+        self.assertIn("Candidate Show", body)
+        self.assertIn("Jane Star", body)
+        self.assertIn("The Detective", body)
+
+    def test_detail_url_uses_slug(self):
+        self.assertEqual(self.source.get_absolute_url(), "/shows/source-show/")
+
+    def test_unknown_slug_returns_404(self):
+        self.assertEqual(
+            self.client.get(reverse("shows:detail", args=["nope"])).status_code, 404
+        )

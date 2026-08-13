@@ -16,6 +16,8 @@ Later layers stack genre and learned weights on top of these edges.
 See QUE-5 for the full design.
 """
 
+from collections import namedtuple
+
 from django.db.models import Count, Q
 
 from .models import CastMember, CrewMember, Show
@@ -51,6 +53,44 @@ SERVICE_JOBS = [
     "Extras Casting Coordinator",
     "Location Casting",
 ]
+
+# Above-the-line crew worth naming next to the cast in a recommendation's
+# callout, most show-defining first. A creator or showrunner defines a show; a
+# director or composer shapes it. This list decides only who gets NAMED, never
+# how a show is scored: scoring is blind to the job (ADR-04). It answers the
+# design rule "pitch by cast, and name a marquee creator when one is shared".
+MARQUEE_JOBS = [
+    "Creator",
+    "Showrunner",
+    "Executive Producer",
+    "Director",
+    "Writer",
+    "Original Music Composer",
+    "Composer",
+    "Music",
+]
+
+# Billing order below which a cast credit counts as a recognizable name rather
+# than a one-scene guest. TMDb bills the featured cast in low positions and
+# dumps single-episode guests at 500+, so any cutoff in that gap behaves the
+# same; 40 leaves room for a large ensemble's recurring players. Used only to
+# decide who to name, never to score.
+RECOGNIZABLE_BILLING = 40
+
+# What we know about one person on one show: enough to score them (best_count,
+# mirroring similar_by_people) and to name them (role/kind/cast_order). role is
+# resolved once per person so a creator reads as a creator and an actor by their
+# character. kind is "marquee" (a MARQUEE_JOBS crew role), "cast", or "crew".
+RoleInfo = namedtuple(
+    "RoleInfo", "name best_count cast_order role kind marquee_rank"
+)
+
+# One shared person tying a candidate back to the source show. contribution is
+# the same min(source share, candidate share) the score is built from, so the
+# callout orders people by exactly what earned the ranking.
+Connection = namedtuple(
+    "Connection", "name role kind contribution cast_order marquee_rank"
+)
 
 
 class RankedShows(list):
@@ -195,6 +235,189 @@ def similar_by_people(show, limit=12):
         mode = "rating"
         results.sort(key=lambda s: (-s.vote_average, -s.vote_count))
     return RankedShows(results[:limit], mode=mode)
+
+
+def role_index(show):
+    """Map every person on `show` to how we score and how we name them.
+
+    The scoring half mirrors similar_by_people exactly: best episode_count per
+    person, cast and crew merged, service jobs excluded on the crew side. The
+    naming half resolves one display role per person: a marquee crew job if
+    they hold one (so a creator reads as a creator), otherwise their cast
+    character, otherwise a plain crew job. cast_order keeps their best billing
+    so the recognizable actors sort to the front of a callout.
+
+    Returns {person_id: RoleInfo}. Used by shared_connections to describe why
+    two shows are connected, in the same currency that ranked them.
+    """
+    marquee_rank = {job: i for i, job in enumerate(MARQUEE_JOBS)}
+
+    best_count = {}
+    name = {}
+    cast_order = {}
+    character = {}      # person_id -> (episode_count, character) of biggest role
+    best_marquee = {}   # person_id -> (rank, job)
+    plain_crew = {}     # person_id -> a non-marquee crew job, as a fallback
+
+    for pid, pname, char, order, count in CastMember.objects.filter(
+        show=show
+    ).values_list(
+        "person_id", "person__name", "character", "order", "episode_count"
+    ):
+        c = count or 0
+        if pid not in best_count or c > best_count[pid]:
+            best_count[pid] = c
+        name[pid] = pname
+        if pid not in cast_order or order < cast_order[pid]:
+            cast_order[pid] = order
+        # Their biggest cast role names them; a lead's main character, not a
+        # one-episode second credit.
+        if pid not in character or c > character[pid][0]:
+            character[pid] = (c, char)
+
+    for pid, pname, job, count in (
+        CrewMember.objects.filter(show=show)
+        .exclude(job__in=SERVICE_JOBS)
+        .values_list("person_id", "person__name", "job", "episode_count")
+    ):
+        c = count or 0
+        if pid not in best_count or c > best_count[pid]:
+            best_count[pid] = c
+        name[pid] = pname
+        rank = marquee_rank.get(job)
+        if rank is not None:
+            if pid not in best_marquee or rank < best_marquee[pid][0]:
+                best_marquee[pid] = (rank, job)
+        else:
+            plain_crew.setdefault(pid, job)
+
+    index = {}
+    for pid in best_count:
+        order = cast_order.get(pid, 9999)
+        # A recognizable actor is named by their character even when they also
+        # crewed (leads often direct or produce an episode); their fame is the
+        # character. Everyone else takes their marquee crew role if they hold
+        # one, then a plain cast or crew credit.
+        if pid in character and order < RECOGNIZABLE_BILLING:
+            role, kind, mrank = (character[pid][1] or "Cast"), "cast", 9999
+        elif pid in best_marquee:
+            rank, job = best_marquee[pid]
+            role, kind, mrank = job, "marquee", rank
+        elif pid in character:
+            role, kind, mrank = (character[pid][1] or "Cast"), "cast", 9999
+        else:
+            role, kind, mrank = plain_crew.get(pid, "Crew"), "crew", 9999
+        index[pid] = RoleInfo(
+            name=name.get(pid, ""),
+            best_count=best_count[pid],
+            cast_order=cast_order.get(pid, 9999),
+            role=role,
+            kind=kind,
+            marquee_rank=mrank,
+        )
+    return index
+
+
+def shared_connections(source, source_index, candidate, candidate_index):
+    """The people who tie `candidate` back to `source`, richest edge first.
+
+    contribution is the same min(source share, candidate share) that built the
+    score, so the order here is the order that earned the ranking. Role and
+    kind come from the source side: this is the source show's page, so a person
+    is named by what they did on the show you are looking at. Every shared
+    person is on the source by construction, so a source-side role always
+    exists.
+
+    Returns a list of Connection, longest/strongest edge first. len() equals
+    the show's shared_people count, since both dedupe by person the same way.
+    """
+    src_eps = source.number_of_episodes or 0
+    cand_eps = candidate.number_of_episodes or 0
+
+    connections = []
+    for pid, info in source_index.items():
+        other = candidate_index.get(pid)
+        if other is None:
+            continue
+        src_share = min(info.best_count / src_eps, 1.0) if src_eps else 0.0
+        cand_share = min(other.best_count / cand_eps, 1.0) if cand_eps else 0.0
+        connections.append(
+            Connection(
+                name=info.name,
+                role=info.role,
+                kind=info.kind,
+                contribution=min(src_share, cand_share),
+                cast_order=info.cast_order,
+                marquee_rank=info.marquee_rank,
+            )
+        )
+    # Strongest edge first; billing then name only to keep equal edges stable.
+    connections.sort(key=lambda c: (-c.contribution, c.cast_order, c.name))
+    return connections
+
+
+def name_connections(connections, max_named=5):
+    """Choose the few people to name, and count the rest.
+
+    The design rule (QUE-2 wireframe): pitch by cast, so lead with the
+    recognizable actors; still name a marquee creator when one is shared;
+    collapse the long tail of bit players and technical crew into a number.
+
+    Leads with the top-billed shared cast, fills the remaining slots with
+    marquee crew (creator and showrunner first), and guarantees a shared
+    creator or showrunner is named even if the cast filled every slot. When a
+    candidate shares neither recognizable cast nor marquee crew, it falls back
+    to the strongest edges so the callout still names someone.
+
+    Returns (named, others): a list of Connection to name, and the count left
+    over. others is len(connections) - len(named).
+    """
+    actors = sorted(
+        (c for c in connections
+         if c.kind == "cast" and c.cast_order < RECOGNIZABLE_BILLING),
+        # Strongest tie first: the lead a candidate shares says more than a
+        # recurring face, and it is the same episode-share the score is built
+        # from. Billing only breaks equal ties.
+        key=lambda c: (-c.contribution, c.cast_order),
+    )
+    marquee = sorted(
+        (c for c in connections if c.kind == "marquee"),
+        # A composer who scored every episode of both shows is a stronger tie
+        # than a one-episode guest director, so lead marquee crew by the same
+        # episode-share as everything else; the role only breaks equal ties.
+        key=lambda c: (-c.contribution, c.marquee_rank),
+    )
+
+    # Lead with the cast, but hold one slot for marquee crew when any is shared,
+    # so a creator or composer is named beside the actors rather than crowded
+    # out by them.
+    actor_slots = max_named - 1 if marquee else max_named
+    named = actors[:actor_slots]
+    for c in marquee:
+        if len(named) >= max_named:
+            break
+        named.append(c)
+    # Marquee did not use its reserved slot: give it back to the cast.
+    for c in actors[actor_slots:]:
+        if len(named) >= max_named:
+            break
+        named.append(c)
+
+    # A shared creator or showrunner is the strongest "why" there is; make sure
+    # one is named even if the cast already filled every slot.
+    creators = [c for c in marquee if c.marquee_rank <= 1]
+    if creators and not any(c in named for c in creators):
+        if len(named) >= max_named:
+            named[-1] = creators[0]
+        else:
+            named.append(creators[0])
+
+    # Neither recognizable cast nor marquee crew: name the strongest edges so
+    # the callout is never just a bare count.
+    if not named:
+        named = connections[:3]
+
+    return named, len(connections) - len(named)
 
 
 def similar_by_cast(show, limit=12):

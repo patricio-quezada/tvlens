@@ -145,8 +145,9 @@
 
         .empty { text-align: center; padding: 4rem 2rem; color: var(--text-tertiary); }
     </style>
+    {% block extra_head %}{% endblock %}
 </head>
-<body>
+<body class="{% block body_class %}{% endblock %}">
     <nav>
         <a href="{% url 'shows:index' %}" class="brand">TVLens</a>
         {% if user.is_authenticated %}
