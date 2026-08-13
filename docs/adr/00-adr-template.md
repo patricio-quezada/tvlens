@@ -11,5 +11,4 @@ the change, and the alternatives we considered with why they lost.
 
 ## After Action Review
 Did we get the result we wanted? If yes, what shows it. If not, what happened and how we
-get better. Note where it is tested and any open item to revisit later. (Named after the
-Army's after action review.)
+get better. Note where it is tested and any open item to revisit later.
