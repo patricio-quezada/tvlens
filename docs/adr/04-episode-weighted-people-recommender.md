@@ -60,8 +60,6 @@ We considered and passed on a few other approaches:
   similar."
 
 ## After Action Review
-_(Named after the Army's after action review, a habit I am carrying over: did we get the
-result we wanted, and if not, what do we change.)_
 
 **What we wanted:** rankings that reflect how alike two shows really are, not how many
 faces they happen to share.
