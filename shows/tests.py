@@ -297,6 +297,22 @@ class SharedConnectionsTests(TestCase):
         self.assertEqual([c.name for c in named], ["Bit Player"])
         self.assertEqual(others, 0)
 
+    def test_name_by_score_ranks_marquee_ahead_of_lower_scoring_cast(self):
+        # A composer on every episode of both (1.0) outscores a recognizable
+        # lead who only guested (0.2). Name-by-score names the composer first,
+        # cast and crew merged in one order, not the cast first by prominence.
+        CastMember.objects.create(show=self.source, person=self.lead, order=0,
+                                  character="Hero", episode_count=2)
+        CastMember.objects.create(show=self.cand, person=self.lead, order=0,
+                                  character="Hero", episode_count=2)
+        CrewMember.objects.create(show=self.source, person=self.maker,
+                                  job="Original Music Composer", episode_count=10)
+        CrewMember.objects.create(show=self.cand, person=self.maker,
+                                  job="Original Music Composer", episode_count=10)
+        named, others = name_connections(self._connections())
+        self.assertEqual([c.name for c in named], ["The Maker", "Lead Actor"])
+        self.assertGreater(named[0].contribution, named[1].contribution)
+
 
 class CalloutProseTests(TestCase):
     """The 7a callout: one flowing sentence per recommendation, with a

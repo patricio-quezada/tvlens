@@ -376,63 +376,41 @@ def shared_connections(source, source_index, candidate, candidate_index):
 def name_connections(connections, max_named=5):
     """Choose the few people to name, and count the rest.
 
-    The design rule (QUE-2 wireframe): pitch by cast, so lead with the
-    recognizable actors; still name a marquee creator when one is shared;
-    collapse the long tail of bit players and technical crew into a number.
+    The rule (QUE-2, refined 2026-08-14 from "name by prominence" to "name by
+    score"): name the highest-scoring shared people and order them by that
+    score, cast and crew as one merged pool. The score is the same episode-share
+    contribution that ranked the show, so the single name on a thin row is the
+    strongest tie rather than whoever prominence happened to surface, and a
+    marquee crew member who scored every episode of both is named ahead of a
+    lead who only guested. No reserved cast slot, no role-based ordering, no
+    creator guarantee: one pool, sorted by score.
 
-    Leads with the top-billed shared cast, fills the remaining slots with
-    marquee crew (creator and showrunner first), and guarantees a shared
-    creator or showrunner is named even if the cast filled every slot. When a
-    candidate shares neither recognizable cast nor marquee crew, it falls back
-    to the strongest edges so the callout still names someone.
+    Only recognizable cast (billed above RECOGNIZABLE_BILLING) and marquee crew
+    are eligible to be named. The long tail of bit players and technical crew
+    still collapses into a number; that is a separate decision (QUE-2: "collapse
+    the long tail of bit players and technical crew into a number") that
+    name-by-score does not touch. Merging is within this eligible pool: it drops
+    the old cast-first reservation, not the collapse of the tail. When a
+    candidate shares neither recognizable cast nor marquee crew, the strongest
+    edges are named so the callout is never a bare count.
 
-    Returns (named, others): a list of Connection to name, and the count left
-    over. others is len(connections) - len(named).
+    Returns (named, others): the Connections to name, highest score first, and
+    the count left over. others is len(connections) - len(named).
     """
-    actors = sorted(
-        (c for c in connections
-         if c.kind == "cast" and c.cast_order < RECOGNIZABLE_BILLING),
-        # Strongest tie first: the lead a candidate shares says more than a
-        # recurring face, and it is the same episode-share the score is built
-        # from. Billing only breaks equal ties.
-        key=lambda c: (-c.contribution, c.cast_order),
-    )
-    marquee = sorted(
-        (c for c in connections if c.kind == "marquee"),
-        # A composer who scored every episode of both shows is a stronger tie
-        # than a one-episode guest director, so lead marquee crew by the same
-        # episode-share as everything else; the role only breaks equal ties.
-        key=lambda c: (-c.contribution, c.marquee_rank),
-    )
-
-    # Lead with the cast, but hold one slot for marquee crew when any is shared,
-    # so a creator or composer is named beside the actors rather than crowded
-    # out by them.
-    actor_slots = max_named - 1 if marquee else max_named
-    named = actors[:actor_slots]
-    for c in marquee:
-        if len(named) >= max_named:
-            break
-        named.append(c)
-    # Marquee did not use its reserved slot: give it back to the cast.
-    for c in actors[actor_slots:]:
-        if len(named) >= max_named:
-            break
-        named.append(c)
-
-    # A shared creator or showrunner is the strongest "why" there is; make sure
-    # one is named even if the cast already filled every slot.
-    creators = [c for c in marquee if c.marquee_rank <= 1]
-    if creators and not any(c in named for c in creators):
-        if len(named) >= max_named:
-            named[-1] = creators[0]
-        else:
-            named.append(creators[0])
+    # connections arrive from shared_connections already sorted by
+    # (-contribution, cast_order, name), so this filter preserves highest-score
+    # first without re-sorting; cast and crew compete in the one order.
+    eligible = [
+        c for c in connections
+        if c.kind == "marquee"
+        or (c.kind == "cast" and c.cast_order < RECOGNIZABLE_BILLING)
+    ]
+    named = eligible[:max_named]
 
     # Neither recognizable cast nor marquee crew: name the strongest edges so
     # the callout is never just a bare count.
     if not named:
-        named = connections[:3]
+        named = list(connections[:3])
 
     return named, len(connections) - len(named)
 
