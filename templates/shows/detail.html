@@ -171,8 +171,19 @@
 
     /* The callout is the point of the page: one flowing sentence naming who
        ties these two shows together. The shared people glow amber against the
-       quieter prose that explains how they connect. */
-    .rec-callout { margin-top: 0.7rem; }
+       quieter prose that explains how they connect. Each callout sits in its
+       own light box (7a wireframe): a faint off-white border and a barely-there
+       lighter panel, so the sentence reads as a contained panel on the near
+       black. Light, not amber, so amber stays the one loud color (the names). */
+    .rec-callout {
+        margin-top: 0.9rem;
+        padding: 0.85rem 1.1rem;
+        border: 1px solid rgba(240, 235, 227, 0.12);
+        border-radius: 10px;
+        background: rgba(240, 235, 227, 0.015);
+        transition: border-color 0.3s ease;
+    }
+    .rec:hover .rec-callout { border-color: rgba(240, 235, 227, 0.2); }
     .callout-prose {
         font-weight: 300; line-height: 1.65; font-size: 0.98rem;
         color: var(--text-secondary); max-width: 68ch;
