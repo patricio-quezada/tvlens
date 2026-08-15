@@ -8,6 +8,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from .forms import RegistrationForm
 from .models import Genre, Show
 from .recommenders import (
+    compose_callout,
     name_connections,
     role_index,
     shared_connections,
@@ -55,9 +56,10 @@ def detail(request, slug):
     """One show, then the shows it connects to through shared people.
 
     Layer 1 becomes visible here. The ranking is similar_by_people's, untouched;
-    this view only describes each edge: for every recommendation it names the
-    people who tie it back, cast and crew, ordered by their episode-share
-    contribution, and hands the template the honest caption from the mode.
+    this view only describes each edge: for every recommendation it composes one
+    prose sentence naming the people who tie it back, cast and crew, ordered by
+    their episode-share contribution, and hands the template the honest caption
+    from the mode.
     """
     show = get_object_or_404(
         Show.objects.prefetch_related("genres", "networks"), slug=slug
@@ -71,9 +73,8 @@ def detail(request, slug):
             show, source_index, candidate, role_index(candidate)
         )
         named, others = name_connections(connections)
-        recommendations.append(
-            {"show": candidate, "named": named, "others": others}
-        )
+        callout = compose_callout(show, candidate, connections, named, others)
+        recommendations.append({"show": candidate, "callout": callout})
 
     return render(
         request,

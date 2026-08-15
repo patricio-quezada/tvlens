@@ -169,26 +169,22 @@
         color: var(--text-tertiary); white-space: nowrap;
     }
 
-    /* The callout is the point of the page: who ties these two shows together.
-       Names carry the weight, roles sit quietly under them. */
-    .rec-callout { margin-top: 0.9rem; }
+    /* The callout is the point of the page: one flowing sentence naming who
+       ties these two shows together. The shared people glow amber against the
+       quieter prose that explains how they connect. */
+    .rec-callout { margin-top: 0.7rem; }
+    .callout-prose {
+        font-weight: 300; line-height: 1.65; font-size: 0.98rem;
+        color: var(--text-secondary); max-width: 68ch;
+    }
     .callout-lead {
-        display: block; font-family: 'Bebas Neue', sans-serif;
-        font-size: 0.8rem; letter-spacing: 0.18em; text-transform: uppercase;
-        color: var(--text-secondary); margin-bottom: 0.6rem;
+        color: var(--text-primary); font-weight: 400;
     }
-    .conns { display: flex; flex-wrap: wrap; gap: 0.55rem; align-items: stretch; }
-    .conn {
-        display: flex; flex-direction: column; gap: 0.1rem;
-        padding: 0.4rem 0.75rem; border-radius: 8px;
-        background: var(--surface); border: 1px solid var(--border);
+    .conn-name {
+        color: var(--accent); font-weight: 500;
+        transition: color 0.2s ease;
     }
-    .conn-name { color: var(--accent); font-size: 0.95rem; font-weight: 500; line-height: 1.2; }
-    .conn-role { color: var(--text-secondary); font-size: 0.72rem; font-weight: 300; }
-    .conn-more {
-        display: flex; align-items: center; padding: 0.4rem 0.5rem;
-        color: var(--text-tertiary); font-size: 0.82rem; font-style: italic;
-    }
+    .rec:hover .conn-name { color: var(--accent-glow); }
 
     .recs-empty {
         padding: 2rem; text-align: center; color: var(--text-secondary);
@@ -275,16 +271,7 @@
                 <span class="rec-strength">{{ rec.show.shared_people }} shared {{ rec.show.shared_people|pluralize:"person,people" }}</span>
             </div>
             <div class="rec-callout">
-                <span class="callout-lead">Connected through</span>
-                <div class="conns">
-                    {% for c in rec.named %}
-                    <span class="conn">
-                        <span class="conn-name">{{ c.name }}</span>
-                        <span class="conn-role">{% if c.kind == 'cast' %}as {{ c.role }}{% else %}{{ c.role }}{% endif %}</span>
-                    </span>
-                    {% endfor %}
-                    {% if rec.others %}<span class="conn-more">and {{ rec.others }} other{{ rec.others|pluralize }}</span>{% endif %}
-                </div>
+                <p class="callout-prose">{% if rec.callout.lead %}<span class="callout-lead">{{ rec.callout.lead }}</span> {% endif %}{% for seg in rec.callout.segments %}{% if seg.t == 'name' %}<span class="conn-name">{{ seg.v }}</span>{% else %}{{ seg.v }}{% endif %}{% endfor %}</p>
             </div>
         </div>
     </a>
