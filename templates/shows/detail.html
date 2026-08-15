@@ -177,9 +177,6 @@
         font-weight: 300; line-height: 1.65; font-size: 0.98rem;
         color: var(--text-secondary); max-width: 68ch;
     }
-    .callout-lead {
-        color: var(--text-primary); font-weight: 400;
-    }
     .conn-name {
         color: var(--accent); font-weight: 500;
         transition: color 0.2s ease;
@@ -271,7 +268,7 @@
                 <span class="rec-strength">{{ rec.show.shared_people }} shared {{ rec.show.shared_people|pluralize:"person,people" }}</span>
             </div>
             <div class="rec-callout">
-                <p class="callout-prose">{% if rec.callout.lead %}<span class="callout-lead">{{ rec.callout.lead }}</span> {% endif %}{% for seg in rec.callout.segments %}{% if seg.t == 'name' %}<span class="conn-name">{{ seg.v }}</span>{% else %}{{ seg.v }}{% endif %}{% endfor %}</p>
+                <p class="callout-prose">{% for seg in rec.callout.segments %}{% if seg.t == 'name' %}<span class="conn-name">{{ seg.v }}</span>{% else %}{{ seg.v }}{% endif %}{% endfor %}</p>
             </div>
         </div>
     </a>

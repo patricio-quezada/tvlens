@@ -382,29 +382,40 @@ class CalloutProseTests(TestCase):
         self._crew(self.cand, p, "Director", 1)
         self.assertIn("directed one episode", self._text(self._callout()))
 
-    def test_creator_led_lead_phrase(self):
-        maker = self._person("The Creator")
+    def test_no_lead_phrase_in_callout(self):
+        # Editorial leads are gone (decided 2026-08-14): the callout carries no
+        # 'lead' key and never prefixes a header, whatever the connection profile.
+        maker = self._person("The Creator")   # would once have led "Made by..."
         self._crew(self.source, maker, "Creator", 62)
         self._crew(self.cand, maker, "Creator", 63)
-        self.assertEqual(self._callout()["lead"], "Made by the same people:")
+        callout = self._callout()
+        self.assertNotIn("lead", callout)
+        text = self._text(callout)
+        self.assertNotIn("Made by the same people", text)
+        self.assertTrue(text.startswith("Creator The Creator"))
 
-    def test_all_cast_lead_counts_the_actors(self):
-        # Two shared actors, both strong ties, nothing else: the actors are the
-        # whole story.
+    def test_weak_tie_opens_on_the_connection_not_a_thinner_thread(self):
+        # A single guest across a few episodes of a long run once earned an
+        # "A thinner thread:" lead; now it opens straight on the person.
+        guest = self._person("A Guest")
+        self._cast(self.source, guest, 0, "Waiter", 3)
+        self._cast(self.cand, guest, 0, "Waiter", 3)
+        text = self._text(self._callout())
+        self.assertNotIn("thinner thread", text)
+        self.assertTrue(text.startswith("A Guest plays Waiter"))
+
+    def test_all_cast_opens_on_the_strongest_actor_no_header(self):
+        # An all-cast tie once led "N actors carry over:"; now it opens on the
+        # strongest actor with no header.
         a = self._person("Actor One")
         b = self._person("Actor Two")
         self._cast(self.source, a, 0, "Hero", 62)
         self._cast(self.cand, a, 0, "Hero", 63)
         self._cast(self.source, b, 1, "Sidekick", 60)
         self._cast(self.cand, b, 1, "Sidekick", 60)
-        self.assertEqual(self._callout()["lead"], "Two actors carry over:")
-
-    def test_thin_thread_lead_when_strongest_edge_is_light(self):
-        # A single guest across a few episodes of a long run: a thin thread.
-        guest = self._person("A Guest")
-        self._cast(self.source, guest, 0, "Waiter", 3)
-        self._cast(self.cand, guest, 0, "Waiter", 3)
-        self.assertEqual(self._callout()["lead"], "A thinner thread:")
+        text = self._text(self._callout())
+        self.assertNotIn("carry over", text)
+        self.assertTrue(text.startswith("Actor One plays Hero"))
 
     def test_tail_collapses_the_remainder_with_a_count(self):
         lead = self._person("Star")

@@ -77,15 +77,6 @@ MARQUEE_JOBS = [
 # decide who to name, never to score.
 RECOGNIZABLE_BILLING = 40
 
-# Below this, even the strongest shared person is a light tie: a guest across a
-# handful of episodes, not a lead who carried a run. The callout says so out
-# loud ("A thinner thread:") rather than dressing a weak edge up as a strong
-# one. 0.15 is one seventh of a run; calibrated on the catalog, it separates
-# Breaking Bad's real ties (Better Call Saul 1.0, The Boys 0.30, Westworld 0.44,
-# The Mandalorian 0.38) from the thin ones (Friends 0.10, Suits 0.11, CSI 0.02).
-# Read off contribution, the same episode-share the score is built from.
-THIN_THRESHOLD = 0.15
-
 # What we know about one person on one show: enough to score them (best_count,
 # mirroring similar_by_people) and to name them (role/kind/cast_order). role is
 # resolved once per person so a creator reads as a creator and an actor by their
@@ -528,45 +519,26 @@ def _crew_clause(c):
     return [_text(noun + " "), _name(c.name), _text(" " + phrase)]
 
 
-def _select_lead(connections, named):
-    """Pick one lead phrase from the connection profile, or none. A small,
-    data-driven set (QUE-2 wireframe): a shared creator says 'same people'; a
-    weak strongest edge says 'thinner thread'; an all-cast tie says the actors
-    are the whole story. Most rows earn no lead and open on the strongest name.
-    Precedence matters: a genuinely thin all-cast tie is named honestly as thin
-    rather than oversold as 'N actors carry over'."""
-    total = len(connections)
-    if any(c.kind == "marquee" and c.marquee_rank <= 1 for c in connections):
-        return "Made by the same people:"
-    if connections and connections[0].contribution < THIN_THRESHOLD:
-        return "A thinner thread:"
-    if connections and all(c.kind == "cast" for c in connections):
-        if total == 1:
-            return "One actor carries over:"
-        return f"{_num_word(total).capitalize()} actors carry over:"
-    return ""
-
-
 def compose_callout(source, candidate, connections, named, others):
     """Turn a candidate's shared people into one flowing prose sentence.
 
     The 7a treatment (QUE-2): lead with the recognizable actor named by their
     character and episode count, gather any other named actors, then name the
     marquee crew by what they did on both shows, and collapse the long tail into
-    a number. A profile-chosen lead phrase sets the framing. Composition lives
-    here in Python, not the template, so it stays testable.
+    a number. No editorial header: the sentence opens straight on the connection
+    (decided 2026-08-14; the earlier "A thinner thread:" / "Made by the same
+    people:" leads are gone). Composition lives here in Python, not the template,
+    so it stays testable.
 
     Returns a dict for the template:
-        lead      an optional opening phrase, already punctuated
         segments  an ordered list of {"t": "text"|"name", "v": str}, so the
                   shared people render as amber tokens and everything else as
                   quiet prose, all auto-escaped
         shared_total  the candidate's shared-people count
 
-    The names come pre-ordered by name_connections (cast by prominence, then
-    marquee crew), so the prose leads with the pitch and the reasoning follows.
+    The names come pre-ordered by name_connections (highest score first); the
+    prose then opens on the cast to pitch by cast, and the reasoning follows.
     """
-    lead = _select_lead(connections, named)
     cast = [c for c in named if c.kind == "cast"]
     crew = [c for c in named if c.kind in ("marquee", "crew")]
 
@@ -586,9 +558,9 @@ def compose_callout(source, candidate, connections, named, others):
             segments.append(_text(" and " if i == len(clauses) - 1 else ", "))
         segments.extend(clause)
 
-    # Open on a capital when no lead phrase already did. A cast clause starts on
-    # a name and needs no help; a crew-only clause starts on a lowercased noun.
-    if not lead and segments and segments[0]["t"] == "text":
+    # With no lead phrase, open on a capital. A cast clause starts on a name and
+    # needs no help; a crew-only clause starts on a lowercased role noun.
+    if segments and segments[0]["t"] == "text":
         segments[0] = _text(segments[0]["v"][:1].upper() + segments[0]["v"][1:])
 
     if others > 0:
@@ -596,7 +568,7 @@ def compose_callout(source, candidate, connections, named, others):
     else:
         segments.append(_text("."))
 
-    return {"lead": lead, "segments": segments, "shared_total": len(connections)}
+    return {"segments": segments, "shared_total": len(connections)}
 
 
 def similar_by_cast(show, limit=12):
