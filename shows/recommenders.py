@@ -16,6 +16,8 @@ Later layers stack genre and learned weights on top of these edges.
 See QUE-5 for the full design.
 """
 
+from collections import namedtuple
+
 from django.db.models import Count, Q
 
 from .models import CastMember, CrewMember, Show
@@ -51,6 +53,48 @@ SERVICE_JOBS = [
     "Extras Casting Coordinator",
     "Location Casting",
 ]
+
+# Above-the-line crew worth naming next to the cast in a recommendation's
+# callout, most show-defining first. A creator or showrunner defines a show; a
+# director or composer shapes it. This list decides only who gets NAMED, never
+# how a show is scored: scoring is blind to the job (ADR-04). It answers the
+# design rule "pitch by cast, and name a marquee creator when one is shared".
+MARQUEE_JOBS = [
+    "Creator",
+    "Showrunner",
+    "Executive Producer",
+    "Director",
+    "Writer",
+    "Original Music Composer",
+    "Composer",
+    "Music",
+]
+
+# Billing order below which a cast credit counts as a recognizable name rather
+# than a one-scene guest. TMDb bills the featured cast in low positions and
+# dumps single-episode guests at 500+, so any cutoff in that gap behaves the
+# same; 40 leaves room for a large ensemble's recurring players. Used only to
+# decide who to name, never to score.
+RECOGNIZABLE_BILLING = 40
+
+# What we know about one person on one show: enough to score them (best_count,
+# mirroring similar_by_people) and to name them (role/kind/cast_order). role is
+# resolved once per person so a creator reads as a creator and an actor by their
+# character. kind is "marquee" (a MARQUEE_JOBS crew role), "cast", or "crew".
+RoleInfo = namedtuple(
+    "RoleInfo", "name best_count cast_order role kind marquee_rank"
+)
+
+# One shared person tying a candidate back to the source show. contribution is
+# the same min(source share, candidate share) the score is built from, so the
+# callout orders people by exactly what earned the ranking. The raw counts ride
+# along so the prose callout can carry honest episode context ("across 28
+# episodes", "scored every episode of both") without a second query.
+Connection = namedtuple(
+    "Connection",
+    "name role kind contribution cast_order marquee_rank "
+    "src_count src_episodes cand_count cand_episodes",
+)
 
 
 class RankedShows(list):
@@ -195,6 +239,336 @@ def similar_by_people(show, limit=12):
         mode = "rating"
         results.sort(key=lambda s: (-s.vote_average, -s.vote_count))
     return RankedShows(results[:limit], mode=mode)
+
+
+def role_index(show):
+    """Map every person on `show` to how we score and how we name them.
+
+    The scoring half mirrors similar_by_people exactly: best episode_count per
+    person, cast and crew merged, service jobs excluded on the crew side. The
+    naming half resolves one display role per person: a marquee crew job if
+    they hold one (so a creator reads as a creator), otherwise their cast
+    character, otherwise a plain crew job. cast_order keeps their best billing
+    so the recognizable actors sort to the front of a callout.
+
+    Returns {person_id: RoleInfo}. Used by shared_connections to describe why
+    two shows are connected, in the same currency that ranked them.
+    """
+    marquee_rank = {job: i for i, job in enumerate(MARQUEE_JOBS)}
+
+    best_count = {}
+    name = {}
+    cast_order = {}
+    character = {}      # person_id -> (episode_count, character) of biggest role
+    best_marquee = {}   # person_id -> (rank, job)
+    plain_crew = {}     # person_id -> a non-marquee crew job, as a fallback
+
+    for pid, pname, char, order, count in CastMember.objects.filter(
+        show=show
+    ).values_list(
+        "person_id", "person__name", "character", "order", "episode_count"
+    ):
+        c = count or 0
+        if pid not in best_count or c > best_count[pid]:
+            best_count[pid] = c
+        name[pid] = pname
+        if pid not in cast_order or order < cast_order[pid]:
+            cast_order[pid] = order
+        # Their biggest cast role names them; a lead's main character, not a
+        # one-episode second credit.
+        if pid not in character or c > character[pid][0]:
+            character[pid] = (c, char)
+
+    for pid, pname, job, count in (
+        CrewMember.objects.filter(show=show)
+        .exclude(job__in=SERVICE_JOBS)
+        .values_list("person_id", "person__name", "job", "episode_count")
+    ):
+        c = count or 0
+        if pid not in best_count or c > best_count[pid]:
+            best_count[pid] = c
+        name[pid] = pname
+        rank = marquee_rank.get(job)
+        if rank is not None:
+            if pid not in best_marquee or rank < best_marquee[pid][0]:
+                best_marquee[pid] = (rank, job)
+        else:
+            plain_crew.setdefault(pid, job)
+
+    index = {}
+    for pid in best_count:
+        order = cast_order.get(pid, 9999)
+        # A recognizable actor is named by their character even when they also
+        # crewed (leads often direct or produce an episode); their fame is the
+        # character. Everyone else takes their marquee crew role if they hold
+        # one, then a plain cast or crew credit.
+        if pid in character and order < RECOGNIZABLE_BILLING:
+            role, kind, mrank = (character[pid][1] or "Cast"), "cast", 9999
+        elif pid in best_marquee:
+            rank, job = best_marquee[pid]
+            role, kind, mrank = job, "marquee", rank
+        elif pid in character:
+            role, kind, mrank = (character[pid][1] or "Cast"), "cast", 9999
+        else:
+            role, kind, mrank = plain_crew.get(pid, "Crew"), "crew", 9999
+        index[pid] = RoleInfo(
+            name=name.get(pid, ""),
+            best_count=best_count[pid],
+            cast_order=cast_order.get(pid, 9999),
+            role=role,
+            kind=kind,
+            marquee_rank=mrank,
+        )
+    return index
+
+
+def shared_connections(source, source_index, candidate, candidate_index):
+    """The people who tie `candidate` back to `source`, richest edge first.
+
+    contribution is the same min(source share, candidate share) that built the
+    score, so the order here is the order that earned the ranking. Role and
+    kind come from the source side: this is the source show's page, so a person
+    is named by what they did on the show you are looking at. Every shared
+    person is on the source by construction, so a source-side role always
+    exists.
+
+    Returns a list of Connection, longest/strongest edge first. len() equals
+    the show's shared_people count, since both dedupe by person the same way.
+    """
+    src_eps = source.number_of_episodes or 0
+    cand_eps = candidate.number_of_episodes or 0
+
+    connections = []
+    for pid, info in source_index.items():
+        other = candidate_index.get(pid)
+        if other is None:
+            continue
+        src_share = min(info.best_count / src_eps, 1.0) if src_eps else 0.0
+        cand_share = min(other.best_count / cand_eps, 1.0) if cand_eps else 0.0
+        connections.append(
+            Connection(
+                name=info.name,
+                role=info.role,
+                kind=info.kind,
+                contribution=min(src_share, cand_share),
+                cast_order=info.cast_order,
+                marquee_rank=info.marquee_rank,
+                src_count=info.best_count,
+                src_episodes=src_eps,
+                cand_count=other.best_count,
+                cand_episodes=cand_eps,
+            )
+        )
+    # Strongest edge first; billing then name only to keep equal edges stable.
+    connections.sort(key=lambda c: (-c.contribution, c.cast_order, c.name))
+    return connections
+
+
+def name_connections(connections, max_named=5):
+    """Choose the few people to name, and count the rest.
+
+    The rule (QUE-2, refined 2026-08-14 from "name by prominence" to "name by
+    score"): name the highest-scoring shared people and order them by that
+    score, cast and crew as one merged pool. The score is the same episode-share
+    contribution that ranked the show, so the single name on a thin row is the
+    strongest tie rather than whoever prominence happened to surface, and a
+    marquee crew member who scored every episode of both is named ahead of a
+    lead who only guested. No reserved cast slot, no role-based ordering, no
+    creator guarantee: one pool, sorted by score.
+
+    Only recognizable cast (billed above RECOGNIZABLE_BILLING) and marquee crew
+    are eligible to be named. The long tail of bit players and technical crew
+    still collapses into a number; that is a separate decision (QUE-2: "collapse
+    the long tail of bit players and technical crew into a number") that
+    name-by-score does not touch. Merging is within this eligible pool: it drops
+    the old cast-first reservation, not the collapse of the tail. When a
+    candidate shares neither recognizable cast nor marquee crew, the strongest
+    edges are named so the callout is never a bare count.
+
+    Returns (named, others): the Connections to name, highest score first, and
+    the count left over. others is len(connections) - len(named).
+    """
+    # connections arrive from shared_connections already sorted by
+    # (-contribution, cast_order, name), so this filter preserves highest-score
+    # first without re-sorting; cast and crew compete in the one order.
+    eligible = [
+        c for c in connections
+        if c.kind == "marquee"
+        or (c.kind == "cast" and c.cast_order < RECOGNIZABLE_BILLING)
+    ]
+    named = eligible[:max_named]
+
+    # Neither recognizable cast nor marquee crew: name the strongest edges so
+    # the callout is never just a bare count.
+    if not named:
+        named = list(connections[:3])
+
+    return named, len(connections) - len(named)
+
+
+# How a crew role reads in prose: a noun to introduce the person and a verb
+# phrase framed as "both", since every named person is, by construction, on both
+# shows. DIRECTED and SHOT are placeholders resolved against the candidate-side
+# episode count so a one-off guest director reads as "directed one episode", not
+# "directed both". Roles absent here fall back to a lowercased job and "worked on
+# both"; the graph rarely names a plain crew job, but the callout never breaks.
+ROLE_PROSE = {
+    "Creator": ("creator", "created both"),
+    "Showrunner": ("showrunner", "ran both shows"),
+    "Executive Producer": ("executive producer", "produced both"),
+    "Producer": ("producer", "produced both"),
+    "Co-Executive Producer": ("producer", "produced both"),
+    "Co-Producer": ("producer", "produced both"),
+    "Writer": ("writer", "wrote for both"),
+    "Original Music Composer": ("composer", "scored both"),
+    "Composer": ("composer", "scored both"),
+    "Music": ("composer", "scored both"),
+    "Music Supervisor": ("music supervisor", "supervised the music on both"),
+    "Director": ("director", "DIRECTED"),
+    "Director of Photography": ("cinematographer", "SHOT"),
+    "Cinematographer": ("cinematographer", "SHOT"),
+    "Editor": ("editor", "edited both"),
+}
+
+# Verb phrases that read naturally sharpened to "every episode of both" when the
+# person is on the whole run of each show. "created both" and "ran both shows"
+# do not take the upgrade (a creator is not measured in episodes), so they are
+# left off this set.
+UPGRADABLE_TO_EVERY = {"produced both", "scored both", "edited both"}
+
+_NUMBER_WORDS = [
+    "zero", "one", "two", "three", "four", "five",
+    "six", "seven", "eight", "nine",
+]
+
+
+def _num_word(n):
+    """Spell small counts, digits for the rest. 'directed one episode' reads
+    better than 'directed 1 episode'; 'across 28 episodes' better than
+    'across twenty-eight'."""
+    return _NUMBER_WORDS[n] if 0 <= n < len(_NUMBER_WORDS) else str(n)
+
+
+def _episodes(n):
+    return f"{_num_word(n)} episode{'' if n == 1 else 's'}"
+
+
+def _text(v):
+    return {"t": "text", "v": v}
+
+
+def _name(v):
+    return {"t": "name", "v": v}
+
+
+def _join_names(names):
+    """['A'] -> [A]; ['A','B'] -> [A, ' and ', B]; ['A','B','C'] -> A, B and C.
+    Returns a segment list so each name stays its own amber-styled token."""
+    segs = []
+    for i, nm in enumerate(names):
+        if i:
+            segs.append(_text(" and " if i == len(names) - 1 else ", "))
+        segs.append(_name(nm))
+    return segs
+
+
+def _cast_clause(c):
+    """The strongest shared actor, named by their character on the source show
+    with that show's episode count: 'Giancarlo Esposito plays Gus Fring across
+    28 episodes', 'Aaron Paul plays Jesse Pinkman in all 62 episodes'.
+
+    Counts are source-side on purpose. This is the source show's page, so the
+    character and the count both describe who the person is here, and their
+    presence in the list is what asserts the tie to the recommended show. Mixing
+    a source character with a candidate count would misread (a lead of the
+    candidate who only guested on the source), so both stay on the same side.
+    """
+    char = c.role if c.role and c.role != "Cast" else None
+    if not char:
+        return [_name(c.name), _text(" appears")]
+    if c.src_count and c.src_episodes and c.src_count >= c.src_episodes:
+        tail = f" plays {char} in all {c.src_episodes} episodes"
+    elif c.src_count:
+        tail = f" plays {char} across {_episodes(c.src_count)}"
+    else:
+        tail = f" plays {char}"
+    return [_name(c.name), _text(tail)]
+
+
+def _secondary_cast_clause(cast):
+    verb = "appears too" if len(cast) == 1 else "appear too"
+    return _join_names([c.name for c in cast]) + [_text(f" {verb}")]
+
+
+def _crew_clause(c):
+    """A crew tie as prose: 'composer Dave Porter scored every episode of both',
+    'director Tim Hunter directed one episode'."""
+    noun, verb = ROLE_PROSE.get(
+        c.role, ((c.role or "crew").lower(), "worked on both")
+    )
+    if verb == "DIRECTED":
+        phrase = f"directed {_episodes(c.src_count)}" if c.src_count else "directed both"
+    elif verb == "SHOT":
+        phrase = f"shot {_episodes(c.src_count)}" if c.src_count else "shot both"
+    else:
+        phrase = verb
+        src_every = c.src_episodes and c.src_count >= c.src_episodes
+        cand_every = c.cand_episodes and c.cand_count >= c.cand_episodes
+        if verb in UPGRADABLE_TO_EVERY and src_every and cand_every:
+            phrase = verb.replace("both", "every episode of both")
+    return [_text(noun + " "), _name(c.name), _text(" " + phrase)]
+
+
+def compose_callout(source, candidate, connections, named, others):
+    """Turn a candidate's shared people into one flowing prose sentence.
+
+    The 7a treatment (QUE-2): lead with the recognizable actor named by their
+    character and episode count, gather any other named actors, then name the
+    marquee crew by what they did on both shows, and collapse the long tail into
+    a number. No editorial header: the sentence opens straight on the connection
+    (decided 2026-08-14; the earlier "A thinner thread:" / "Made by the same
+    people:" leads are gone). Composition lives here in Python, not the template,
+    so it stays testable.
+
+    Returns a dict for the template:
+        segments  an ordered list of {"t": "text"|"name", "v": str}, so the
+                  shared people render as amber tokens and everything else as
+                  quiet prose, all auto-escaped
+        shared_total  the candidate's shared-people count
+
+    The names come pre-ordered by name_connections (highest score first); the
+    prose then opens on the cast to pitch by cast, and the reasoning follows.
+    """
+    cast = [c for c in named if c.kind == "cast"]
+    crew = [c for c in named if c.kind in ("marquee", "crew")]
+
+    clauses = []
+    if cast:
+        clauses.append(_cast_clause(cast[0]))
+        if len(cast) > 1:
+            clauses.append(_secondary_cast_clause(cast[1:]))
+    for c in crew:
+        clauses.append(_crew_clause(c))
+    if not clauses:  # neither cast nor crew named: fall back to bare names
+        clauses.append(_join_names([c.name for c in named]))
+
+    segments = []
+    for i, clause in enumerate(clauses):
+        if i:
+            segments.append(_text(" and " if i == len(clauses) - 1 else ", "))
+        segments.extend(clause)
+
+    # With no lead phrase, open on a capital. A cast clause starts on a name and
+    # needs no help; a crew-only clause starts on a lowercased role noun.
+    if segments and segments[0]["t"] == "text":
+        segments[0] = _text(segments[0]["v"][:1].upper() + segments[0]["v"][1:])
+
+    if others > 0:
+        segments.append(_text(f", with {others} other{'' if others == 1 else 's'}."))
+    else:
+        segments.append(_text("."))
+
+    return {"segments": segments, "shared_total": len(connections)}
 
 
 def similar_by_cast(show, limit=12):
