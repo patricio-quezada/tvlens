@@ -59,6 +59,11 @@ class Show(models.Model):
 
     tmdb_id = models.IntegerField(unique=True, db_index=True)
     name = models.CharField(max_length=300)
+    # Public identity in the URL (ADR-03). Stable once set: a re-import that
+    # changes the name keeps the old slug so links do not rot. unique=True
+    # carries its own index. Long because a show name can be, though slugs
+    # in the catalog are short.
+    slug = models.SlugField(max_length=300, unique=True, blank=True)
     original_name = models.CharField(max_length=300, blank=True)
     overview = models.TextField(blank=True)
     tagline = models.CharField(max_length=500, blank=True)
@@ -87,10 +92,46 @@ class Show(models.Model):
     def __str__(self):
         return self.name
 
+    def save(self, *args, **kwargs):
+        # Fill the slug on first save so ingestion keeps working without
+        # touching its upsert, and keep it stable afterward (see the field).
+        if not self.slug:
+            self.slug = self._unique_slug()
+        super().save(*args, **kwargs)
+
+    def _unique_slug(self):
+        """A slugified name, with -2, -3, ... appended on collision.
+
+        The data migration that backfills the existing catalog resolves
+        collisions the same way, so a show minted here and one minted there
+        never disagree.
+        """
+        from django.utils.text import slugify
+
+        base = slugify(self.name) or "show"
+        slug = base
+        n = 2
+        taken = Show.objects.exclude(pk=self.pk)
+        while taken.filter(slug=slug).exists():
+            slug = f"{base}-{n}"
+            n += 1
+        return slug
+
+    def get_absolute_url(self):
+        from django.urls import reverse
+
+        return reverse("shows:detail", kwargs={"slug": self.slug})
+
     @property
     def poster_url(self):
         if self.poster_path:
             return f"{settings.TMDB_IMAGE_BASE_URL}/w342{self.poster_path}"
+        return ""
+
+    @property
+    def backdrop_url(self):
+        if self.backdrop_path:
+            return f"{settings.TMDB_IMAGE_BASE_URL}/w1280{self.backdrop_path}"
         return ""
 
     @property

@@ -7,7 +7,15 @@ from django.shortcuts import get_object_or_404, redirect, render
 
 from .forms import RegistrationForm
 from .models import Genre, Show
-from .recommenders import similar_by_cast, similar_by_crew, similar_by_people
+from .recommenders import (
+    compose_callout,
+    name_connections,
+    role_index,
+    shared_connections,
+    similar_by_cast,
+    similar_by_crew,
+    similar_by_people,
+)
 
 
 def index(request):
@@ -40,6 +48,41 @@ def index(request):
             "recently_added": recently_added,
             "genres": genres,
             "favorite_genre_ids": favorite_genre_ids,
+        },
+    )
+
+
+def detail(request, slug):
+    """One show, then the shows it connects to through shared people.
+
+    Layer 1 becomes visible here. The ranking is similar_by_people's, untouched;
+    this view only describes each edge: for every recommendation it composes one
+    prose sentence naming the people who tie it back, cast and crew, ordered by
+    their episode-share contribution, and hands the template the honest caption
+    from the mode.
+    """
+    show = get_object_or_404(
+        Show.objects.prefetch_related("genres", "networks"), slug=slug
+    )
+    ranked = similar_by_people(show)
+
+    source_index = role_index(show)
+    recommendations = []
+    for candidate in ranked:
+        connections = shared_connections(
+            show, source_index, candidate, role_index(candidate)
+        )
+        named, others = name_connections(connections)
+        callout = compose_callout(show, candidate, connections, named, others)
+        recommendations.append({"show": candidate, "callout": callout})
+
+    return render(
+        request,
+        "shows/detail.html",
+        {
+            "show": show,
+            "recommendations": recommendations,
+            "mode": ranked.mode,
         },
     )
 
