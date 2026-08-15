@@ -10,6 +10,7 @@ from django.urls import reverse
 
 from .models import CastMember, CrewMember, Person, Show
 from .recommenders import (
+    compose_callout,
     name_connections,
     role_index,
     shared_connections,
@@ -295,6 +296,130 @@ class SharedConnectionsTests(TestCase):
         named, others = name_connections(self._connections())
         self.assertEqual([c.name for c in named], ["Bit Player"])
         self.assertEqual(others, 0)
+
+
+class CalloutProseTests(TestCase):
+    """The 7a callout: one flowing sentence per recommendation, with a
+    data-driven lead, honest source-side episode context, roles in prose, and
+    the long tail collapsed into a count (QUE-2 wireframe)."""
+
+    def setUp(self):
+        # A short source and candidate so 'every episode' is easy to trigger.
+        self.source = Show.objects.create(tmdb_id=1, name="Source",
+                                          number_of_episodes=62)
+        self.cand = Show.objects.create(tmdb_id=2, name="Cand",
+                                        number_of_episodes=63)
+        self._pid = 10
+
+    def _person(self, name):
+        self._pid += 1
+        return Person.objects.create(tmdb_id=self._pid, name=name)
+
+    def _cast(self, show, person, order, character, eps):
+        CastMember.objects.create(show=show, person=person, order=order,
+                                  character=character, episode_count=eps)
+
+    def _crew(self, show, person, job, eps):
+        CrewMember.objects.create(show=show, person=person, job=job,
+                                  episode_count=eps)
+
+    def _callout(self):
+        conns = shared_connections(
+            self.source, role_index(self.source),
+            self.cand, role_index(self.cand),
+        )
+        named, others = name_connections(conns)
+        return compose_callout(self.source, self.cand, conns, named, others)
+
+    def _text(self, callout):
+        return "".join(seg["v"] for seg in callout["segments"])
+
+    def test_cast_lead_uses_source_side_episode_context(self):
+        # A lead who did 43 of the source's 62 reads "across 43 episodes", not
+        # the candidate's count, so the character and number agree on one show.
+        lead = self._person("Bob Odenkirk")
+        self._cast(self.source, lead, 0, "Saul Goodman", 43)
+        self._cast(self.cand, lead, 0, "Saul Goodman", 63)
+        text = self._text(self._callout())
+        self.assertIn("Bob Odenkirk plays Saul Goodman across 43 episodes", text)
+
+    def test_full_run_reads_every_episode(self):
+        lead = self._person("Aaron Paul")
+        self._cast(self.source, lead, 0, "Jesse Pinkman", 62)
+        self._cast(self.cand, lead, 0, "Jesse Pinkman", 20)
+        self.assertIn("plays Jesse Pinkman in all 62 episodes",
+                      self._text(self._callout()))
+
+    def test_composer_on_every_episode_of_both_is_named_so(self):
+        p = self._person("Dave Porter")
+        self._crew(self.source, p, "Original Music Composer", 62)
+        self._crew(self.cand, p, "Original Music Composer", 63)
+        callout = self._callout()
+        text = self._text(callout)
+        # Crew-only callout capitalizes the opening role noun.
+        self.assertTrue(text.startswith("Composer Dave Porter"))
+        self.assertIn("scored every episode of both", text)
+
+    def test_director_reads_with_source_episode_count(self):
+        p = self._person("Tim Hunter")
+        self._crew(self.source, p, "Director", 1)
+        self._crew(self.cand, p, "Director", 1)
+        self.assertIn("directed one episode", self._text(self._callout()))
+
+    def test_creator_led_lead_phrase(self):
+        maker = self._person("The Creator")
+        self._crew(self.source, maker, "Creator", 62)
+        self._crew(self.cand, maker, "Creator", 63)
+        self.assertEqual(self._callout()["lead"], "Made by the same people:")
+
+    def test_all_cast_lead_counts_the_actors(self):
+        # Two shared actors, both strong ties, nothing else: the actors are the
+        # whole story.
+        a = self._person("Actor One")
+        b = self._person("Actor Two")
+        self._cast(self.source, a, 0, "Hero", 62)
+        self._cast(self.cand, a, 0, "Hero", 63)
+        self._cast(self.source, b, 1, "Sidekick", 60)
+        self._cast(self.cand, b, 1, "Sidekick", 60)
+        self.assertEqual(self._callout()["lead"], "Two actors carry over:")
+
+    def test_thin_thread_lead_when_strongest_edge_is_light(self):
+        # A single guest across a few episodes of a long run: a thin thread.
+        guest = self._person("A Guest")
+        self._cast(self.source, guest, 0, "Waiter", 3)
+        self._cast(self.cand, guest, 0, "Waiter", 3)
+        self.assertEqual(self._callout()["lead"], "A thinner thread:")
+
+    def test_tail_collapses_the_remainder_with_a_count(self):
+        lead = self._person("Star")
+        self._cast(self.source, lead, 0, "Hero", 62)
+        self._cast(self.cand, lead, 0, "Hero", 63)
+        for i in range(3):  # three bit players collapse into the tail
+            bit = self._person(f"Bit {i}")
+            self._cast(self.source, bit, 600 + i, "Extra", 2)
+            self._cast(self.cand, bit, 600 + i, "Extra", 2)
+        text = self._text(self._callout())
+        self.assertTrue(text.rstrip().endswith("with 3 others."))
+
+    def test_secondary_cast_grouped_not_repeated(self):
+        lead = self._person("Star")
+        second = self._person("Costar")
+        self._cast(self.source, lead, 0, "Hero", 62)
+        self._cast(self.cand, lead, 0, "Hero", 63)
+        self._cast(self.source, second, 1, "Rival", 55)
+        self._cast(self.cand, second, 1, "Rival", 55)
+        text = self._text(self._callout())
+        # The lead is elaborated; the second is gathered, not re-described.
+        self.assertIn("Costar appears too", text)
+        self.assertNotIn("Costar plays", text)
+
+    def test_no_tail_when_everyone_is_named(self):
+        lead = self._person("Star")
+        self._cast(self.source, lead, 0, "Hero", 62)
+        self._cast(self.cand, lead, 0, "Hero", 63)
+        text = self._text(self._callout())
+        self.assertNotIn("others", text)
+        self.assertTrue(text.rstrip().endswith("episodes."))
 
 
 class ShowDetailViewTests(TestCase):
