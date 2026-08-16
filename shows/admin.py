@@ -21,7 +21,6 @@ from .models import (
     Watchlist,
 )
 
-
 # ── Inlines ───────────────────────────────────────────────────────────────────
 
 class SeasonInline(admin.TabularInline):
