@@ -10,10 +10,13 @@ from django.urls import reverse
 
 from .models import CastMember, CrewMember, Person, Show
 from .recommenders import (
+    SQLITE_MAX_VARS_SAFE,
     compose_callout,
     name_connections,
     role_index,
     shared_connections,
+    similar_by_cast,
+    similar_by_crew,
     similar_by_people,
 )
 
@@ -485,3 +488,64 @@ class ShowDetailViewTests(TestCase):
         self.assertEqual(
             self.client.get(reverse("shows:detail", args=["nope"])).status_code, 404
         )
+
+
+class SqlVariableCeilingTests(TestCase):
+    """Freeze the scale fix from issue #1: a person set larger than SQLite's
+    variable ceiling must not raise OperationalError. Two shows share more
+    people than SQLITE_MAX_VARS_SAFE, spanning several chunks, so a regression
+    that dropped the subquery or the chunking would 500 here instead of live.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        # Comfortably past two chunk boundaries so the people-side fold has to
+        # merge across batches, and far past the old 999 SQLite floor.
+        n = 2 * SQLITE_MAX_VARS_SAFE + 5
+        cls.src = Show.objects.create(
+            tmdb_id=1, name="Src", number_of_episodes=100
+        )
+        cls.cand = Show.objects.create(
+            tmdb_id=2, name="Cand", number_of_episodes=100
+        )
+        Person.objects.bulk_create(
+            [Person(tmdb_id=1000 + i, name=f"P{i}") for i in range(n)]
+        )
+        people = list(Person.objects.all())
+        CastMember.objects.bulk_create(
+            [CastMember(show=cls.src, person=p, episode_count=100) for p in people]
+        )
+        CastMember.objects.bulk_create(
+            [CastMember(show=cls.cand, person=p, episode_count=100) for p in people]
+        )
+        CrewMember.objects.bulk_create(
+            [
+                CrewMember(show=cls.src, person=p, job="Writer", episode_count=100)
+                for p in people
+            ]
+        )
+        CrewMember.objects.bulk_create(
+            [
+                CrewMember(show=cls.cand, person=p, job="Writer", episode_count=100)
+                for p in people
+            ]
+        )
+        cls.n = n
+
+    def test_similar_by_people_chunks_past_the_ceiling(self):
+        [r] = similar_by_people(self.src, limit=5)
+        self.assertEqual(r.pk, self.cand.pk)
+        # Every person is on all 100 episodes of both, so each contributes 1.0
+        # and all n register as shared; the chunked fold matches one big query.
+        self.assertEqual(r.shared_people, self.n)
+        self.assertAlmostEqual(r.score, float(self.n))
+
+    def test_similar_by_cast_subquery_past_the_ceiling(self):
+        result = list(similar_by_cast(self.src))
+        self.assertEqual([s.pk for s in result], [self.cand.pk])
+        self.assertEqual(result[0].shared_cast, self.n)
+
+    def test_similar_by_crew_subquery_past_the_ceiling(self):
+        result = list(similar_by_crew(self.src))
+        self.assertEqual([s.pk for s in result], [self.cand.pk])
+        self.assertEqual(result[0].shared_crew, self.n)

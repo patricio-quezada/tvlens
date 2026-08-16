@@ -77,6 +77,11 @@ MARQUEE_JOBS = [
 # decide who to name, never to score.
 RECOGNIZABLE_BILLING = 40
 
+# Largest person_id__in batch we bind at once, kept under SQLite's 999-variable
+# floor on older builds so a large person set never trips "too many SQL
+# variables". See docs/adr/06-sql-variable-ceiling.md.
+SQLITE_MAX_VARS_SAFE = 900
+
 # What we know about one person on one show: enough to score them (best_count,
 # mirroring similar_by_people) and to name them (role/kind/cast_order). role is
 # resolved once per person so a creator reads as a creator and an actor by their
@@ -193,21 +198,30 @@ def similar_by_people(show, limit=12):
 
     # Unlike the Show-side join in similar_by_crew, these filters run on the
     # credit tables directly, so .exclude() drops casting rows and nothing else.
+    #
+    # This side keeps the materialised list: scoring needs each person's
+    # episode_count in Python, so a subquery does not fit (see
+    # docs/adr/06-sql-variable-ceiling.md). Instead the person set is chunked
+    # so a decades-long soap's tens of thousands of people never cross SQLite's
+    # variable ceiling. fold_best merges across batches, so best_by_show is
+    # identical to one unchunked query.
     person_ids = list(own_best)
     best_by_show = {}
-    for show_id, person_id, count in (
-        CastMember.objects.filter(person_id__in=person_ids)
-        .exclude(show=show)
-        .values_list("show_id", "person_id", "episode_count")
-    ):
-        fold_best(best_by_show.setdefault(show_id, {}), person_id, count)
-    for show_id, person_id, count in (
-        CrewMember.objects.filter(person_id__in=person_ids)
-        .exclude(show=show)
-        .exclude(job__in=SERVICE_JOBS)
-        .values_list("show_id", "person_id", "episode_count")
-    ):
-        fold_best(best_by_show.setdefault(show_id, {}), person_id, count)
+    for start in range(0, len(person_ids), SQLITE_MAX_VARS_SAFE):
+        batch = person_ids[start:start + SQLITE_MAX_VARS_SAFE]
+        for show_id, person_id, count in (
+            CastMember.objects.filter(person_id__in=batch)
+            .exclude(show=show)
+            .values_list("show_id", "person_id", "episode_count")
+        ):
+            fold_best(best_by_show.setdefault(show_id, {}), person_id, count)
+        for show_id, person_id, count in (
+            CrewMember.objects.filter(person_id__in=batch)
+            .exclude(show=show)
+            .exclude(job__in=SERVICE_JOBS)
+            .values_list("show_id", "person_id", "episode_count")
+        ):
+            fold_best(best_by_show.setdefault(show_id, {}), person_id, count)
     if not best_by_show:
         return RankedShows()
 
@@ -580,14 +594,17 @@ def similar_by_cast(show, limit=12):
 
     Returns an empty queryset when the show has no cast recorded.
     """
-    person_ids = list(
-        CastMember.objects.filter(show=show).values_list("person_id", flat=True)
-    )
-    if not person_ids:
-        return Show.objects.none()
-
+    # A subquery, not a materialised id list: the person set is only needed to
+    # join, never in Python, so pushing it into SQL removes both the extra query
+    # and SQLite's per-person variable ceiling. An empty subquery yields no
+    # rows, so the no-cast case still returns an empty queryset.
+    # See docs/adr/06-sql-variable-ceiling.md.
     return (
-        Show.objects.filter(cast__person_id__in=person_ids)
+        Show.objects.filter(
+            cast__person_id__in=CastMember.objects.filter(show=show).values(
+                "person_id"
+            )
+        )
         .exclude(pk=show.pk)
         .annotate(shared_cast=Count("cast__person_id", distinct=True))
         .order_by("-shared_cast", "-popularity")
@@ -604,20 +621,24 @@ def similar_by_crew(show, limit=12):
 
     Returns an empty queryset when the show has no qualifying crew recorded.
     """
-    person_ids = list(
+    # A subquery, not a materialised id list: the person set only feeds the
+    # join, so pushing it into SQL removes both the extra query and SQLite's
+    # per-person variable ceiling. The SERVICE_JOBS exclusion stays inside the
+    # subquery so casting rows never seed the source set. An empty subquery
+    # yields no rows, so the no-crew case still returns an empty queryset.
+    # See docs/adr/06-sql-variable-ceiling.md.
+    source_person_ids = (
         CrewMember.objects.filter(show=show)
         .exclude(job__in=SERVICE_JOBS)
-        .values_list("person_id", flat=True)
+        .values("person_id")
     )
-    if not person_ids:
-        return Show.objects.none()
 
     # Both conditions sit in one filter() call so they apply to the same join.
     # Splitting them into .filter().exclude() would drop every show that has
     # any casting crew at all, rather than ignoring the casting rows.
     return (
         Show.objects.filter(
-            Q(crew__person_id__in=person_ids) & ~Q(crew__job__in=SERVICE_JOBS)
+            Q(crew__person_id__in=source_person_ids) & ~Q(crew__job__in=SERVICE_JOBS)
         )
         .exclude(pk=show.pk)
         .annotate(shared_crew=Count("crew__person_id", distinct=True))
