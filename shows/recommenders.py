@@ -28,6 +28,7 @@ from .models import CastMember, CrewMember, Show
 # unrelated shows look related. On the 100-show catalog it linked The Boys to
 # Grey's Anatomy on four shared people, every one of them a casting director.
 # Excluding these costs two shows of coverage and removes thirteen false pairs.
+# See docs/adr/01-exclude-casting-roles.md.
 #
 # Exact titles by choice (2026-08-06 review): the list is auditable, but a new
 # TMDb import can mint a variant that slips past it. When touching ingest,
@@ -122,7 +123,7 @@ class RankedShows(list):
 def similar_by_people(show, limit=12):
     """Return shows ranked by episode-weighted shared people, cast and crew merged.
 
-    The rule, decided on QUE-9:
+    The rule, decided on QUE-9 (ADR-04):
 
         score(A, B) = sum over shared people of
             min(episode_count on A / A.number_of_episodes,
@@ -155,8 +156,8 @@ def similar_by_people(show, limit=12):
     When every candidate scores 0.0 the weighted order carries no signal.
     That happens when the source show has no episodes recorded yet (TMDb
     "Planned" and "In Production" shows legitimately carry 0) or when every
-    shared edge is a null-count series-level credit. Decided on QUE-11 and
-    revised the same day (2026-08-07), the order falls down a ladder, and
+    shared edge is a null-count series-level credit. Decided on QUE-11 (ADR-05)
+    and revised the same day (2026-08-07), the order falls down a ladder, and
     only the order, the candidate set never changes:
 
         1. weighted   sum of min(source share, candidate share)
