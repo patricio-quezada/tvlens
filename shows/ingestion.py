@@ -132,6 +132,8 @@ class Ingestor:
         episodes, which is what makes a backfill cheap.
 
         Returns (cast_rows, crew_rows) touched.
+
+        See docs/adr/02-aggregate-credits-ingest.md.
         """
         agg = self.client.get_tv_aggregate_credits(show.tmdb_id)
         if not agg:
