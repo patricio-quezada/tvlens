@@ -11,6 +11,7 @@ Usage:
     python manage.py backfill_aggregate_credits --limit 5 --dry-run
 """
 
+from django.core.management import call_command
 from django.core.management.base import BaseCommand
 
 from shows.ingestion import Ingestor
@@ -87,3 +88,9 @@ class Command(BaseCommand):
                     f"{len(empty)} returned nothing: {', '.join(empty)}"
                 )
             )
+
+        # Backfilled episode counts change every weighted score, so refresh the
+        # materialized Layer 1 store once the whole pass is written. A dry run
+        # wrote nothing, so it leaves the store alone (ADR-07).
+        if not dry_run:
+            call_command("rebuild_similar_shows")
