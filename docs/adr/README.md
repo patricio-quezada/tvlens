@@ -23,3 +23,4 @@ Copy `00-adr-template.md` to start a new one.
 - [05 - Fall back down a ladder when the people graph has no signal](05-no-signal-fallback-ladder.md)
 - [06 - Lift the SQL variable ceiling in the recommenders](06-sql-variable-ceiling.md)
 - [07 - Materialize the Layer 1 ranking and serve reads from a table](07-materialized-recommendations.md)
+- [08 - Layer 2: personalize by re-ranking the graph per user](08-layer2-personalized-reranking.md)
