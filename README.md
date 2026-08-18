@@ -59,7 +59,7 @@ quality-based cold-start rather than popularity.
 
 ## Built with
 
-Django 6.0 and SQLite, server-rendered with no JS framework. Data from the TMDb API.
+Django 5.2 and SQLite, server-rendered with no JS framework. Data from the TMDb API.
 Dependencies: `django-extensions`, `python-dotenv`, `requests`.
 
 ## License
