@@ -7,6 +7,7 @@ Usage:
     python manage.py ingest_shows --show 1396    # single show by TMDB ID
 """
 
+from django.core.management import call_command
 from django.core.management.base import BaseCommand
 
 from shows.ingestion import Ingestor
@@ -43,6 +44,9 @@ class Command(BaseCommand):
             show = ingestor.ingest_show(options["show"])
             if show:
                 self.stdout.write(self.style.SUCCESS(f"Done: {show.name}"))
+                # A new show changes the shared-people graph, so refresh the
+                # materialized store once the ingest is done (ADR-07).
+                call_command("rebuild_similar_shows")
             else:
                 self.stdout.write(self.style.ERROR("Failed to ingest show"))
             return
@@ -52,3 +56,6 @@ class Command(BaseCommand):
         self.stdout.write(f"Ingesting {pages} pages (sort: {sort_by}) ...")
         ingestor.ingest_discover(pages=pages, sort_by=sort_by)
         self.stdout.write(self.style.SUCCESS("Ingestion complete."))
+        # Rebuild the Layer 1 store once, after the whole batch, so reads always
+        # serve the fresh graph (ADR-07).
+        call_command("rebuild_similar_shows")

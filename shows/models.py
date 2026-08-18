@@ -1,8 +1,8 @@
 """
-TVLens data models — 16 tables for a MovieLens-inspired TV recommendation platform.
+TVLens data models — 17 tables for a MovieLens-inspired TV recommendation platform.
 
 Tables:
-  1. Genre              9. Rating
+  1. Genre              9. Rating           17. SimilarShow
   2. Network           10. Review
   3. Show              11. Watchlist
   4. Season            12. WatchHistory
@@ -395,3 +395,47 @@ class UserProfile(models.Model):
 def create_user_profile(sender, instance, created, **kwargs):
     if created:
         UserProfile.objects.create(user=instance)
+
+
+# ── 17. SimilarShow ───────────────────────────────────────────────────────────
+
+class SimilarShow(models.Model):
+    """One precomputed Layer 1 edge: source -> target, at a fixed rank.
+
+    This is the materialized shared-people graph. similar_by_people(show) is a
+    pure function of the catalog (same answer for everyone, changes only on
+    ingest), yet it runs a Python-scored traversal on every request. We compute
+    it once and serve reads from this table instead. The whole table is rebuilt
+    wholesale after every ingest; nothing writes here per request.
+
+    mode is the source's rung on the fallback ladder (weighted/estimated/rating,
+    ADR-05). Every edge of one source shares it, so it is denormalized onto each
+    row rather than kept in a second table: one table is the simplest thing that
+    round-trips the RankedShows shape similar_by_people returns.
+
+    See docs/adr/07-materialized-recommendations.md.
+    """
+
+    source = models.ForeignKey(
+        Show, on_delete=models.CASCADE, related_name="similar_edges"
+    )
+    target = models.ForeignKey(
+        Show, on_delete=models.CASCADE, related_name="similar_edges_in"
+    )
+    rank = models.PositiveIntegerField(
+        help_text="0-based position in the source's ranked list."
+    )
+    score = models.FloatField()
+    shared_people = models.PositiveIntegerField()
+    mode = models.CharField(
+        max_length=10,
+        help_text="The source's ladder rung: weighted, estimated, or rating.",
+    )
+
+    class Meta:
+        unique_together = ["source", "target"]
+        ordering = ["source", "rank"]
+        indexes = [models.Index(fields=["source", "rank"])]
+
+    def __str__(self):
+        return f"{self.source.name} -> {self.target.name} (#{self.rank})"
