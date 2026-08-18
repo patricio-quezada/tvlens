@@ -20,7 +20,7 @@ from collections import namedtuple
 
 from django.db.models import Count, Q
 
-from .models import CastMember, CrewMember, Show
+from .models import CastMember, CrewMember, Show, SimilarShow
 
 # Jobs that connect two productions without connecting the two shows.
 #
@@ -254,6 +254,42 @@ def similar_by_people(show, limit=12):
         mode = "rating"
         results.sort(key=lambda s: (-s.vote_average, -s.vote_count))
     return RankedShows(results[:limit], mode=mode)
+
+
+def stored_similar(show):
+    """Read `show`'s Layer 1 ranking from the materialized SimilarShow store.
+
+    The read-path twin of similar_by_people: it returns the same RankedShows
+    shape (Show objects carrying `score` and `shared_people`, plus a `mode`),
+    but by reading precomputed edges in rank order instead of scoring the graph
+    live. The store is rebuilt wholesale after every ingest, so for an unchanged
+    catalog these two functions agree row for row. See
+    docs/adr/07-materialized-recommendations.md.
+
+    mode comes off the stored edges (every edge of one source carries the
+    source's rung, so the first one decides). An empty store for this source
+    means no similar shows, returned as an empty RankedShows defaulting to
+    "weighted", matching similar_by_people's empty return.
+
+    select_related / prefetch_related mirror what the detail and similar pages
+    render off each candidate: the target Show itself, plus its genres and
+    networks.
+    """
+    edges = (
+        SimilarShow.objects.filter(source=show)
+        .order_by("rank")
+        .select_related("target")
+        .prefetch_related("target__genres", "target__networks")
+    )
+    shows = []
+    mode = "weighted"
+    for edge in edges:
+        target = edge.target
+        target.score = edge.score
+        target.shared_people = edge.shared_people
+        mode = edge.mode
+        shows.append(target)
+    return RankedShows(shows, mode=mode)
 
 
 def role_index(show):

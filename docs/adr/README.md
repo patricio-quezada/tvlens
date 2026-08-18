@@ -22,3 +22,4 @@ Copy `00-adr-template.md` to start a new one.
 - [04 - Recommend by episode-weighted shared people](04-episode-weighted-people-recommender.md)
 - [05 - Fall back down a ladder when the people graph has no signal](05-no-signal-fallback-ladder.md)
 - [06 - Lift the SQL variable ceiling in the recommenders](06-sql-variable-ceiling.md)
+- [07 - Materialize the Layer 1 ranking and serve reads from a table](07-materialized-recommendations.md)
