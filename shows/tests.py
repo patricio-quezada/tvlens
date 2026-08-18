@@ -5,10 +5,13 @@ so a later layer that reweights this edge, or an ingest change that shifts the
 data, fails loudly here instead of silently reranking the catalog.
 """
 
+from io import StringIO
+
+from django.core.management import call_command
 from django.test import TestCase
 from django.urls import reverse
 
-from .models import CastMember, CrewMember, Person, Show
+from .models import CastMember, CrewMember, Person, Show, SimilarShow
 from .recommenders import (
     SQLITE_MAX_VARS_SAFE,
     compose_callout,
@@ -18,6 +21,7 @@ from .recommenders import (
     similar_by_cast,
     similar_by_crew,
     similar_by_people,
+    stored_similar,
 )
 
 
@@ -468,6 +472,9 @@ class ShowDetailViewTests(TestCase):
                                   character="The Detective", episode_count=10)
         CastMember.objects.create(show=cls.cand, person=lead, order=0,
                                   character="The Detective", episode_count=10)
+        # The detail view now serves the ranking from the materialized store
+        # (ADR-07), so populate it before exercising the page.
+        call_command("rebuild_similar_shows", stdout=StringIO())
 
     def test_detail_page_renders_show_and_named_connection(self):
         resp = self.client.get(self.source.get_absolute_url())
@@ -488,6 +495,123 @@ class ShowDetailViewTests(TestCase):
         self.assertEqual(
             self.client.get(reverse("shows:detail", args=["nope"])).status_code, 404
         )
+
+
+class StoredSimilarTests(TestCase):
+    """The materialized Layer 1 store (ADR-07): rebuild_similar_shows precomputes
+    similar_by_people into SimilarShow, and stored_similar reads it back in the
+    same shape. These freeze the one invariant that matters: for an unchanged
+    catalog the store equals the live computation, row for row.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        # A weighted graph: Src shares a full-run lead with B and a partial
+        # player with C, so Src has two ranked edges. Lonely shares its one
+        # person with no one, so it has zero edges.
+        cls.src = Show.objects.create(tmdb_id=1, name="Src", number_of_episodes=10)
+        cls.b = Show.objects.create(
+            tmdb_id=2, name="Bshow", number_of_episodes=10, popularity=5.0
+        )
+        cls.c = Show.objects.create(
+            tmdb_id=3, name="Cshow", number_of_episodes=10, popularity=1.0
+        )
+        cls.lonely = Show.objects.create(
+            tmdb_id=9, name="Lonely", number_of_episodes=10
+        )
+        lead = Person.objects.create(tmdb_id=1, name="Lead Actor")
+        side = Person.objects.create(tmdb_id=2, name="Side Player")
+        hermit = Person.objects.create(tmdb_id=3, name="Hermit")
+        # Lead: all of Src and all of B -> strong edge (1.0).
+        CastMember.objects.create(show=cls.src, person=lead, order=0,
+                                  character="Hero", episode_count=10)
+        CastMember.objects.create(show=cls.b, person=lead, order=0,
+                                  character="Hero", episode_count=10)
+        # Side: all of Src, two episodes of C -> weaker edge (0.2).
+        CastMember.objects.create(show=cls.src, person=side, order=1,
+                                  character="Rival", episode_count=10)
+        CastMember.objects.create(show=cls.c, person=side, order=1,
+                                  character="Rival", episode_count=2)
+        CastMember.objects.create(show=cls.lonely, person=hermit, order=0,
+                                  character="Alone", episode_count=10)
+
+        # A zero-episode source ranks by the candidate side: mode "estimated".
+        cls.blank = Show.objects.create(
+            tmdb_id=4, name="Blank", number_of_episodes=0
+        )
+        traveler = Person.objects.create(tmdb_id=4, name="Traveler")
+        CastMember.objects.create(show=cls.blank, person=traveler, order=0,
+                                  character="Wanderer", episode_count=5)
+        CastMember.objects.create(show=cls.b, person=traveler, order=2,
+                                  character="Wanderer", episode_count=5)
+
+        call_command("rebuild_similar_shows", stdout=StringIO())
+
+    def _assertMatchesLive(self, show):
+        live = similar_by_people(show)
+        stored = stored_similar(show)
+        self.assertEqual(
+            [(s.pk, round(s.score, 6), s.shared_people) for s in stored],
+            [(s.pk, round(s.score, 6), s.shared_people) for s in live],
+        )
+        if live:  # mode is only meaningful when the list carries edges
+            self.assertEqual(stored.mode, live.mode)
+
+    def test_stored_matches_live_for_weighted_source(self):
+        # Src's two edges arrive in the same order, with the same scores and
+        # shared-people counts, as the live recommender.
+        stored = stored_similar(self.src)
+        self.assertEqual([s.name for s in stored], ["Bshow", "Cshow"])
+        self.assertEqual(stored.mode, "weighted")
+        self.assertAlmostEqual(stored[0].score, 1.0)
+        self.assertAlmostEqual(stored[1].score, 0.2)
+        self._assertMatchesLive(self.src)
+
+    def test_stored_matches_live_for_a_second_source(self):
+        # B is a target above but also a source (shares Lead with Src,
+        # Traveler with Blank); its own stored list must match live too.
+        self._assertMatchesLive(self.b)
+
+    def test_source_with_no_similar_shows_stores_nothing(self):
+        self.assertEqual(SimilarShow.objects.filter(source=self.lonely).count(), 0)
+        stored = stored_similar(self.lonely)
+        self.assertEqual(list(stored), [])
+        self.assertEqual(stored.mode, "weighted")
+
+    def test_estimated_mode_round_trips_through_the_store(self):
+        # Blank has zero episodes, so its edges score zero and the live ladder
+        # falls to "estimated". That non-weighted mode must survive the store.
+        live = similar_by_people(self.blank)
+        self.assertEqual(live.mode, "estimated")
+        stored = stored_similar(self.blank)
+        self.assertEqual(stored.mode, "estimated")
+        self.assertEqual([s.pk for s in stored], [s.pk for s in live])
+        # The denormalized mode is written onto every one of the source's edges.
+        modes = set(
+            SimilarShow.objects.filter(source=self.blank).values_list(
+                "mode", flat=True
+            )
+        )
+        self.assertEqual(modes, {"estimated"})
+
+    def test_detail_page_renders_from_the_stored_edges(self):
+        # The detail view now reads stored_similar. With the store built, the
+        # page must surface Src's top candidate and its shared-people count.
+        resp = self.client.get(self.src.get_absolute_url())
+        self.assertEqual(resp.status_code, 200)
+        body = resp.content.decode()
+        self.assertIn("Bshow", body)
+        self.assertIn("Lead Actor", body)
+        self.assertIn("Ranked by shared cast and crew.", body)
+
+    def test_rebuild_is_wholesale_replacing_stale_edges(self):
+        # A stale edge left by a prior build must not survive the next rebuild.
+        SimilarShow.objects.create(
+            source=self.lonely, target=self.src, rank=0, score=9.9,
+            shared_people=1, mode="weighted",
+        )
+        call_command("rebuild_similar_shows", stdout=StringIO())
+        self.assertEqual(SimilarShow.objects.filter(source=self.lonely).count(), 0)
 
 
 class SqlVariableCeilingTests(TestCase):

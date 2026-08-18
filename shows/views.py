@@ -14,7 +14,7 @@ from .recommenders import (
     shared_connections,
     similar_by_cast,
     similar_by_crew,
-    similar_by_people,
+    stored_similar,
 )
 
 
@@ -55,16 +55,17 @@ def index(request):
 def detail(request, slug):
     """One show, then the shows it connects to through shared people.
 
-    Layer 1 becomes visible here. The ranking is similar_by_people's, untouched;
-    this view only describes each edge: for every recommendation it composes one
-    prose sentence naming the people who tie it back, cast and crew, ordered by
-    their episode-share contribution, and hands the template the honest caption
-    from the mode.
+    Layer 1 becomes visible here. The ranking is the materialized graph's
+    (stored_similar reads the same order similar_by_people would compute live,
+    ADR-07); this view only describes each edge: for every recommendation it
+    composes one prose sentence naming the people who tie it back, cast and crew,
+    ordered by their episode-share contribution, and hands the template the
+    honest caption from the mode.
     """
     show = get_object_or_404(
         Show.objects.prefetch_related("genres", "networks"), slug=slug
     )
-    ranked = similar_by_people(show)
+    ranked = stored_similar(show)
 
     source_index = role_index(show)
     recommendations = []
@@ -95,7 +96,7 @@ def similar(request, pk):
         "shows/similar.html",
         {
             "show": show,
-            "by_people": similar_by_people(show),
+            "by_people": stored_similar(show),
             "by_cast": similar_by_cast(show),
             "by_crew": similar_by_crew(show),
         },
