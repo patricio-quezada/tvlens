@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}{{ genre.name }} · TVLens{% endblock %}
+{% block content %}
+<div class="page-header">
+    <p><a href="{% url 'shows:index' %}">← All shows</a></p>
+    <h1>{{ genre.name }}</h1>
+    <p>{{ shows|length }} show{{ shows|length|pluralize }}, best-rated first.</p>
+</div>
+{% include "shows/_row.html" with title=genre.name shows=shows favorite_genre_ids=favorite_genre_ids %}
+{% endblock %}
