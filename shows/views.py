@@ -2,11 +2,14 @@
 
 from django.contrib import messages
 from django.contrib.auth import login
+from django.contrib.auth.decorators import login_required
 from django.db.models import Count
+from django.http import HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
+from django.views.decorators.http import require_POST
 
 from .forms import RegistrationForm
-from .models import Genre, Show
+from .models import Genre, Rating, Show
 from .recommenders import (
     compose_callout,
     name_connections,
@@ -16,6 +19,30 @@ from .recommenders import (
     similar_by_crew,
     stored_similar,
 )
+
+# The MovieLens half-star scale, 0.5 to 5.0 (the same scale ADR-08 assumes for
+# Layer 2, enforced by Rating's model validators). Every value the widget offers
+# and the only values rate() will store. Multiples of 0.5 are exact in binary,
+# so equality checks against this set never suffer float drift.
+VALID_SCORES = [n / 2 for n in range(1, 11)]
+
+
+def star_steps(user_rating):
+    """The ten half-star inputs for the rating widget, high to low.
+
+    The template renders these in DOM order 5.0 -> 0.5 so the pure-CSS widget can
+    fill "this star and every lower one" with a sibling selector (see detail.html).
+    Each even half-step is a full star, each odd one the left half of the next.
+    """
+    steps = []
+    for n in range(10, 0, -1):
+        value = n / 2
+        steps.append({
+            "value": value,
+            "css_class": "full" if n % 2 == 0 else "half",
+            "checked": user_rating == value,
+        })
+    return steps
 
 
 def index(request):
@@ -67,6 +94,16 @@ def detail(request, slug):
     )
     ranked = stored_similar(show)
 
+    # TVLens's own rating (distinct from the TMDb vote_average in the hero). The
+    # widget shows the signed-in user their current score and lets them change it.
+    user_rating = None
+    if request.user.is_authenticated:
+        user_rating = (
+            Rating.objects.filter(user=request.user, show=show)
+            .values_list("score", flat=True)
+            .first()
+        )
+
     source_index = role_index(show)
     recommendations = []
     for candidate in ranked:
@@ -84,8 +121,41 @@ def detail(request, slug):
             "show": show,
             "recommendations": recommendations,
             "mode": ranked.mode,
+            "user_rating": user_rating,
+            "star_steps": star_steps(user_rating),
+            "average_rating": show.average_rating,
+            "rating_count": show.ratings.count(),
         },
     )
+
+
+@login_required
+@require_POST
+def rate(request, slug):
+    """Record or update the signed-in user's half-star rating for one show.
+
+    This is how TVLens collects its OWN ratings (the cold-start data Layer 2
+    needs, #6), so the stored shape is exactly one per-user score in 0.5 steps.
+    One row per (user, show): update_or_create moves the existing row on a
+    re-rate instead of piling up duplicates, which Rating's unique_together
+    would reject anyway. The widget only ever POSTs a valid half-step, but this
+    is a public endpoint, so the 0.5-to-5.0 bounds and the half-step are
+    enforced here too rather than trusted from the client.
+    """
+    show = get_object_or_404(Show, slug=slug)
+    try:
+        score = float(request.POST.get("score", ""))
+    except (TypeError, ValueError):
+        return HttpResponseBadRequest("Rating must be a number.")
+    if score not in VALID_SCORES:
+        return HttpResponseBadRequest(
+            "Rating must be a half-star step between 0.5 and 5.0."
+        )
+    Rating.objects.update_or_create(
+        user=request.user, show=show, defaults={"score": score}
+    )
+    messages.success(request, f"You rated {show.name} {score:g} stars.")
+    return redirect(show.get_absolute_url())
 
 
 def similar(request, pk):
