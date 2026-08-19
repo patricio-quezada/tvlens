@@ -16,6 +16,7 @@ from .models import (
     CastMember,
     CrewMember,
     Episode,
+    Genre,
     Person,
     Rating,
     Season,
@@ -23,8 +24,10 @@ from .models import (
     SimilarShow,
     WatchHistory,
 )
+from .personalization import build_profile, rerank
 from .recommenders import (
     SQLITE_MAX_VARS_SAFE,
+    RankedShows,
     compose_callout,
     name_connections,
     role_index,
@@ -831,3 +834,217 @@ class WatchedSignalTests(TestCase):
         anon = AnonymousUser()
         self.assertFalse(self.rated.is_watched_by(anon))
         self.assertEqual(list(Show.objects.watched_by(anon)), [])
+
+
+class Layer2ProfileTests(TestCase):
+    """The interpretable per-user weights Layer 2 ranks on (ADR-08).
+
+    Weights are signed and nameable, not an embedding: a high rating lifts that
+    show's genres, a low one pushes them down, and the readout can always say
+    which genre and by how much. These freeze that the signal is signed and that
+    the profile is inspectable. All shows share one vote_average so the flat
+    quality prior does not mask the learned signal.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user("cinephile", password="pw-cinephile-1")
+        cls.comedy = Genre.objects.create(tmdb_id=1, name="Comedy")
+        cls.horror = Genre.objects.create(tmdb_id=2, name="Horror")
+        cls.com = Show.objects.create(
+            tmdb_id=1, name="Com", number_of_episodes=10, vote_average=8.0
+        )
+        cls.com.genres.add(cls.comedy)
+        cls.hor = Show.objects.create(
+            tmdb_id=2, name="Hor", number_of_episodes=10, vote_average=8.0
+        )
+        cls.hor.genres.add(cls.horror)
+
+    def test_high_rating_lifts_a_genre_low_rating_pushes_it_down(self):
+        Rating.objects.create(user=self.user, show=self.com, score=5.0)
+        Rating.objects.create(user=self.user, show=self.hor, score=1.0)
+        profile = build_profile(self.user)
+        # score - NEUTRAL (3.0): 5.0 -> +2.0 on Comedy, 1.0 -> -2.0 on Horror.
+        self.assertAlmostEqual(profile.learned_genre_weights[self.comedy.id], 2.0)
+        self.assertAlmostEqual(profile.learned_genre_weights[self.horror.id], -2.0)
+
+    def test_cold_start_profile_carries_no_learned_signal(self):
+        profile = build_profile(self.user)  # user has rated nothing
+        self.assertTrue(profile.is_cold_start)
+        self.assertEqual(profile.learned_genre_weights, {})
+        self.assertEqual(profile.top_genres(), [])
+
+    def test_top_genres_is_a_signed_named_readout(self):
+        Rating.objects.create(user=self.user, show=self.com, score=5.0)
+        Rating.objects.create(user=self.user, show=self.hor, score=1.0)
+        top = dict(build_profile(self.user).top_genres())
+        self.assertGreater(top["Comedy"], 0)
+        self.assertLess(top["Horror"], 0)
+
+
+class Layer2ColdStartTests(TestCase):
+    """Cold start is a quality prior, never a popularity chart (ADR-05/ADR-08)."""
+
+    def test_prior_favors_quality_and_ignores_popularity(self):
+        good = Genre.objects.create(tmdb_id=1, name="Prestige")
+        weak = Genre.objects.create(tmdb_id=2, name="Filler")
+        # High quality but unpopular vs low quality but very popular. If the prior
+        # leaned on popularity, Filler would win; it must not.
+        g = Show.objects.create(
+            tmdb_id=1, name="G", number_of_episodes=10,
+            vote_average=9.0, popularity=1.0,
+        )
+        g.genres.add(good)
+        b = Show.objects.create(
+            tmdb_id=2, name="B", number_of_episodes=10,
+            vote_average=6.0, popularity=999.0,
+        )
+        b.genres.add(weak)
+        profile = build_profile(AnonymousUser())
+        self.assertTrue(profile.is_cold_start)
+        self.assertGreater(profile.genre_weights[good.id], 0)
+        self.assertLess(profile.genre_weights[weak.id], 0)
+        self.assertGreater(
+            profile.genre_weights[good.id], profile.genre_weights[weak.id]
+        )
+
+
+class Layer2RerankTests(TestCase):
+    """Re-ranking a Layer 1 list per user (ADR-08): cold start leaves the order
+    alone, a positive signal lifts a genre, a negative one sinks it, and Layer 1's
+    facts survive. Candidates share one vote_average so the prior stays flat.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user("viewer", password="pw-viewer-xyz")
+        cls.comedy = Genre.objects.create(tmdb_id=1, name="Comedy")
+        cls.drama = Genre.objects.create(tmdb_id=2, name="Drama")
+        cls.a = Show.objects.create(
+            tmdb_id=1, name="Alpha", number_of_episodes=10,
+            vote_average=8.0, popularity=3.0,
+        )
+        cls.a.genres.add(cls.drama)
+        cls.b = Show.objects.create(
+            tmdb_id=2, name="Bravo", number_of_episodes=10,
+            vote_average=8.0, popularity=2.0,
+        )
+        cls.b.genres.add(cls.comedy)
+        cls.c = Show.objects.create(
+            tmdb_id=3, name="Charlie", number_of_episodes=10,
+            vote_average=8.0, popularity=1.0,
+        )
+        cls.c.genres.add(cls.comedy)
+        cls.fave = Show.objects.create(
+            tmdb_id=9, name="FaveComedy", number_of_episodes=10, vote_average=8.0
+        )
+        cls.fave.genres.add(cls.comedy)
+        cls.fave_drama = Show.objects.create(
+            tmdb_id=10, name="FaveDrama", number_of_episodes=10, vote_average=8.0
+        )
+        cls.fave_drama.genres.add(cls.drama)
+
+    def _layer1(self):
+        # A fixed Layer 1 order of near-tied tail edges (small, close scores): the
+        # drama Alpha first, then the two comedies. Layer 1 barely distinguishes
+        # them, so taste is free to reorder.
+        order = [self.a, self.b, self.c]
+        for i, s in enumerate(order):
+            s.score = 0.3 - 0.1 * i
+            s.shared_people = 2
+        return RankedShows(order, mode="weighted")
+
+    def test_cold_start_preserves_layer1_order(self):
+        reranked = rerank(self.user, self._layer1())
+        self.assertEqual([s.name for s in reranked], ["Alpha", "Bravo", "Charlie"])
+        self.assertFalse(reranked.personalized)
+        self.assertEqual(reranked.mode, "weighted")
+
+    def test_positive_signal_lifts_the_preferred_genre(self):
+        Rating.objects.create(user=self.user, show=self.fave, score=5.0)
+        reranked = rerank(self.user, self._layer1())
+        names = [s.name for s in reranked]
+        self.assertEqual(names[0], "Bravo")  # a comedy overtakes the drama Alpha
+        self.assertLess(names.index("Bravo"), names.index("Alpha"))
+        self.assertTrue(reranked.personalized)
+
+    def test_negative_signal_demotes_a_disliked_genre(self):
+        Rating.objects.create(user=self.user, show=self.fave, score=0.5)
+        reranked = rerank(self.user, self._layer1())
+        names = [s.name for s in reranked]
+        self.assertEqual(names[0], "Alpha")  # the drama rises as comedy is pushed down
+        self.assertLess(names.index("Alpha"), names.index("Bravo"))
+
+    def test_rerank_keeps_layer1_facts_and_mode(self):
+        reranked = rerank(self.user, self._layer1())
+        self.assertEqual(reranked.mode, "weighted")
+        for s in reranked:
+            self.assertEqual(s.shared_people, 2)
+            self.assertTrue(hasattr(s, "score"))
+
+    def test_dominant_layer1_edge_resists_personalization(self):
+        # A blowout Layer 1 edge (a spinoff-strength score) must not be dislodged
+        # by taste. The user dislikes drama, yet a dominant drama edge stays first
+        # while the near-tied tail below it reorders.
+        Rating.objects.create(user=self.user, show=self.fave_drama, score=0.5)
+        dom = Show.objects.create(
+            tmdb_id=20, name="Dominant", number_of_episodes=10, vote_average=8.0
+        )
+        dom.genres.add(self.drama)
+        dom.score, dom.shared_people = 20.0, 5
+        self.b.score, self.b.shared_people = 0.2, 1
+        self.c.score, self.c.shared_people = 0.2, 1
+        reranked = rerank(self.user, RankedShows([dom, self.b, self.c], mode="weighted"))
+        self.assertEqual(reranked[0].name, "Dominant")
+
+
+class Layer2DetailViewTests(TestCase):
+    """End to end on the page a logged-in user actually sees: the detail view's
+    'More shows like this' is Layer 1 for anonymous and re-ranked for a rated
+    user, and the shift is visible in the rendered order and the caption.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user("fan", password="pw-fan-abcde")
+        drama = Genre.objects.create(tmdb_id=1, name="Drama")
+        comedy = Genre.objects.create(tmdb_id=2, name="Comedy")
+        cls.source = Show.objects.create(
+            tmdb_id=1, name="Source", number_of_episodes=10, vote_average=8.0
+        )
+        # Two candidates share the same lead with Source, so Layer 1 scores them
+        # equally and breaks the tie on popularity: DramaPick first.
+        cls.drama_pick = Show.objects.create(
+            tmdb_id=2, name="DramaPick", number_of_episodes=10,
+            vote_average=8.0, popularity=5.0,
+        )
+        cls.drama_pick.genres.add(drama)
+        cls.comedy_pick = Show.objects.create(
+            tmdb_id=3, name="ComedyPick", number_of_episodes=10,
+            vote_average=8.0, popularity=1.0,
+        )
+        cls.comedy_pick.genres.add(comedy)
+        cls.fave = Show.objects.create(
+            tmdb_id=9, name="FaveComedy", number_of_episodes=10, vote_average=8.0
+        )
+        cls.fave.genres.add(comedy)
+        lead = Person.objects.create(tmdb_id=1, name="Shared Lead")
+        for s in (cls.source, cls.drama_pick, cls.comedy_pick):
+            CastMember.objects.create(
+                show=s, person=lead, order=0, character="Hero", episode_count=10
+            )
+        call_command("rebuild_similar_shows", stdout=StringIO())
+
+    def test_anonymous_sees_layer1_order(self):
+        body = self.client.get(self.source.get_absolute_url()).content.decode()
+        self.assertLess(body.index("DramaPick"), body.index("ComedyPick"))
+        self.assertNotIn("reordered for", body)
+
+    def test_rated_user_sees_recommendations_reordered_to_taste(self):
+        Rating.objects.create(user=self.user, show=self.fave, score=5.0)
+        self.client.force_login(self.user)
+        body = self.client.get(self.source.get_absolute_url()).content.decode()
+        # The comedy preference lifts ComedyPick above the DramaPick that Layer 1
+        # ranked first, and the page says so.
+        self.assertLess(body.index("ComedyPick"), body.index("DramaPick"))
+        self.assertIn("reordered for fan", body)
