@@ -48,6 +48,29 @@ class Network(models.Model):
 
 # ── 3. Show ───────────────────────────────────────────────────────────────────
 
+class ShowQuerySet(models.QuerySet):
+    def watched_by(self, user):
+        """Shows this user has watched, with rating-implies-watched (ADR-08).
+
+        Watched means the user has either rated the show or logged any
+        WatchHistory for one of its episodes. A rating counts on its own, with
+        no episode row, because you cannot rate what you have not seen (ADR-08).
+        Layer 2 (#6) reads this to know which shows a user has engaged with,
+        alongside the ratings themselves.
+
+        Derived, not stored: watched is a pure function of Rating and
+        WatchHistory, so a separate "watched" column would only be a second
+        source of truth to drift out of sync. The OR-join can repeat a show
+        once per matching episode, so distinct() collapses it back to one row.
+        """
+        if not user.is_authenticated:
+            return self.none()
+        return self.filter(
+            models.Q(ratings__user=user)
+            | models.Q(seasons__episodes__watched_by__user=user)
+        ).distinct()
+
+
 class Show(models.Model):
     class Status(models.TextChoices):
         RETURNING = "Returning Series"
@@ -84,6 +107,8 @@ class Show(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    objects = ShowQuerySet.as_manager()
 
     class Meta:
         ordering = ["-popularity"]
@@ -137,6 +162,16 @@ class Show(models.Model):
     def average_rating(self):
         avg = self.ratings.aggregate(models.Avg("score"))["score__avg"]
         return round(avg, 1) if avg else None
+
+    def is_watched_by(self, user):
+        """Whether this one show counts as watched for user (ShowQuerySet.watched_by).
+
+        Kept as the single definition of the rule so the per-show check and the
+        bulk queryset can never disagree about what "watched" means.
+        """
+        if not user.is_authenticated:
+            return False
+        return Show.objects.watched_by(user).filter(pk=self.pk).exists()
 
 
 # ── 4. Season ─────────────────────────────────────────────────────────────────

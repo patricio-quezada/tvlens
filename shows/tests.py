@@ -7,12 +7,22 @@ data, fails loudly here instead of silently reranking the catalog.
 
 from io import StringIO
 
-from django.contrib.auth.models import User
+from django.contrib.auth.models import AnonymousUser, User
 from django.core.management import call_command
 from django.test import TestCase
 from django.urls import reverse
 
-from .models import CastMember, CrewMember, Person, Rating, Show, SimilarShow
+from .models import (
+    CastMember,
+    CrewMember,
+    Episode,
+    Person,
+    Rating,
+    Season,
+    Show,
+    SimilarShow,
+    WatchHistory,
+)
 from .recommenders import (
     SQLITE_MAX_VARS_SAFE,
     compose_callout,
@@ -764,3 +774,60 @@ class RatingTests(TestCase):
         body = self.client.get(self.show.get_absolute_url()).content.decode()
         self.assertIn("Log in", body)
         self.assertNotIn('class="star-rating"', body)
+
+
+class WatchedSignalTests(TestCase):
+    """ADR-08's "a rating implies watched", made queryable for Layer 2 (#6).
+
+    Watched is derived, never stored: a show counts as watched for a user if
+    they rated it OR logged any WatchHistory for one of its episodes. These
+    freeze the three cases the rule turns on (rating-only, watch-history-only,
+    untouched), that the bulk queryset dedupes, and the anonymous guard.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user("viewer", password="pw-viewer-123")
+        cls.rated = Show.objects.create(
+            tmdb_id=1, name="Rated Only", number_of_episodes=10
+        )
+        cls.watched = Show.objects.create(
+            tmdb_id=2, name="Watched Only", number_of_episodes=10
+        )
+        cls.untouched = Show.objects.create(
+            tmdb_id=3, name="Untouched", number_of_episodes=10
+        )
+
+        # Rated but never played: the rating alone implies watched.
+        Rating.objects.create(user=cls.user, show=cls.rated, score=4.0)
+
+        # Played but never rated, across two episodes so a missing distinct()
+        # would surface the watched show twice in the bulk queryset.
+        season = Season.objects.create(
+            show=cls.watched, tmdb_id=100, season_number=1
+        )
+        for i in (1, 2):
+            ep = Episode.objects.create(
+                season=season, tmdb_id=1000 + i, episode_number=i
+            )
+            WatchHistory.objects.create(user=cls.user, episode=ep)
+
+    def test_rated_show_counts_as_watched_without_watch_history(self):
+        self.assertTrue(self.rated.is_watched_by(self.user))
+
+    def test_watch_history_only_show_counts_as_watched(self):
+        self.assertTrue(self.watched.is_watched_by(self.user))
+
+    def test_untouched_show_is_not_watched(self):
+        self.assertFalse(self.untouched.is_watched_by(self.user))
+
+    def test_watched_by_returns_both_signals_once_each(self):
+        watched_pks = sorted(
+            Show.objects.watched_by(self.user).values_list("pk", flat=True)
+        )
+        self.assertEqual(watched_pks, sorted([self.rated.pk, self.watched.pk]))
+
+    def test_anonymous_user_has_watched_nothing(self):
+        anon = AnonymousUser()
+        self.assertFalse(self.rated.is_watched_by(anon))
+        self.assertEqual(list(Show.objects.watched_by(anon)), [])
