@@ -1,9 +1,9 @@
 {% if shows %}
-<section class="row">
+<section class="row"{% if anchor %} id="{{ anchor }}"{% endif %}>
     <h2 class="row-title">{{ title }}</h2>
     <div class="row-scroller">
         {% for show in shows %}
-        <div class="card">
+        <a class="card card-link" href="{{ show.get_absolute_url }}">
             <div class="card-poster">
                 {% if show.poster_url %}
                 <img src="{{ show.poster_url }}" alt="{{ show.name }}" loading="lazy">
@@ -23,7 +23,7 @@
                     {% endfor %}
                 </div>
             </div>
-        </div>
+        </a>
         {% endfor %}
     </div>
 </section>

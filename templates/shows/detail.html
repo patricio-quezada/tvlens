@@ -204,6 +204,64 @@
         to { opacity: 1; transform: translateY(0); }
     }
 
+    /* ── Rate this show ───────────────────────────────────────────────── */
+    .rate-panel {
+        margin-top: 1.75rem; padding-top: 1.5rem;
+        border-top: 1px solid var(--border); max-width: 62ch;
+    }
+    .rate-panel .rate-heading {
+        font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.1em;
+        text-transform: uppercase; font-size: 1.05rem;
+        color: var(--text-secondary); margin-bottom: 0.7rem;
+    }
+    .rate-row { display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap; }
+
+    /* Pure-CSS half-star widget: ten radios, one per half-step, laid out
+       right-to-left (row-reverse) so a plain sibling selector can light "this
+       star and every lower one". Each half label is 0.5em wide and pulled over
+       the left half of the full star to its right, so clicking the left half of
+       a star picks the .5 value and the right half the .0 value. No JS anywhere
+       in TVLens: pick a star, then Save (a plain form POST, like login/register).
+       The three fill rules read: persisted rating is amber; hovering the widget
+       clears that amber; the hovered star and every lower one preview in glow. */
+    .star-rating {
+        display: inline-flex; flex-direction: row-reverse;
+        justify-content: flex-end; border: 0; padding: 0; margin: 0;
+        font-size: 2rem; line-height: 1;
+    }
+    .star-rating input {
+        position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden;
+    }
+    .star-rating label {
+        position: relative; width: 1em; height: 1em;
+        color: var(--text-tertiary); cursor: pointer;
+    }
+    .star-rating label::before {
+        content: '★'; position: absolute; left: 0; top: 0;
+        overflow: hidden; transition: color 0.15s ease;
+    }
+    .star-rating label.full::before { width: 1em; }
+    .star-rating label.half { width: 0.5em; margin-right: -0.5em; z-index: 1; }
+    .star-rating label.half::before { width: 0.5em; }
+
+    .star-rating input:checked ~ label { color: var(--accent); }
+    .star-rating:hover input:checked ~ label { color: var(--text-tertiary); }
+    .star-rating:hover > label:hover,
+    .star-rating:hover > label:hover ~ label { color: var(--accent-glow); }
+    .star-rating input:focus-visible + label { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    .rate-save {
+        font-family: 'DM Sans', sans-serif; font-size: 0.82rem; letter-spacing: 0.02em;
+        padding: 0.5rem 1.1rem; background: var(--accent); color: #08080a;
+        border: 0; border-radius: 6px; cursor: pointer; font-weight: 500;
+    }
+    .rate-save:hover { filter: brightness(1.08); }
+    .rate-meta { font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.9rem; }
+    .rate-meta .avg-score { color: var(--rating); font-weight: 500; }
+    .rate-meta .you { color: var(--accent); }
+    .rate-login { font-size: 0.92rem; color: var(--text-secondary); }
+    .rate-login a { color: var(--accent); }
+
     @media (max-width: 680px) {
         .hero-inner { grid-template-columns: 130px 1fr; gap: 1.25rem; }
         .hero-title { font-size: 2.6rem; }
@@ -249,6 +307,28 @@
             {% endif %}
 
             {% if show.overview %}<p class="hero-overview">{{ show.overview }}</p>{% endif %}
+
+            <section class="rate-panel">
+                <div class="rate-heading">Rate this show</div>
+                {% if user.is_authenticated %}
+                <form class="rate-row" method="post" action="{% url 'shows:rate' show.slug %}">
+                    {% csrf_token %}
+                    <fieldset class="star-rating" aria-label="Your rating, half a star to five stars">
+                        {% for step in star_steps %}
+                        <input type="radio" name="score" value="{{ step.value }}" id="star-{{ forloop.counter }}"{% if step.checked %} checked{% endif %}>
+                        <label class="{{ step.css_class }}" for="star-{{ forloop.counter }}" title="{{ step.value|floatformat:1 }} stars"></label>
+                        {% endfor %}
+                    </fieldset>
+                    <button class="rate-save" type="submit">Save</button>
+                </form>
+                <p class="rate-meta">
+                    {% if average_rating %}<span class="avg-score">★ {{ average_rating|floatformat:1 }}</span> average from {{ rating_count }} rating{{ rating_count|pluralize }} on TVLens.{% else %}Not yet rated on TVLens. Be the first.{% endif %}
+                    {% if user_rating %}<span class="you">Your rating: {{ user_rating|floatformat:1 }}.</span>{% endif %}
+                </p>
+                {% else %}
+                <p class="rate-login"><a href="{% url 'login' %}?next={{ request.path }}">Log in</a> to rate this show in half-stars.{% if average_rating %} <span class="avg-score">★ {{ average_rating|floatformat:1 }}</span> average from {{ rating_count }} rating{{ rating_count|pluralize }}.{% endif %}</p>
+                {% endif %}
+            </section>
         </div>
     </div>
 </article>
