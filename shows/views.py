@@ -90,6 +90,31 @@ def index(request):
     )
 
 
+def genre(request, pk):
+    """All shows in one genre, best-rated first. Powers the home 'Browse by genre' pills."""
+    genre = get_object_or_404(Genre, pk=pk)
+    shows = (
+        Show.objects.filter(genres=genre)
+        .prefetch_related("genres")
+        .order_by("-vote_average", "name")
+    )
+    favorite_genre_ids: set = set()
+    if request.user.is_authenticated:
+        favorite_genre_ids = set(
+            Genre.objects.filter(
+                shows__ratings__user=request.user,
+                shows__ratings__score__gte=4.0,
+            )
+            .values_list("id", flat=True)
+            .distinct()
+        )
+    return render(
+        request,
+        "shows/genre.html",
+        {"genre": genre, "shows": shows, "favorite_genre_ids": favorite_genre_ids},
+    )
+
+
 def detail(request, slug):
     """One show, then the shows it connects to through shared people.
 
