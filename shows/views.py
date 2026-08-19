@@ -10,6 +10,7 @@ from django.views.decorators.http import require_POST
 
 from .forms import RegistrationForm
 from .models import Genre, Rating, Show
+from .personalization import rerank
 from .recommenders import (
     compose_callout,
     name_connections,
@@ -57,7 +58,17 @@ def index(request):
         top_picks_title = f"Top Picks for {request.user.username}"
         # TODO(Q-17/Q-18): populate top_picks from personalized recommender
         # TODO(Q-20): populate side_quests from cross-genre neighborhood walk
-        # TODO(Q-10 follow-up): compute favorite_genre_ids from user's ≥4-star ratings
+        # A favorite genre is one the user has rated >= 4 stars (the same "high"
+        # line Layer 2 personalizes from, ADR-08). The template glows these genre
+        # pills and cards so the page shows what it thinks the user likes.
+        favorite_genre_ids = set(
+            Genre.objects.filter(
+                shows__ratings__user=request.user,
+                shows__ratings__score__gte=4.0,
+            )
+            .values_list("id", flat=True)
+            .distinct()
+        )
 
     recently_added = base_qs.order_by("-created_at")[:12]
     genres = (
@@ -82,17 +93,19 @@ def index(request):
 def detail(request, slug):
     """One show, then the shows it connects to through shared people.
 
-    Layer 1 becomes visible here. The ranking is the materialized graph's
-    (stored_similar reads the same order similar_by_people would compute live,
-    ADR-07); this view only describes each edge: for every recommendation it
-    composes one prose sentence naming the people who tie it back, cast and crew,
-    ordered by their episode-share contribution, and hands the template the
-    honest caption from the mode.
+    Layer 1 supplies the candidate list (stored_similar reads the same order
+    similar_by_people would compute live, ADR-07); Layer 2 then re-ranks that
+    list for the signed-in user by their learned genre/tag preferences (ADR-08).
+    For every recommendation the view composes one prose sentence naming the
+    people who tie it back, cast and crew, ordered by their episode-share
+    contribution, and hands the template the honest caption from the mode.
     """
     show = get_object_or_404(
         Show.objects.prefetch_related("genres", "networks"), slug=slug
     )
-    ranked = stored_similar(show)
+    # Layer 1 order in, personalized order out. Anonymous and ratingless users
+    # get the cold-start ordering (Layer 1 under a light quality prior).
+    ranked = rerank(request.user, stored_similar(show))
 
     # TVLens's own rating (distinct from the TMDb vote_average in the hero). The
     # widget shows the signed-in user their current score and lets them change it.
@@ -121,6 +134,7 @@ def detail(request, slug):
             "show": show,
             "recommendations": recommendations,
             "mode": ranked.mode,
+            "personalized": ranked.personalized,
             "user_rating": user_rating,
             "star_steps": star_steps(user_rating),
             "average_rating": show.average_rating,
