@@ -10,11 +10,11 @@
     {% if top_picks %}
         {% include "shows/_row.html" with title=top_picks_title shows=top_picks favorite_genre_ids=favorite_genre_ids %}
     {% else %}
-        {% include "shows/_row_empty.html" with title=top_picks_title message="Rate a few shows and we'll surface picks tailored to you here." cta_label="Start rating" cta_url="#" %}
+        {% include "shows/_row_empty.html" with title=top_picks_title message="Rate a few shows and we'll surface picks tailored to you here." cta_label="Start rating" cta_url="#catalog" %}
     {% endif %}
 {% endif %}
 
-{% include "shows/_row.html" with title="Recently added" shows=recently_added favorite_genre_ids=favorite_genre_ids %}
+{% include "shows/_row.html" with title="Recently added" shows=recently_added favorite_genre_ids=favorite_genre_ids anchor="catalog" %}
 
 {% if user.is_authenticated %}
     {% if side_quests %}
