@@ -7,11 +7,22 @@ data, fails loudly here instead of silently reranking the catalog.
 
 from io import StringIO
 
+from django.contrib.auth.models import AnonymousUser, User
 from django.core.management import call_command
 from django.test import TestCase
 from django.urls import reverse
 
-from .models import CastMember, CrewMember, Person, Show, SimilarShow
+from .models import (
+    CastMember,
+    CrewMember,
+    Episode,
+    Person,
+    Rating,
+    Season,
+    Show,
+    SimilarShow,
+    WatchHistory,
+)
 from .recommenders import (
     SQLITE_MAX_VARS_SAFE,
     compose_callout,
@@ -673,3 +684,150 @@ class SqlVariableCeilingTests(TestCase):
         result = list(similar_by_crew(self.src))
         self.assertEqual([s.pk for s in result], [self.cand.pk])
         self.assertEqual(result[0].shared_crew, self.n)
+
+
+class RatingTests(TestCase):
+    """The rating slice (#5): the half-star endpoint, its guards, and display.
+
+    Each test freezes one decision behind the widget: ratings are per signed-in
+    user (TVLens has real auth, so a rating keys off request.user and rating
+    requires login), one row per (user, show) updated in place on a re-rate, and
+    constrained to the MovieLens half-star scale (0.5 to 5.0 in 0.5 steps). The
+    show's average is the mean of them. This is the cold-start data Layer 2 (#6)
+    reads, so the stored shape is the contract.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.show = Show.objects.create(
+            tmdb_id=1, name="Rated Show", number_of_episodes=10
+        )
+        cls.other = Show.objects.create(
+            tmdb_id=2, name="Other Show", number_of_episodes=10
+        )
+        cls.alice = User.objects.create_user("alice", password="pw-alice-123")
+        cls.bob = User.objects.create_user("bob", password="pw-bob-123")
+
+    def _rate(self, show, score):
+        return self.client.post(
+            reverse("shows:rate", args=[show.slug]), {"score": score}
+        )
+
+    def test_recording_a_rating_persists_the_score(self):
+        self.client.force_login(self.alice)
+        resp = self._rate(self.show, "3.5")
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(
+            Rating.objects.get(user=self.alice, show=self.show).score, 3.5
+        )
+
+    def test_re_rating_updates_the_row_and_does_not_duplicate(self):
+        self.client.force_login(self.alice)
+        self._rate(self.show, "2.0")
+        self._rate(self.show, "4.5")
+        rows = Rating.objects.filter(user=self.alice, show=self.show)
+        self.assertEqual(rows.count(), 1)
+        self.assertEqual(rows.first().score, 4.5)
+
+    def test_scale_bounds_and_half_step_are_enforced(self):
+        self.client.force_login(self.alice)
+        # The endpoints of the scale are accepted.
+        for good in ("0.5", "5.0"):
+            self.assertEqual(self._rate(self.show, good).status_code, 302)
+        # Below, above, off-the-half-step, and junk are rejected, no row written.
+        for bad in ("0.4", "5.5", "3.3", "0", "-1", "abc", ""):
+            self.assertEqual(self._rate(self.other, bad).status_code, 400)
+        self.assertFalse(Rating.objects.filter(show=self.other).exists())
+
+    def test_average_reflects_all_ratings(self):
+        Rating.objects.create(user=self.alice, show=self.show, score=4.0)
+        Rating.objects.create(user=self.bob, show=self.show, score=3.0)
+        self.assertEqual(self.show.average_rating, 3.5)
+
+    def test_average_and_count_show_on_the_detail_page(self):
+        Rating.objects.create(user=self.alice, show=self.show, score=4.0)
+        Rating.objects.create(user=self.bob, show=self.show, score=5.0)
+        body = self.client.get(self.show.get_absolute_url()).content.decode()
+        self.assertIn("★ 4.5", body)
+        self.assertIn("2 ratings", body)
+
+    def test_widget_prechecks_the_users_current_rating(self):
+        Rating.objects.create(user=self.alice, show=self.show, score=3.5)
+        self.client.force_login(self.alice)
+        body = self.client.get(self.show.get_absolute_url()).content.decode()
+        # 3.5 is the fourth input in the high-to-low widget (5.0, 4.5, 4.0, 3.5).
+        self.assertIn('value="3.5" id="star-4" checked', body)
+        self.assertIn("Your rating: 3.5", body)
+
+    def test_rating_requires_login(self):
+        resp = self._rate(self.show, "3.0")
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn("/accounts/login/", resp["Location"])
+        self.assertFalse(Rating.objects.filter(show=self.show).exists())
+
+    def test_get_on_the_endpoint_is_not_allowed(self):
+        self.client.force_login(self.alice)
+        resp = self.client.get(reverse("shows:rate", args=[self.show.slug]))
+        self.assertEqual(resp.status_code, 405)
+
+    def test_anonymous_detail_page_prompts_login_not_widget(self):
+        body = self.client.get(self.show.get_absolute_url()).content.decode()
+        self.assertIn("Log in", body)
+        self.assertNotIn('class="star-rating"', body)
+
+
+class WatchedSignalTests(TestCase):
+    """ADR-08's "a rating implies watched", made queryable for Layer 2 (#6).
+
+    Watched is derived, never stored: a show counts as watched for a user if
+    they rated it OR logged any WatchHistory for one of its episodes. These
+    freeze the three cases the rule turns on (rating-only, watch-history-only,
+    untouched), that the bulk queryset dedupes, and the anonymous guard.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user("viewer", password="pw-viewer-123")
+        cls.rated = Show.objects.create(
+            tmdb_id=1, name="Rated Only", number_of_episodes=10
+        )
+        cls.watched = Show.objects.create(
+            tmdb_id=2, name="Watched Only", number_of_episodes=10
+        )
+        cls.untouched = Show.objects.create(
+            tmdb_id=3, name="Untouched", number_of_episodes=10
+        )
+
+        # Rated but never played: the rating alone implies watched.
+        Rating.objects.create(user=cls.user, show=cls.rated, score=4.0)
+
+        # Played but never rated, across two episodes so a missing distinct()
+        # would surface the watched show twice in the bulk queryset.
+        season = Season.objects.create(
+            show=cls.watched, tmdb_id=100, season_number=1
+        )
+        for i in (1, 2):
+            ep = Episode.objects.create(
+                season=season, tmdb_id=1000 + i, episode_number=i
+            )
+            WatchHistory.objects.create(user=cls.user, episode=ep)
+
+    def test_rated_show_counts_as_watched_without_watch_history(self):
+        self.assertTrue(self.rated.is_watched_by(self.user))
+
+    def test_watch_history_only_show_counts_as_watched(self):
+        self.assertTrue(self.watched.is_watched_by(self.user))
+
+    def test_untouched_show_is_not_watched(self):
+        self.assertFalse(self.untouched.is_watched_by(self.user))
+
+    def test_watched_by_returns_both_signals_once_each(self):
+        watched_pks = sorted(
+            Show.objects.watched_by(self.user).values_list("pk", flat=True)
+        )
+        self.assertEqual(watched_pks, sorted([self.rated.pk, self.watched.pk]))
+
+    def test_anonymous_user_has_watched_nothing(self):
+        anon = AnonymousUser()
+        self.assertFalse(self.rated.is_watched_by(anon))
+        self.assertEqual(list(Show.objects.watched_by(anon)), [])
