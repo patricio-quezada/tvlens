@@ -72,7 +72,10 @@ def index(request):
             .distinct()
         )
 
-    recently_added = base_qs.order_by("-created_at")[:12]
+    # One show, one row: anything already in Top Picks stays out of the other
+    # home rows. Side Quests (Q-20) must apply the same exclusion when built.
+    pick_ids = {s.pk for s in picks}
+    recently_added = base_qs.exclude(pk__in=pick_ids).order_by("-created_at")[:12]
     genres = (
         Genre.objects.annotate(n=Count("shows"))
         .filter(n__gt=0)

@@ -1124,3 +1124,18 @@ class TopPicksTests(TestCase):
         self.assertIn("Top Picks for me", body)
         self.assertIn("Sleeper", body)
         self.assertNotIn("Start rating", body)
+
+    def test_a_top_pick_never_repeats_in_recently_added(self):
+        # One show, one row: a show surfaced as a Top Pick must not also
+        # appear in Recently Added (and Side Quests inherits this rule, Q-20).
+        Rating.objects.create(user=self.user, show=self.sleeper, score=4.5)
+        self.client.force_login(self.user)
+        ctx = self.client.get(reverse("shows:index")).context
+        self.assertIn(self.sleeper, ctx["top_picks"])
+        self.assertNotIn(self.sleeper, list(ctx["recently_added"]))
+        # Unrated shows still reach Recently Added untouched.
+        self.assertIn(self.beloved, list(ctx["recently_added"]))
+        # Anonymous visitors have no picks, so nothing is held back.
+        self.client.logout()
+        ctx = self.client.get(reverse("shows:index")).context
+        self.assertIn(self.sleeper, list(ctx["recently_added"]))
