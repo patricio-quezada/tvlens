@@ -31,3 +31,7 @@ media/
 .DS_Store
 Thumbs.db
 .gstack/
+
+# daily warm-start (generated)
+scripts/logs/
+scripts/next-prep.md
