@@ -10,7 +10,7 @@ from django.views.decorators.http import require_POST
 
 from .forms import RegistrationForm
 from .models import Genre, Rating, Show
-from .personalization import rerank
+from .personalization import rerank, top_picks
 from .recommenders import (
     compose_callout,
     name_connections,
@@ -49,14 +49,16 @@ def star_steps(user_rating):
 def index(request):
     base_qs = Show.objects.prefetch_related("genres")
 
-    top_picks: list = []
+    picks: list = []
     side_quests: list = []
     favorite_genre_ids: set = set()
     top_picks_title = None
 
     if request.user.is_authenticated:
         top_picks_title = f"Top Picks for {request.user.username}"
-        # TODO(Q-17/Q-18): populate top_picks from personalized recommender
+        # The user's rated shows ranked by lift over a global baseline, so the
+        # top of the row is genuinely top, not raw stars replayed (#15).
+        picks = top_picks(request.user)
         # TODO(Q-20): populate side_quests from cross-genre neighborhood walk
         # A favorite genre is one the user has rated >= 4 stars (the same "high"
         # line Layer 2 personalizes from, ADR-08). The template glows these genre
@@ -80,7 +82,7 @@ def index(request):
         request,
         "shows/index.html",
         {
-            "top_picks": top_picks,
+            "top_picks": picks,
             "top_picks_title": top_picks_title,
             "side_quests": side_quests,
             "recently_added": recently_added,

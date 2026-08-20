@@ -24,7 +24,7 @@ from .models import (
     SimilarShow,
     WatchHistory,
 )
-from .personalization import build_profile, rerank
+from .personalization import build_profile, rerank, top_picks
 from .recommenders import (
     SQLITE_MAX_VARS_SAFE,
     RankedShows,
@@ -1048,3 +1048,79 @@ class Layer2DetailViewTests(TestCase):
         # ranked first, and the page says so.
         self.assertLess(body.index("ComedyPick"), body.index("DramaPick"))
         self.assertIn("reordered for fan", body)
+
+
+class TopPicksTests(TestCase):
+    """Top Picks (#15): the user's rated shows ranked by lift over a baseline.
+
+    Each test freezes one decided rule: the order is lift (user score minus
+    baseline), not raw stars; only shows rated >= 3.5 qualify; the baseline is
+    the other-user average once MIN_OTHER_RATERS others have rated, else TMDb
+    vote_average / 2; and the global number is a yardstick, never a leaderboard
+    (another user's ratings shift a baseline but never inject their shows).
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user("me", password="pw-me-12345")
+        # TMDb-side quality differs so the fallback baselines differ: Beloved is
+        # world-adored (4.5 baseline), Sleeper the world shrugs at (3.0).
+        cls.beloved = Show.objects.create(
+            tmdb_id=1, name="Beloved", number_of_episodes=10, vote_average=9.0
+        )
+        cls.sleeper = Show.objects.create(
+            tmdb_id=2, name="Sleeper", number_of_episodes=10, vote_average=6.0
+        )
+        cls.meh = Show.objects.create(
+            tmdb_id=3, name="Meh", number_of_episodes=10, vote_average=5.0
+        )
+
+    def test_ranked_by_lift_not_raw_score(self):
+        # Raw stars say Beloved (5.0) > Sleeper (4.0); lift says Sleeper
+        # (4.0 - 3.0 = +1.0) > Beloved (5.0 - 4.5 = +0.5).
+        Rating.objects.create(user=self.user, show=self.beloved, score=5.0)
+        Rating.objects.create(user=self.user, show=self.sleeper, score=4.0)
+        picks = top_picks(self.user)
+        self.assertEqual([s.name for s in picks], ["Sleeper", "Beloved"])
+        self.assertAlmostEqual(picks[0].lift, 1.0)
+        self.assertAlmostEqual(picks[1].lift, 0.5)
+
+    def test_floor_excludes_shows_the_user_did_not_actually_like(self):
+        # +1.5 lift, but a 3.0 is lukewarm: it must not be a Top Pick.
+        Rating.objects.create(user=self.user, show=self.meh, score=3.0)
+        self.assertEqual(top_picks(self.user), [])
+
+    def test_other_user_average_becomes_baseline_past_the_minimum(self):
+        # Three others average 3.0 on Beloved, so the TVLens baseline replaces
+        # the 4.5 TMDb fallback and the lift grows from +0.5 to +2.0. The
+        # user's own rating must not sneak into the baseline.
+        Rating.objects.create(user=self.user, show=self.beloved, score=5.0)
+        for i, score in enumerate((2.5, 3.0, 3.5)):
+            other = User.objects.create_user(f"other{i}", password=f"pw-o-{i}00")
+            Rating.objects.create(user=other, show=self.beloved, score=score)
+        [pick] = top_picks(self.user)
+        self.assertAlmostEqual(pick.baseline, 3.0)
+        self.assertAlmostEqual(pick.lift, 2.0)
+
+    def test_below_the_minimum_falls_back_to_tmdb(self):
+        # Two other raters are not a believable TVLens baseline yet.
+        Rating.objects.create(user=self.user, show=self.beloved, score=5.0)
+        for i in range(2):
+            other = User.objects.create_user(f"few{i}", password=f"pw-f-{i}00")
+            Rating.objects.create(user=other, show=self.beloved, score=0.5)
+        [pick] = top_picks(self.user)
+        self.assertAlmostEqual(pick.baseline, 4.5)
+
+    def test_not_a_leaderboard_other_users_shows_never_appear(self):
+        stranger = User.objects.create_user("stranger", password="pw-s-99999")
+        Rating.objects.create(user=stranger, show=self.beloved, score=5.0)
+        self.assertEqual(top_picks(self.user), [])
+        self.assertEqual(top_picks(AnonymousUser()), [])
+
+    def test_home_page_renders_the_picks_row(self):
+        Rating.objects.create(user=self.user, show=self.sleeper, score=4.5)
+        self.client.force_login(self.user)
+        body = self.client.get(reverse("shows:index")).content.decode()
+        self.assertIn("Top Picks for me", body)
+        self.assertIn("Sleeper", body)
+        self.assertNotIn("Start rating", body)

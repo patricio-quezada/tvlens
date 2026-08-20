@@ -21,7 +21,7 @@ TMDb vote_average, never popularity (ADR-05): they mostly see Layer 1's honest
 order until their own ratings move it.
 """
 
-from django.db.models import Avg
+from django.db.models import Avg, Count
 
 from .models import Genre, Rating, Show, ShowTag
 from .recommenders import RankedShows
@@ -256,3 +256,76 @@ def rerank(user, ranked):
     result.profile = profile
     result.personalized = not profile.is_cold_start
     return result
+
+
+# A Top Pick must actually be liked: the user's own score has to clear this
+# floor before lift is even considered. 3.5 sits just above the scale's
+# comfortable middle, so a show the user was lukewarm on can never headline
+# their picks no matter how far it beats the baseline.
+TOP_PICK_FLOOR = 3.5
+
+# How many OTHER users must have rated a show before their average is a
+# believable baseline. Below this the TVLens-side number is one or two
+# opinions, so the benchmark falls back to TMDb instead.
+MIN_OTHER_RATERS = 3
+
+
+def top_picks(user, limit=12):
+    """The user's rated shows, ranked by lift over a global baseline (#15).
+
+    Top Picks is NOT the user's raw ratings replayed, and NOT a public
+    leaderboard. Each rated show is measured against a benchmark of what
+    everyone else thinks, and the list orders by lift = the user's score minus
+    that baseline: the shows the user rates genuinely above the crowd rise to
+    the top, while a 4.0 on a show the whole world rates 4.5 sinks. The
+    baseline is a yardstick only; it is never displayed front-and-center.
+
+    The baseline per show is the TVLens all-user average EXCLUDING this user,
+    but only once at least MIN_OTHER_RATERS other people have rated it;
+    thinner than that, it falls back to TMDb vote_average / 2 (TMDb rates on
+    0-10, TVLens on 0.5-5). With a single user in the database, every show
+    takes the TMDb fallback, which is what makes the demo meaningful today:
+    lift reads as "how much more I liked this than the world did".
+
+    Only shows the user scored >= TOP_PICK_FLOOR qualify; ties break on the
+    user's score, then name, so equal lifts order deterministically. Returns
+    up to `limit` Show objects, each annotated with `.user_score`,
+    `.baseline`, and `.lift` so the ranking can always explain itself.
+    Anonymous users get an empty list (the template keeps its empty state).
+    """
+    if user is None or not user.is_authenticated:
+        return []
+
+    rated = list(
+        Rating.objects.filter(user=user, score__gte=TOP_PICK_FLOOR)
+        .select_related("show")
+        .prefetch_related("show__genres")
+    )
+    if not rated:
+        return []
+
+    others = {
+        row["show_id"]: row
+        for row in (
+            Rating.objects.filter(show_id__in=[r.show_id for r in rated])
+            .exclude(user=user)
+            .values("show_id")
+            .annotate(avg=Avg("score"), n=Count("id"))
+        )
+    }
+
+    picks = []
+    for r in rated:
+        show = r.show
+        other = others.get(r.show_id)
+        if other and other["n"] >= MIN_OTHER_RATERS:
+            baseline = other["avg"]
+        else:
+            baseline = show.vote_average / 2
+        show.user_score = r.score
+        show.baseline = baseline
+        show.lift = r.score - baseline
+        picks.append(show)
+
+    picks.sort(key=lambda s: (-s.lift, -s.user_score, s.name))
+    return picks[:limit]
