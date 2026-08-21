@@ -1127,7 +1127,7 @@ class TopPicksTests(TestCase):
 
     def test_a_top_pick_never_repeats_in_recently_added(self):
         # One show, one row: a show surfaced as a Top Pick must not also
-        # appear in Recently Added (and Side Quests inherits this rule, Q-20).
+        # appear in Recently Added (and Side Quests inherits this rule, issue #10).
         Rating.objects.create(user=self.user, show=self.sleeper, score=4.5)
         self.client.force_login(self.user)
         ctx = self.client.get(reverse("shows:index")).context
