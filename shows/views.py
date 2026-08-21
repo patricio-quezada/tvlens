@@ -59,7 +59,7 @@ def index(request):
         # The user's rated shows ranked by lift over a global baseline, so the
         # top of the row is genuinely top, not raw stars replayed (#15).
         picks = top_picks(request.user)
-        # TODO(Q-20): populate side_quests from cross-genre neighborhood walk
+        # TODO(#10): populate side_quests from cross-genre neighborhood walk
         # A favorite genre is one the user has rated >= 4 stars (the same "high"
         # line Layer 2 personalizes from, ADR-08). The template glows these genre
         # pills and cards so the page shows what it thinks the user likes.
@@ -73,7 +73,7 @@ def index(request):
         )
 
     # One show, one row: anything already in Top Picks stays out of the other
-    # home rows. Side Quests (Q-20) must apply the same exclusion when built.
+    # home rows. Side Quests (issue #10) must apply the same exclusion when built.
     pick_ids = {s.pk for s in picks}
     recently_added = base_qs.exclude(pk__in=pick_ids).order_by("-created_at")[:12]
     genres = (
