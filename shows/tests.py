@@ -24,7 +24,13 @@ from .models import (
     SimilarShow,
     WatchHistory,
 )
-from .personalization import build_profile, rerank, top_picks
+from .personalization import (
+    SIDE_QUEST_SEED_FLOOR,
+    build_profile,
+    rerank,
+    side_quests,
+    top_picks,
+)
 from .recommenders import (
     SQLITE_MAX_VARS_SAFE,
     RankedShows,
@@ -1139,3 +1145,200 @@ class TopPicksTests(TestCase):
         self.client.logout()
         ctx = self.client.get(reverse("shows:index")).context
         self.assertIn(self.sleeper, list(ctx["recently_added"]))
+
+
+class SideQuestsTests(TestCase):
+    """Side Quests (#10, ADR-09): strong Layer 1 edges that cross a genre line.
+
+    The row must be plausible and NOT a chart. These freeze the four things that
+    make it that: every pick crosses a genre boundary, the order comes off the
+    people graph rather than popularity, the row needs no ratings (anonymous
+    included), and the user's own high ratings take over the walk once they exist.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        crime = Genre.objects.create(tmdb_id=1, name="Crime")
+        comedy = Genre.objects.create(tmdb_id=2, name="Comedy")
+        scifi = Genre.objects.create(tmdb_id=3, name="SciFi")
+        western = Genre.objects.create(tmdb_id=4, name="Western")
+
+        def show(tmdb_id, name, genre, popularity):
+            s = Show.objects.create(
+                tmdb_id=tmdb_id,
+                name=name,
+                number_of_episodes=10,
+                popularity=popularity,
+            )
+            s.genres.add(genre)
+            return s
+
+        # Anchor sits at the middle of the graph. CrossComedy is a strong edge
+        # across a genre line; SameCrime is an equally strong edge that stays
+        # inside Crime AND is the most popular show in the catalog, so it is the
+        # trap: a popularity chart or a plain "strongest edges" row would lead
+        # with it. WeakSciFi is a thin cross-genre edge on a very popular show.
+        cls.anchor = show(1, "Anchor", crime, 1.0)
+        cls.cross = show(2, "CrossComedy", comedy, 2.0)
+        cls.same = show(3, "SameCrime", crime, 999.0)
+        cls.weak = show(4, "WeakSciFi", scifi, 500.0)
+        # A second, disconnected pair with a stronger edge than anything Anchor
+        # touches: the top-up material, and the proof that a seeded row puts the
+        # user's own neighborhood ahead of a bigger edge elsewhere.
+        cls.far_a = show(5, "FarA", comedy, 3.0)
+        cls.far_b = show(6, "FarB", western, 4.0)
+
+        def full_run(person, *shows, episodes=10):
+            for s in shows:
+                CastMember.objects.create(
+                    show=s, person=person, order=0, character=person.name,
+                    episode_count=episodes,
+                )
+
+        full_run(Person.objects.create(tmdb_id=1, name="Lead Across"),
+                 cls.anchor, cls.cross)               # score 1.0, cross-genre
+        full_run(Person.objects.create(tmdb_id=2, name="Lead Within"),
+                 cls.anchor, cls.same)                # score 1.0, same genre
+        full_run(Person.objects.create(tmdb_id=3, name="One Scene"),
+                 cls.anchor, cls.weak, episodes=1)    # score 0.1, cross-genre
+        full_run(Person.objects.create(tmdb_id=4, name="Far Lead"),
+                 cls.far_a, cls.far_b)
+        full_run(Person.objects.create(tmdb_id=5, name="Far Second"),
+                 cls.far_a, cls.far_b)                # 1.0 + 1.0 = 2.0
+
+        call_command("rebuild_similar_shows", stdout=StringIO())
+
+    def _names(self, quests):
+        return [s.name for s in quests]
+
+    def test_every_pick_crosses_a_genre_line(self):
+        # The one invariant the row is named for: a pick never shares a genre
+        # with the show whose edge reached it.
+        for pick in side_quests(AnonymousUser()):
+            self.assertFalse(
+                {g.id for g in pick.genres.all()}
+                & {g.id for g in pick.quest_from.genres.all()},
+                f"{pick.name} shares a genre with {pick.quest_from.name}",
+            )
+
+    def test_cold_start_is_the_strongest_cross_genre_edges(self):
+        # 2.0 pair first, then the 1.0 cross-genre edge, then the 0.1 one.
+        # SameCrime is missing: its edge is just as strong as CrossComedy's, but
+        # it stays inside Crime, so it is not a side quest.
+        quests = side_quests(AnonymousUser())
+        self.assertEqual(
+            self._names(quests),
+            ["FarA", "FarB", "Anchor", "CrossComedy", "WeakSciFi"],
+        )
+        self.assertNotIn("SameCrime", self._names(quests))
+        self.assertFalse(quests.personalized)
+
+    def test_cold_start_is_not_a_popularity_ordering(self):
+        # ADR-05/ADR-09: nothing here is a chart. The catalog's most popular
+        # show is absent entirely, and the row's own order runs against
+        # popularity rather than with it.
+        quests = side_quests(AnonymousUser())
+        by_popularity = sorted(quests, key=lambda s: -s.popularity)
+        self.assertNotEqual(self._names(quests), self._names(by_popularity))
+        self.assertEqual(quests[-1].name, "WeakSciFi")  # 2nd most popular, last
+        self.assertNotIn("SameCrime", self._names(quests))  # most popular, absent
+
+    def test_anonymous_visitor_gets_the_row(self):
+        response = self.client.get(reverse("shows:index"))
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["side_quests"])
+        self.assertContains(response, "Side Quests")
+        self.assertContains(response, "FarA")
+
+    def test_signed_in_but_unrated_user_gets_the_same_cold_start_row(self):
+        user = User.objects.create_user("newcomer", password="x")
+        self.assertEqual(
+            self._names(side_quests(user)),
+            self._names(side_quests(AnonymousUser())),
+        )
+
+    def test_a_high_rating_seeds_the_walk(self):
+        # Once the user rates Anchor highly, the row starts from Anchor's own
+        # cross-genre neighbors instead of the catalog's strongest edges.
+        user = User.objects.create_user("rater", password="x")
+        Rating.objects.create(user=user, show=self.anchor, score=5.0)
+        quests = side_quests(user, limit=3)
+        self.assertTrue(quests.personalized)
+        self.assertEqual(self._names(quests)[:2], ["CrossComedy", "WeakSciFi"])
+        for pick in quests[:2]:
+            self.assertEqual(pick.quest_from, self.anchor)
+
+    def test_seeded_picks_come_before_a_stronger_top_up(self):
+        # FarA's edge (2.0) beats anything Anchor touches, but it is not part of
+        # this user's neighborhood, so it fills the row only after the seeded
+        # picks. Personal first, then the catalog.
+        user = User.objects.create_user("rater2", password="x")
+        Rating.objects.create(user=user, show=self.anchor, score=5.0)
+        quests = side_quests(user, limit=3)
+        self.assertEqual(
+            self._names(quests), ["CrossComedy", "WeakSciFi", "FarA"]
+        )
+        self.assertGreater(quests[2].quest_score, quests[0].quest_score)
+
+    def test_a_rating_below_the_seed_floor_does_not_seed(self):
+        # 3.5 is watched, and it is above ADR-08's neutral 3.0, but it is not
+        # "rated highly": the row stays the cold-start walk.
+        user = User.objects.create_user("lukewarm", password="x")
+        Rating.objects.create(
+            user=user, show=self.anchor, score=SIDE_QUEST_SEED_FLOOR - 0.5
+        )
+        quests = side_quests(user)
+        self.assertFalse(quests.personalized)
+        self.assertEqual(
+            self._names(quests), ["FarA", "FarB", "CrossComedy", "WeakSciFi"]
+        )
+
+    def test_watched_shows_never_come_back_as_a_quest(self):
+        user = User.objects.create_user("viewer", password="x")
+        Rating.objects.create(user=user, show=self.far_a, score=5.0)
+        self.assertNotIn("FarA", self._names(side_quests(user)))
+
+    def test_row_still_renders_when_the_seeds_have_no_cross_genre_edge(self):
+        # SameCrime's only strong edge stays inside Crime, so this user's own
+        # neighborhood yields nothing. The row falls back to the catalog walk
+        # rather than disappearing, which is the whole point of #10.
+        user = User.objects.create_user("stuck", password="x")
+        Rating.objects.create(user=user, show=self.same, score=5.0)
+        quests = side_quests(user)
+        self.assertFalse(quests.personalized)
+        self.assertEqual(
+            self._names(quests),
+            ["FarA", "FarB", "Anchor", "CrossComedy", "WeakSciFi"],
+        )
+
+    def test_dedupe_priority_top_picks_then_side_quests_then_recently_added(self):
+        # Priority is by how personal the row is, and deliberately NOT by render
+        # order: Side Quests sits below Recently added on the page but claims its
+        # shows first (ADR-09).
+        user = User.objects.create_user("home", password="x")
+        Rating.objects.create(user=user, show=self.same, score=5.0)
+        self.client.force_login(user)
+        response = self.client.get(reverse("shows:index"))
+
+        picks = {s.pk for s in response.context["top_picks"]}
+        quests = {s.pk for s in response.context["side_quests"]}
+        recent = {s.pk for s in response.context["recently_added"]}
+        self.assertIn(self.same.pk, picks)
+        self.assertTrue(quests)
+        self.assertFalse(picks & quests)
+        self.assertFalse(picks & recent)
+        self.assertFalse(quests & recent)
+
+    def test_a_side_quest_never_repeats_in_recently_added(self):
+        response = self.client.get(reverse("shows:index"))
+        quests = {s.pk for s in response.context["side_quests"]}
+        recent = {s.pk for s in response.context["recently_added"]}
+        self.assertTrue(quests)
+        self.assertFalse(quests & recent)
+
+    def test_quest_carries_the_edge_that_earned_it(self):
+        # Each pick can say why it is there: which show reached it, and on what
+        # Layer 1 score. The row's explanation lives on the objects, not in prose.
+        quest = side_quests(AnonymousUser())[0]
+        self.assertEqual(quest.quest_from, self.far_b)
+        self.assertAlmostEqual(quest.quest_score, 2.0)

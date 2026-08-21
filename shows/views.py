@@ -10,7 +10,7 @@ from django.views.decorators.http import require_POST
 
 from .forms import RegistrationForm
 from .models import Genre, Rating, Show
-from .personalization import rerank, top_picks
+from .personalization import rerank, side_quests, top_picks
 from .recommenders import (
     compose_callout,
     name_connections,
@@ -50,7 +50,6 @@ def index(request):
     base_qs = Show.objects.prefetch_related("genres")
 
     picks: list = []
-    side_quests: list = []
     favorite_genre_ids: set = set()
     top_picks_title = None
 
@@ -59,7 +58,6 @@ def index(request):
         # The user's rated shows ranked by lift over a global baseline, so the
         # top of the row is genuinely top, not raw stars replayed (#15).
         picks = top_picks(request.user)
-        # TODO(#10): populate side_quests from cross-genre neighborhood walk
         # A favorite genre is one the user has rated >= 4 stars (the same "high"
         # line Layer 2 personalizes from, ADR-08). The template glows these genre
         # pills and cards so the page shows what it thinks the user likes.
@@ -72,10 +70,21 @@ def index(request):
             .distinct()
         )
 
-    # One show, one row: anything already in Top Picks stays out of the other
-    # home rows. Side Quests (issue #10) must apply the same exclusion when built.
+    # One show, one row. The exclusion chain runs Top Picks > Side Quests >
+    # Recently Added, and that priority is by how PERSONAL a row is, not by
+    # where it sits on the page: Side Quests renders below Recently Added but
+    # claims a show first. Deliberate, do not "fix" it to match render order
+    # (ADR-09). A show only ever falls down this chain, never up.
     pick_ids = {s.pk for s in picks}
-    recently_added = base_qs.exclude(pk__in=pick_ids).order_by("-created_at")[:12]
+    # Side Quests needs no ratings, so it renders for anonymous visitors too
+    # (ADR-09): the cold-start walk is the catalog's strongest cross-genre
+    # edges, and it becomes seeded by the user's own high ratings once they
+    # exist. Called outside the is_authenticated block on purpose.
+    quests = side_quests(request.user, exclude_ids=pick_ids)
+    quest_ids = {s.pk for s in quests}
+    recently_added = (
+        base_qs.exclude(pk__in=pick_ids | quest_ids).order_by("-created_at")[:12]
+    )
     genres = (
         Genre.objects.annotate(n=Count("shows"))
         .filter(n__gt=0)
@@ -87,7 +96,7 @@ def index(request):
         {
             "top_picks": picks,
             "top_picks_title": top_picks_title,
-            "side_quests": side_quests,
+            "side_quests": quests,
             "recently_added": recently_added,
             "genres": genres,
             "favorite_genre_ids": favorite_genre_ids,

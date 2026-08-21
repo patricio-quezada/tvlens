@@ -19,11 +19,18 @@ nameable features rather than a black-box embedding (issue #7). A brand-new user
 has no ratings, so their affinities are just a light quality prior derived from
 TMDb vote_average, never popularity (ADR-05): they mostly see Layer 1's honest
 order until their own ratings move it.
+
+This module also builds the two personal home-page rows, because both answer
+"what should this particular user see": Top Picks, the user's own ratings ranked
+by lift over a global baseline (#15), and Side Quests, strong Layer 1 edges that
+cross a genre line (ADR-09, docs/adr/09-side-quests-cross-genre-edges.md).
+Neither is a chart: no row ever ranks by popularity, and no row ever shows a
+user what other users are watching.
 """
 
 from django.db.models import Avg, Count
 
-from .models import Genre, Rating, Show, ShowTag
+from .models import Genre, Rating, Show, ShowTag, SimilarShow
 from .recommenders import RankedShows
 
 # A rating at NEUTRAL_SCORE says nothing about taste; above it is a positive
@@ -329,3 +336,155 @@ def top_picks(user, limit=12):
 
     picks.sort(key=lambda s: (-s.lift, -s.user_score, s.name))
     return picks[:limit]
+
+
+# ── Side Quests (#10) ────────────────────────────────────────────────────────
+
+# A seed is a show the user rated at least this highly. 4.0 is the same "high"
+# line the home page already treats as a favorite genre and that ADR-08 calls
+# the signal Layer 2 personalizes from, so the glowing genre pills and the shows
+# Side Quests walks out from agree about what "you like this" means.
+SIDE_QUEST_SEED_FLOOR = 4.0
+
+
+class SideQuests(list):
+    """The Side Quests row: shows, plus one fact about how the row was built.
+
+    personalized is True when at least one entry was reached from a show this
+    user rated highly, False for the catalog-wide walk an anonymous or unrated
+    visitor sees. Mirrors RankedShows: a plain list with one attribute, so
+    callers that expect a list keep working.
+    """
+
+    def __init__(self, shows=(), personalized=False):
+        super().__init__(shows)
+        self.personalized = personalized
+
+
+def _genre_ids_by_show():
+    """{show_id: set of genre_id}, in one query over the m2m through table."""
+    by_show = {}
+    for show_id, genre_id in (
+        Show.genres.through.objects.order_by("show_id").values_list(
+            "show_id", "genre_id"
+        )
+    ):
+        by_show.setdefault(show_id, set()).add(genre_id)
+    return by_show
+
+
+def _cross_genre_edges(genres_by_show):
+    """Layer 1 edges whose two ends share no genre at all, strongest first.
+
+    This is the whole idea of Side Quests (ADR-09): not a new score, just the
+    subset of the materialized graph (ADR-07) that already crosses a genre line.
+    The edge is Layer 1's, so a pick is always something the people graph
+    believes in; the genre disjointness is what makes it a side quest rather
+    than more of the same.
+
+    Both ends must actually carry genres. Every show in the catalog does today,
+    but an import that lands a show with none would otherwise make every one of
+    its edges look "cross-genre" on a technicality and flood the row.
+
+    Read whole and filtered in Python: at catalog scale this is ~1k rows and one
+    query, and the disjointness test does not express cleanly in the ORM.
+    Ordering is explicit (Show and SimilarShow both carry a different Meta
+    default; Show's is -popularity, which ADR-05 forbids ranking by).
+    """
+    edges = []
+    for source_id, target_id, score in (
+        SimilarShow.objects.order_by("-score", "target__name", "source__name")
+        .values_list("source_id", "target_id", "score")
+    ):
+        source_genres = genres_by_show.get(source_id)
+        target_genres = genres_by_show.get(target_id)
+        if not source_genres or not target_genres:
+            continue
+        if source_genres & target_genres:
+            continue
+        edges.append((target_id, source_id, score))
+    return edges
+
+
+def side_quests(user, limit=12, exclude_ids=()):
+    """The Side Quests row: strong Layer 1 edges that cross a genre line (#10).
+
+    Plausibly likeable, but not what you would have picked yourself. Two paths,
+    the same as the rest of the site (ADR-08): a neutral prior at cold start,
+    personalizing as ratings arrive.
+
+      cold start  the catalog's strongest cross-genre edges, whoever is looking.
+                  Anonymous visitors get this too; the row needs no ratings, so
+                  it renders for everyone (ADR-09).
+      seeded      once the user has rated something >= SIDE_QUEST_SEED_FLOOR,
+                  the walk starts from those shows: the cross-genre neighbors of
+                  what they already like, strongest edge first.
+
+    A seeded row is topped up from the catalog-wide walk when the user's own
+    seeds run dry (a seed can have no cross-genre edge at all, and a seed whose
+    genre list is broad often does), so the row is always full rather than a
+    stub of four cards. Order is personal first: every seeded pick comes before
+    every top-up even when the top-up edge scores higher, because a neighbor of
+    a show this user liked is a better side quest than a stronger edge between
+    two shows they have never touched. Shows the user has already
+    watched never appear, and neither does anything in `exclude_ids` (the home
+    page passes Top Picks, one show one row).
+
+    Returns a SideQuests list of Show objects, each annotated with `.quest_from`
+    (the show whose edge reached it) and `.quest_score` (that edge's Layer 1
+    score), so the row can always say why a pick is there.
+    """
+    blocked = set(exclude_ids)
+    seed_ids = set()
+    if user is not None and user.is_authenticated:
+        # No quest you have already been on: watched covers rated (ADR-08).
+        blocked |= set(
+            Show.objects.watched_by(user).order_by("id").values_list("id", flat=True)
+        )
+        seed_ids = set(
+            Rating.objects.filter(user=user, score__gte=SIDE_QUEST_SEED_FLOOR)
+            .order_by("show_id")
+            .values_list("show_id", flat=True)
+        )
+
+    edges = _cross_genre_edges(_genre_ids_by_show())
+    chosen = []
+    taken = set()
+
+    def take(candidates):
+        for target_id, source_id, score in candidates:
+            if len(chosen) >= limit:
+                return
+            if target_id in blocked or target_id in taken:
+                continue
+            taken.add(target_id)
+            chosen.append((target_id, source_id, score))
+
+    if seed_ids:
+        take([e for e in edges if e[1] in seed_ids])
+    # Anything the user's own shows reached makes this row personal; the top-up
+    # below fills the rest of the strip and does not change that.
+    personalized = bool(chosen)
+    take(edges)
+
+    if not chosen:
+        return SideQuests()
+
+    # One fetch for the picks and the shows they came from. Explicitly ordered:
+    # Show's Meta default is -popularity, and nothing in this path may rank by
+    # it (ADR-05). The order that matters is `chosen`, applied below.
+    wanted = {t for t, _, _ in chosen} | {s for _, s, _ in chosen}
+    by_id = {
+        show.id: show
+        for show in Show.objects.filter(pk__in=wanted)
+        .prefetch_related("genres")
+        .order_by("pk")
+    }
+
+    quests = []
+    for target_id, source_id, score in chosen:
+        show = by_id[target_id]
+        show.quest_from = by_id[source_id]
+        show.quest_score = score
+        quests.append(show)
+    return SideQuests(quests, personalized=personalized)
