@@ -16,12 +16,17 @@
 
 {% include "shows/_row.html" with title="Recently added" shows=recently_added favorite_genre_ids=favorite_genre_ids anchor="catalog" %}
 
-{% if user.is_authenticated %}
-    {% if side_quests %}
-        {% include "shows/_row.html" with title="Side Quests" shows=side_quests favorite_genre_ids=favorite_genre_ids %}
-    {% else %}
-        {% include "shows/_row_empty.html" with title="Side Quests" message="Off-the-beaten-path picks based on what you rate highly. Unlocks once you've rated a handful of shows." cta_label=None cta_url=None %}
-    {% endif %}
+{# Side Quests renders for everyone, signed in or not: the cold-start row is the
+   catalog's strongest cross-genre edges and needs no ratings (ADR-09). It sits
+   below Recently added on the page but claims its shows BEFORE it in the dedupe
+   chain; see the comment in views.index. #}
+{% if side_quests %}
+    {% include "shows/_row.html" with title="Side Quests" shows=side_quests favorite_genre_ids=favorite_genre_ids %}
+{% else %}
+    {# PLACEHOLDER copy (#10): the old line promised "based on what you rate
+       highly / unlocks once you've rated a handful", which is no longer true.
+       Patricio writes the replacement; do not ship this string. #}
+    {% include "shows/_row_empty.html" with title="Side Quests" message="[PLACEHOLDER copy, pending Patricio's words - #10]" cta_label=None cta_url=None %}
 {% endif %}
 
 {% if genres %}
