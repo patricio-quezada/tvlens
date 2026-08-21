@@ -22,6 +22,7 @@ media/
 
 # IDE
 .vscode/
+.obsidian/
 .idea/
 *.swp
 *.swo
@@ -32,6 +33,3 @@ media/
 Thumbs.db
 .gstack/
 
-# daily warm-start (generated)
-scripts/logs/
-scripts/next-prep.md
