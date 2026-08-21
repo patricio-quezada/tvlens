@@ -1,6 +1,6 @@
 """Tests for the recommender's decided invariants.
 
-Each test freezes one decision recorded on QUE-9 (and the 2026-08-06 review),
+Each test freezes one decision recorded in ADR-04 (and the 2026-08-06 review),
 so a later layer that reweights this edge, or an ingest change that shifts the
 data, fails loudly here instead of silently reranking the catalog.
 """
@@ -124,7 +124,7 @@ class SimilarByPeopleTests(TestCase):
         self.assertEqual(similar_by_people(self.a), [])
 
     def test_zero_episode_source_estimates_from_candidate_side(self):
-        # Revised on QUE-11 (2026-08-07): a zero-episode source still knows
+        # Revised in ADR-05 (2026-08-07): a zero-episode source still knows
         # half of every edge, the candidate's side, so the list ranks by that
         # estimate. The three candidates are rigged so estimate order (Lead,
         # Half, Cameo), popularity order (Cameo first), and rating order
@@ -180,7 +180,7 @@ class SimilarByPeopleTests(TestCase):
     def test_rating_mode_when_no_edge_carries_any_signal(self):
         # Every shared edge is a null-count series credit, so neither the
         # weighted score nor the candidate-side estimate has signal. The last
-        # rung ranks by TMDb rating, per the original QUE-11 decision.
+        # rung ranks by TMDb rating, per the original ADR-05 decision.
         ghost = Person.objects.create(tmdb_id=2, name="Ghost")
         low = Show.objects.create(
             tmdb_id=3, name="Low", number_of_episodes=10,
@@ -240,7 +240,7 @@ class SlugTests(TestCase):
 
 class SharedConnectionsTests(TestCase):
     """The show-detail page's "why": the shared people, named and ordered by
-    the same episode-share that ranked them (QUE-2 wireframe)."""
+    the same episode-share that ranked them (issue #2 wireframe)."""
 
     @classmethod
     def setUpTestData(cls):
@@ -338,7 +338,7 @@ class SharedConnectionsTests(TestCase):
 class CalloutProseTests(TestCase):
     """The 7a callout: one flowing sentence per recommendation, with a
     data-driven lead, honest source-side episode context, roles in prose, and
-    the long tail collapsed into a count (QUE-2 wireframe)."""
+    the long tail collapsed into a count (issue #2 wireframe)."""
 
     def setUp(self):
         # A short source and candidate so 'every episode' is easy to trigger.
