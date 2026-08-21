@@ -111,7 +111,13 @@ class Show(models.Model):
     objects = ShowQuerySet.as_manager()
 
     class Meta:
-        ordering = ["-popularity"]
+        # Alphabetical, deliberately. The default used to be ["-popularity"],
+        # which meant any queryset that forgot an explicit order_by silently
+        # became a popularity chart, the one thing this recommender exists to
+        # avoid (ADR-05). It failed quietly and in the wrong direction. Name is
+        # deterministic and carries no signal; every row that wants an order
+        # states it (see views.index and shows/personalization.py).
+        ordering = ["name"]
 
     def __str__(self):
         return self.name
