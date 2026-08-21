@@ -10,10 +10,12 @@ production says something about the show. See SERVICE_JOBS below.
 
 The merged edge weights every shared person by episode share, so a lead who
 carried a whole run outranks a crowd of one-episode guests. See
-similar_by_people and QUE-9 for the four decisions behind it.
+similar_by_people and docs/adr/04-episode-weighted-people-recommender.md
+for the four decisions behind it.
 
-Later layers stack genre and learned weights on top of these edges.
-See QUE-5 for the full design.
+Later layers stack genre and learned weights on top of these edges. Layer 2
+re-ranks this list per user rather than scoring shows a second time; see
+docs/adr/08-layer2-personalized-reranking.md.
 """
 
 from collections import namedtuple
@@ -123,7 +125,7 @@ class RankedShows(list):
 def similar_by_people(show, limit=12):
     """Return shows ranked by episode-weighted shared people, cast and crew merged.
 
-    The rule, decided on QUE-9 (ADR-04):
+    The rule, decided in ADR-04 (docs/adr/04-episode-weighted-people-recommender.md):
 
         score(A, B) = sum over shared people of
             min(episode_count on A / A.number_of_episodes,
@@ -156,7 +158,8 @@ def similar_by_people(show, limit=12):
     When every candidate scores 0.0 the weighted order carries no signal.
     That happens when the source show has no episodes recorded yet (TMDb
     "Planned" and "In Production" shows legitimately carry 0) or when every
-    shared edge is a null-count series-level credit. Decided on QUE-11 (ADR-05)
+    shared edge is a null-count series-level credit. Decided in ADR-05
+    (docs/adr/05-no-signal-fallback-ladder.md)
     and revised the same day (2026-08-07), the order falls down a ladder, and
     only the order, the candidate set never changes:
 
@@ -418,7 +421,7 @@ def shared_connections(source, source_index, candidate, candidate_index):
 def name_connections(connections, max_named=5):
     """Choose the few people to name, and count the rest.
 
-    The rule (QUE-2, refined 2026-08-14 from "name by prominence" to "name by
+    The rule (issue #2, refined 2026-08-14 from "name by prominence" to "name by
     score"): name the highest-scoring shared people and order them by that
     score, cast and crew as one merged pool. The score is the same episode-share
     contribution that ranked the show, so the single name on a thin row is the
@@ -429,7 +432,7 @@ def name_connections(connections, max_named=5):
 
     Only recognizable cast (billed above RECOGNIZABLE_BILLING) and marquee crew
     are eligible to be named. The long tail of bit players and technical crew
-    still collapses into a number; that is a separate decision (QUE-2: "collapse
+    still collapses into a number; that is a separate decision (issue #2: "collapse
     the long tail of bit players and technical crew into a number") that
     name-by-score does not touch. Merging is within this eligible pool: it drops
     the old cast-first reservation, not the collapse of the tail. When a
@@ -573,7 +576,7 @@ def _crew_clause(c):
 def compose_callout(source, candidate, connections, named, others):
     """Turn a candidate's shared people into one flowing prose sentence.
 
-    The 7a treatment (QUE-2): lead with the recognizable actor named by their
+    The 7a treatment (issue #2): lead with the recognizable actor named by their
     character and episode count, gather any other named actors, then name the
     marquee crew by what they did on both shows, and collapse the long tail into
     a number. No editorial header: the sentence opens straight on the connection
