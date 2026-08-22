@@ -76,10 +76,12 @@ def index(request):
     # claims a show first. Deliberate, do not "fix" it to match render order
     # (ADR-09). A show only ever falls down this chain, never up.
     pick_ids = {s.pk for s in picks}
-    # Side Quests needs no ratings, so it renders for anonymous visitors too
-    # (ADR-09): the cold-start walk is the catalog's strongest cross-genre
-    # edges, and it becomes seeded by the user's own high ratings once they
-    # exist. Called outside the is_authenticated block on purpose.
+    # Side Quests is gated on the user's own ratings (ADR-09, amended): it is
+    # surprise measured against demonstrated taste, so there is no expectation
+    # to violate until a user has three shows rated highly, and no global row
+    # to show in the meantime. It returns an empty, locked list for everyone
+    # below that line. Called outside the is_authenticated block only because
+    # it handles the anonymous case itself, in one place.
     quests = side_quests(request.user, exclude_ids=pick_ids)
     quest_ids = {s.pk for s in quests}
     recently_added = (
