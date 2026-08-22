@@ -11,7 +11,7 @@ from django.views.decorators.http import require_POST
 
 from .forms import RegistrationForm
 from .models import Genre, Rating, Show
-from .personalization import rerank, side_quests, top_picks
+from .personalization import rated_shows, rerank, side_quests, top_picks
 from .recommenders import (
     compose_callout,
     name_connections,
@@ -186,6 +186,38 @@ def detail(request, slug):
             "star_steps": star_steps(user_rating),
             "average_rating": show.average_rating,
             "rating_count": show.ratings.count(),
+        },
+    )
+
+
+@login_required
+def my_ratings(request):
+    """Everything this user has told TVLens, in one place (#11).
+
+    The rating loop had no mirror. A user could rate a show and then had no way
+    to see what they had said, change their mind about it, or understand why
+    Top Picks looks the way it does. Every rating appears here, including the
+    low ones Top Picks filters out, because this page is the user's record
+    rather than a recommendation.
+
+    Most recent first, meaning most recently *touched*: re-rating a show moves
+    it back to the top, which is the honest reading of "what have I been saying
+    lately". The sort is explicit rather than inherited. Rating.Meta already
+    orders by -updated_at, but rated_shows() hands back Show objects, and
+    Show's own Meta default is -popularity, which ADR-05 forbids ranking by.
+    Name breaks ties so two ratings saved in the same instant stay stable.
+    """
+    shows = rated_shows(request.user)
+    shows.sort(key=lambda s: (-s.rated_at.timestamp(), s.name))
+    return render(
+        request,
+        "shows/my_ratings.html",
+        {
+            "shows": shows,
+            "rating_count": len(shows),
+            "average_score": (
+                sum(s.user_score for s in shows) / len(shows) if shows else None
+            ),
         },
     )
 

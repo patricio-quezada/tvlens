@@ -26,6 +26,8 @@ from .models import (
     WatchHistory,
 )
 from .personalization import (
+    TOP_PICK_FLOOR,
+    rated_shows,
     SIDE_QUEST_CENTRALITY_EXPONENT,
     SIDE_QUEST_HOP_DECAY,
     SIDE_QUEST_SEED_FLOOR,
@@ -1663,3 +1665,118 @@ class StarScaleTests(TestCase):
         self.assertIn("★ 3.5", body)
         self.assertNotIn("★ 7.0", body)
         self.assertNotIn('class="poster-rating yours"', body)
+
+class MyRatingsTests(TestCase):
+    """The user's own record of what they have said (#11).
+
+    Top Picks answers "what should this user watch". This page answers "what
+    have I told it", which is a different question and needs the ratings Top
+    Picks throws away: the low ones. These freeze that difference, the ordering,
+    and the fact that one user never sees another's ratings.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user("viewer", password="pw-viewer-11")
+        cls.other = User.objects.create_user("stranger", password="pw-strange-11")
+        cls.loved = Show.objects.create(
+            tmdb_id=1, name="Loved Show", number_of_episodes=10,
+            vote_average=6.0, vote_count=500,
+        )
+        cls.hated = Show.objects.create(
+            tmdb_id=2, name="Hated Show", number_of_episodes=10,
+            vote_average=9.0, vote_count=500,
+        )
+        cls.theirs = Show.objects.create(
+            tmdb_id=3, name="Someone Elses Show", number_of_episodes=10,
+            vote_average=8.0, vote_count=500,
+        )
+
+    def _url(self):
+        return reverse("shows:my_ratings")
+
+    def test_the_page_requires_a_login(self):
+        resp = self.client.get(self._url())
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn("/accounts/login/", resp["Location"])
+
+    def test_every_rating_appears_including_the_low_ones(self):
+        # The difference from Top Picks, which floors at TOP_PICK_FLOOR. A page
+        # that hid a user's own 1.5 would not be their record of anything.
+        Rating.objects.create(user=self.user, show=self.loved, score=5.0)
+        Rating.objects.create(user=self.user, show=self.hated, score=1.5)
+        self.assertLess(1.5, TOP_PICK_FLOOR)
+        self.client.force_login(self.user)
+        body = self.client.get(self._url()).content.decode()
+        self.assertIn("Loved Show", body)
+        self.assertIn("Hated Show", body)
+        self.assertNotIn("Someone Elses Show", body)
+
+    def test_another_users_ratings_are_never_shown(self):
+        Rating.objects.create(user=self.other, show=self.theirs, score=5.0)
+        self.client.force_login(self.user)
+        body = self.client.get(self._url()).content.decode()
+        self.assertNotIn("Someone Elses Show", body)
+
+    def test_most_recently_rated_comes_first(self):
+        Rating.objects.create(user=self.user, show=self.loved, score=4.0)
+        Rating.objects.create(user=self.user, show=self.hated, score=2.0)
+        self.client.force_login(self.user)
+        names = [s.name for s in self.client.get(self._url()).context["shows"]]
+        self.assertEqual(names, ["Hated Show", "Loved Show"])
+
+    def test_re_rating_a_show_moves_it_back_to_the_top(self):
+        # "Most recent" means most recently touched. Changing your mind about a
+        # show is the most recent thing you have said.
+        Rating.objects.create(user=self.user, show=self.loved, score=4.0)
+        Rating.objects.create(user=self.user, show=self.hated, score=2.0)
+        self.client.force_login(self.user)
+        self.client.post(
+            reverse("shows:rate", args=[self.loved.slug]), {"score": "4.5"}
+        )
+        names = [s.name for s in self.client.get(self._url()).context["shows"]]
+        self.assertEqual(names, ["Loved Show", "Hated Show"])
+
+    def test_each_row_carries_the_users_score_and_its_lift(self):
+        # Nobody else has rated these, so the baseline is TMDb / 2 for both.
+        Rating.objects.create(user=self.user, show=self.loved, score=5.0)
+        Rating.objects.create(user=self.user, show=self.hated, score=1.5)
+        self.client.force_login(self.user)
+        by_name = {s.name: s for s in self.client.get(self._url()).context["shows"]}
+        self.assertAlmostEqual(by_name["Loved Show"].user_score, 5.0)
+        self.assertAlmostEqual(by_name["Loved Show"].baseline, 3.0)
+        self.assertAlmostEqual(by_name["Loved Show"].lift, 2.0)
+        # Rated well below the crowd: lift is negative, and the page says so.
+        self.assertAlmostEqual(by_name["Hated Show"].baseline, 4.5)
+        self.assertAlmostEqual(by_name["Hated Show"].lift, -3.0)
+
+    def test_the_summary_counts_and_averages_the_users_own_scores(self):
+        Rating.objects.create(user=self.user, show=self.loved, score=5.0)
+        Rating.objects.create(user=self.user, show=self.hated, score=2.0)
+        self.client.force_login(self.user)
+        ctx = self.client.get(self._url()).context
+        self.assertEqual(ctx["rating_count"], 2)
+        self.assertAlmostEqual(ctx["average_score"], 3.5)
+
+    def test_a_user_who_has_rated_nothing_gets_an_empty_state(self):
+        self.client.force_login(self.user)
+        resp = self.client.get(self._url())
+        self.assertEqual(list(resp.context["shows"]), [])
+        self.assertIsNone(resp.context["average_score"])
+        self.assertContains(resp, "Nothing rated yet")
+
+    def test_rated_shows_keeps_every_rating_and_top_picks_floors_them(self):
+        # The one function both pages share, and the only thing they disagree
+        # about: which ratings qualify.
+        Rating.objects.create(user=self.user, show=self.loved, score=5.0)
+        Rating.objects.create(user=self.user, show=self.hated, score=1.5)
+        self.assertEqual(len(rated_shows(self.user)), 2)
+        self.assertEqual(len(rated_shows(self.user, min_score=TOP_PICK_FLOOR)), 1)
+
+    def test_the_nav_offers_the_page_only_to_a_signed_in_user(self):
+        anon = self.client.get(reverse("shows:index")).content.decode()
+        self.assertNotIn("My Ratings", anon)
+        self.client.force_login(self.user)
+        signed_in = self.client.get(reverse("shows:index")).content.decode()
+        self.assertIn("My Ratings", signed_in)
+

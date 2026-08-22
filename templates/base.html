@@ -270,6 +270,7 @@
     <nav>
         <a href="{% url 'shows:index' %}" class="brand">TVLens</a>
         {% if user.is_authenticated %}
+            <a href="{% url 'shows:my_ratings' %}">My Ratings</a>
             <span class="user">{{ user.username }}</span>
             <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit">Logout</button></form>
         {% else %}
