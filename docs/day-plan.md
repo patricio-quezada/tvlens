@@ -11,7 +11,7 @@ same next `queued` row. Reorder rows freely — the job always works the topmost
 |-------|-------|--------|------|
 | 1  | #6  | done — shipped Day 18 | Layer 2 re-ranking + genre-filter page |
 | 2  | #15 | done — shipped Day 18 | Top Picks (lift over the global baseline) + one-show-one-row dedupe |
-| 3  | #10 | queued | Side Quests on by default |
+| 3  | #10 | done — shipped Day 19 | Side Quests: surprise against demonstrated taste |
 | 4  | #7  | queued | Personalized context box |
 | 5  | #4  | queued | Callout voice / "why recommended" |
 | 6  | #9  | queued | Genre page → catalog grid + home reset  *(design-heavy: propose)* |
@@ -23,19 +23,23 @@ same next `queued` row. Reorder rows freely — the job always works the topmost
 | 12 | #14 | queued | Trailers / YouTube link |
 | 13 | #8  | queued | Search — multi-day, its own scope |
 
-## How the prep job works each morning
+## How the queue works
 
-1. Read this file, take the **topmost `queued`** row.
-2. If the row is marked *design-heavy*, produce a **scoped proposal + questions** on the
-   issue — do NOT guess at taste and build it.
-3. Otherwise draft the implementation on a branch named `prep/<slug of the issue title>`
-   (describe the work, not the number) in an isolated worktree. Never touch master. Never push.
-4. Post a brief as a comment on the issue: what it built, how to run it locally, and any
-   decisions it needs.
-5. Mark the row `in-review` here so the next run moves on.
+1. Take the **topmost `queued`** row.
+2. **If the design is not recorded anywhere, propose instead of building.** Write a
+   scoped proposal with the numbers on the issue and stop. This is the rule, not the
+   *design-heavy* tag below: #10 carried no tag and still needed a proposal, because
+   "cross-genre neighborhood walk" appeared exactly once in the repo, in a TODO, and
+   the reading everyone assumed returned nothing for 63 of 100 shows. A phrase that
+   sounds decided is not a decision. Check what it produces before building it.
+3. Otherwise build it on a branch. Never master, never push.
+4. Mark the row `in-review` so the next pass moves on.
 
-Patricio reviews, tests against the local demo, and ships (merge + push) himself. Shipping
-and the daily build-in-public post stay his.
+There is no scheduled job. The 0900 Windows warm-start that used to pre-stage a
+worktree was retired on 2026-08-21; the reading it front-loaded now happens on
+demand. Patricio reviews, tests against the local demo, and ships (merge and push)
+himself. Shipping and the daily build-in-public post stay his.
 
 ## Design-heavy issues (propose, never guess)
-#9, #13, #15, #16 carry layout/taste calls. On these the job writes a proposal, not a build.
+#9, #13, #16 carry layout/taste calls, so they get a proposal rather than a build.
+This list is a prediction, not the trigger. Rule 2 above is the trigger.
