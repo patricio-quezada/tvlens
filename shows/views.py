@@ -35,19 +35,24 @@ from .recommenders import (
 # so equality checks against this set never suffer float drift.
 VALID_SCORES = [n / 2 for n in range(1, 11)]
 
-# How many recommendations the show page offers. ADR-07 stores 12 edges per
-# show and the page used to render all of them, each with its own prose
-# callout, which is a very long page and, in Patricio's demo note, "too many
-# now (paradox of choice)".
+# How many recommendations the show page offers, and how that grows. ADR-07
+# stores 12 edges per show and the page used to render all of them, each with
+# its own prose callout, which is a very long page and, in Patricio's demo
+# note, "too many now (paradox of choice)".
 #
-# The value is drawn from 3, 5, 7 and 9, at Patricio's request. Five: three is
-# thin for a row whose whole purpose is discovery, seven is close enough to the
-# old uncapped behaviour to still read as a list to work through, and nine is
-# more than the six this replaced, which would undo the demo note that asked
-# for fewer. The tail of a stored list is the weakest evidence anyway, so
-# cutting from the back costs the least. One constant, so the count stays cheap
-# to argue about (#16, item 6).
-DETAIL_RECOMMENDATION_LIMIT = 5
+# The rungs are 3, 5, 7, 9: Patricio's numbers, from the Scottish Rite. Three
+# is what a reader is offered first, because the job of this section is one
+# good next thing to watch rather than a list to work through. Each step up is
+# asked for explicitly.
+#
+# The ladder ends at 12, which is not one of those numbers. It is the number of
+# edges ADR-07 stores per show, and ending there means a reader who has clicked
+# through every rung is never quietly denied the last three. Stopping at nine
+# would leave a tail with no route to it, which is the hole capping the page
+# opened in the first place.
+RECOMMENDATION_STEPS = (3, 5, 7, 9, 12)
+DETAIL_RECOMMENDATION_LIMIT = RECOMMENDATION_STEPS[0]
+RECOMMENDATION_MAX = RECOMMENDATION_STEPS[-1]
 
 
 def star_steps(user_rating):
@@ -209,14 +214,24 @@ def detail(request, slug):
             .first()
         )
 
-    # Capping the list (#16, item 6) strands the rest of a stored ranking
-    # unless the page can be asked for it, and nothing else in the product
-    # links to the full list. ?all=1 is a stateless request for more of this
-    # same page: nothing is stored, and leaving the URL leaves the state. That
-    # distinction is the whole of #9, where a preference wearing the costume of
-    # persistent state was the bug.
-    show_all = request.GET.get("all") == "1"
-    shown = list(ranked) if show_all else list(ranked)[:DETAIL_RECOMMENDATION_LIMIT]
+    # How far up the ladder this request is. ?show=N is a stateless request
+    # for more of this same page: nothing is stored, and leaving the URL leaves
+    # the expanded view behind. That distinction is the whole of #9, where a
+    # preference wearing the costume of persistent state was the bug. The value
+    # is off the URL, so it is checked against the ladder rather than trusted;
+    # anything else falls back to the opening step.
+    try:
+        step = int(request.GET.get("show", ""))
+    except (TypeError, ValueError):
+        step = DETAIL_RECOMMENDATION_LIMIT
+    if step not in RECOMMENDATION_STEPS:
+        step = DETAIL_RECOMMENDATION_LIMIT
+
+    available = min(len(ranked), RECOMMENDATION_MAX)
+    shown = list(ranked)[:step]
+    next_step = None
+    if step < available:
+        next_step = next(n for n in RECOMMENDATION_STEPS if n > step)
 
     source_index = role_index(show)
     recommendations = []
@@ -234,8 +249,9 @@ def detail(request, slug):
         {
             "show": show,
             "recommendations": recommendations,
-            "total_recommendations": len(ranked),
-            "showing_all": show_all,
+            "recommendation_step": step,
+            "next_recommendation_step": next_step,
+            "recommendations_available": available,
             "mode": ranked.mode,
             "personalized": ranked.personalized,
             "user_rating": user_rating,
