@@ -31,10 +31,15 @@ VALID_SCORES = [n / 2 for n in range(1, 11)]
 # How many recommendations the show page offers. ADR-07 stores 12 edges per
 # show and the page used to render all of them, each with its own prose
 # callout, which is a very long page and, in Patricio's demo note, "too many
-# now (paradox of choice)". Six is enough to feel like a choice without being a
-# list to work through, and the tail of a stored list is the weakest evidence
-# anyway. One constant so the count stays cheap to argue about (#16, item 6).
-DETAIL_RECOMMENDATION_LIMIT = 6
+# now (paradox of choice)".
+#
+# The value is drawn from 3, 5 or 7 at Patricio's request. Five is the middle:
+# three is thin for a row whose whole purpose is discovery, and seven is close
+# enough to the old behaviour to still read as a list to work through. The tail
+# of a stored list is the weakest evidence anyway, so cutting from the back
+# costs the least. One constant, so the count stays cheap to argue about
+# (#16, item 6).
+DETAIL_RECOMMENDATION_LIMIT = 5
 
 
 def star_steps(user_rating):
