@@ -280,6 +280,67 @@ TOP_PICK_FLOOR = 3.5
 MIN_OTHER_RATERS = 3
 
 
+def rated_shows(user, min_score=None):
+    """Every show this user has rated, measured against what everyone else thinks.
+
+    The shared body behind Top Picks (#15) and the My Ratings page (#11). Both
+    ask the same question -- how does this user's opinion of a show compare to
+    the crowd's -- and differ only in which ratings qualify and how the answer
+    is ordered. The baseline rule therefore lives here once, so the two pages
+    can never disagree about what a show's benchmark is.
+
+    The baseline per show is the TVLens all-user average EXCLUDING this user,
+    but only once at least MIN_OTHER_RATERS other people have rated it; thinner
+    than that, it falls back to TMDb vote_average / 2 (TMDb rates on 0-10,
+    TVLens on 0.5-5). With a single user in the database every show takes the
+    TMDb fallback, which is what makes the demo meaningful today: lift reads as
+    "how much more I liked this than the world did".
+
+    `min_score` filters to ratings at or above a floor; None keeps every rating,
+    including the low ones, which My Ratings needs and Top Picks must not have.
+
+    Returns Show objects annotated with `.user_score`, `.baseline`, `.lift` and
+    `.rated_at` (the rating's updated_at: when the user last said something
+    about this show, not when they first did). No meaningful order -- every
+    caller sorts, explicitly, because Show's Meta default is -popularity and
+    ADR-05 forbids ranking by it.
+    """
+    if user is None or not user.is_authenticated:
+        return []
+
+    ratings = Rating.objects.filter(user=user)
+    if min_score is not None:
+        ratings = ratings.filter(score__gte=min_score)
+    rated = list(ratings.select_related("show").prefetch_related("show__genres"))
+    if not rated:
+        return []
+
+    others = {
+        row["show_id"]: row
+        for row in (
+            Rating.objects.filter(show_id__in=[r.show_id for r in rated])
+            .exclude(user=user)
+            .values("show_id")
+            .annotate(avg=Avg("score"), n=Count("id"))
+        )
+    }
+
+    shows = []
+    for r in rated:
+        show = r.show
+        other = others.get(r.show_id)
+        if other and other["n"] >= MIN_OTHER_RATERS:
+            baseline = other["avg"]
+        else:
+            baseline = show.vote_average / 2
+        show.user_score = r.score
+        show.baseline = baseline
+        show.lift = r.score - baseline
+        show.rated_at = r.updated_at
+        shows.append(show)
+    return shows
+
+
 def top_picks(user, limit=12):
     """The user's rated shows, ranked by lift over a global baseline (#15).
 
@@ -303,40 +364,7 @@ def top_picks(user, limit=12):
     `.baseline`, and `.lift` so the ranking can always explain itself.
     Anonymous users get an empty list (the template keeps its empty state).
     """
-    if user is None or not user.is_authenticated:
-        return []
-
-    rated = list(
-        Rating.objects.filter(user=user, score__gte=TOP_PICK_FLOOR)
-        .select_related("show")
-        .prefetch_related("show__genres")
-    )
-    if not rated:
-        return []
-
-    others = {
-        row["show_id"]: row
-        for row in (
-            Rating.objects.filter(show_id__in=[r.show_id for r in rated])
-            .exclude(user=user)
-            .values("show_id")
-            .annotate(avg=Avg("score"), n=Count("id"))
-        )
-    }
-
-    picks = []
-    for r in rated:
-        show = r.show
-        other = others.get(r.show_id)
-        if other and other["n"] >= MIN_OTHER_RATERS:
-            baseline = other["avg"]
-        else:
-            baseline = show.vote_average / 2
-        show.user_score = r.score
-        show.baseline = baseline
-        show.lift = r.score - baseline
-        picks.append(show)
-
+    picks = rated_shows(user, min_score=TOP_PICK_FLOOR)
     picks.sort(key=lambda s: (-s.lift, -s.user_score, s.name))
     return picks[:limit]
 

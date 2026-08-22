@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}My Ratings — TVLens{% endblock %}
+
+{% comment %}Piping only. The markup here is deliberately plain: the point of this
+   pass is that the data is correct, reachable and tested. Design comes after.{% endcomment %}
+
+{% block content %}
+<div class="page-header">
+    <h1>My Ratings</h1>
+    <p>
+        {% if rating_count %}
+            {{ rating_count }} show{{ rating_count|pluralize }} rated, averaging ★ {{ average_score|floatformat:1 }}.
+        {% else %}
+            Nothing rated yet.
+        {% endif %}
+    </p>
+</div>
+
+{% if shows %}
+<ul class="rating-list">
+    {% for show in shows %}
+    <li>
+        <a class="rating-name" href="{{ show.get_absolute_url }}">{{ show.name }}</a>
+        <span class="rating-mine">★ {{ show.user_score|floatformat:1 }}</span>
+        <span class="rating-crowd">crowd ★ {{ show.baseline|floatformat:1 }}</span>
+        <span class="rating-lift{% if show.lift > 0 %} above{% elif show.lift < 0 %} below{% endif %}">
+            {% if show.lift > 0 %}+{% endif %}{{ show.lift|floatformat:1 }}
+        </span>
+    </li>
+    {% endfor %}
+</ul>
+{% else %}
+<p class="empty">
+    Nothing here yet. Rate a show and it will appear.
+    <a href="{% url 'shows:index' %}">Browse the catalog</a>.
+</p>
+{% endif %}
+{% endblock %}
