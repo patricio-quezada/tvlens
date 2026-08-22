@@ -27,7 +27,7 @@
 {% if side_quests %}
     {% include "shows/_row.html" with title="Side Quests" shows=side_quests favorite_genre_ids=favorite_genre_ids %}
 {% elif side_quests.locked %}
-    {% include "shows/_row_empty.html" with title="Side Quests" message="Side quests locked. Rate three shows to unlock." cta_label=None cta_url=None %}
+    {% include "shows/_row_empty.html" with title="Side Quests" message="Side quests locked. Rate three shows 4 stars or higher to unlock." have=side_quests.seeds_have needed=side_quests.seeds_needed cta_label=None cta_url=None %}
 {% endif %}
 
 {% if genres %}

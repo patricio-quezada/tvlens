@@ -6,6 +6,12 @@
 > withdrawn. Section "Amendment" says what changed and why; the Decision below is the
 > current rule, not the original one. The file name is kept so existing references still
 > resolve.
+>
+> **Amended again 2026-08-22.** The mechanism survives a second time; the *ranking* does not.
+> The one-hop walk made the candidate pool identical to the seeds' own recommendation lists,
+> and multiplying raw edge scores by novelty let the strongest edge in that pool win on
+> strength alone. Section "Second amendment" says what changed and why. The Decision below is
+> the current rule.
 
 ## Context
 The home page has three rows. Top Picks is the signed-in user's own rated shows ranked by
@@ -59,9 +65,92 @@ an empty stub with no definition; once the definition is "surprising relative to
 have demonstrated you like", loading it for a user who has demonstrated nothing is not a
 feature, it is a contradiction. The row is now gated, and the page says so in as many words.
 
+## Second amendment: the row was the recommendation row wearing a different title
+The first amendment fixed *who* the row is for. It left *how it is ordered* untouched, and
+with the row on the page that turned out to be the larger problem. Patricio, looking at his
+own account:
+
+> side quests seem to be showing the top recommendations of the three shows I have rated. Is
+> that what we want? I thought we wanted side quests to be more like "edge cases" but bound by
+> our recommendations. Think of it as a second-degree connection to the fourth-degree of Kevin
+> Bacon.
+
+He was right, and it was structural rather than a tuning miss. Two faults.
+
+**The candidate pool was the recommendation pool.** Walking ranks 0 through 5 out of the
+seeds *is* what a "more like this" row shows. Surprise was then applied only as a re-sort over
+that pool, so the row could re-order those shows but could never leave them. Measured on the
+development database with three seeds: **11 of 11 picks came from the first-degree pool.** The
+overlap was 100 percent by construction, not by coincidence. Graph distance was not one of the
+row's axes; it was a constant, pinned at its minimum.
+
+**Strength drowned novelty.** The order was `score x novelty`, and the docstring claimed
+"both halves have to be there". They did not have comparable range. Across one real candidate
+set, Layer 1 scores ran 0.42 to 5.76, about 14x, while novelty is a share and spans at most
+5x in practice. The bigger term decided the row. The lead pick, Person of Interest, had a
+novelty of 0.25 and sat first purely on a 5.76 edge: the top "surprise" was the top
+recommendation.
+
+### What changed
+**Strength is log-compressed.** `log1p(score)` puts strength on novelty's order of magnitude,
+which is the only condition under which multiplying them means anything. This is the smallest
+of the three changes and it fixes the symptom that was actually visible.
+
+**The walk goes a second hop, at a discount.** A two-hop path is scored at its weakest link
+and multiplied by `SIDE_QUEST_HOP_DECAY`, so distance is earned rather than assumed. Shows the
+user has already watched stay in the walk as *bridges* even though they can never be picks: a
+show you have seen is a real shared-people connection, and treating it as a dead end throws
+away the graph's most reliable edges.
+
+**A show that many seeds reach is pushed down.** Divided by `(seeds that reached it) **
+SIDE_QUEST_CENTRALITY_EXPONENT`. This is the term that most directly answers "edge cases bound
+by our recommendations": a candidate every one of your favorites points at is at the *centre*
+of your taste, and centrality is measurable where peripherality was previously only implied.
+
+### What it did
+Same user, same three seeds, before and after:
+
+| | Before | After |
+|---|---|---|
+| picks from the first-degree recommendation pool | 11 of 11 | 9 of 12 |
+| rank of Person of Interest (edge 5.76, novelty 0.25) | 1st | 5th |
+
+Three of twelve picks are now shows a recommendation row would never have surfaced, and the
+strongest edge in the pool no longer leads simply because it is the strongest edge.
+
+### What this amendment deliberately does not settle
+Every constant here was fitted against a 100-show catalog in which two hops already reach 43
+percent of everything. `SIDE_QUEST_HOP_DECAY = 0.5` is a round number chosen where hop-2
+candidates were plentiful, and whether it is too harsh or too generous is not answerable from
+this data. Deferred to
+[#20](https://github.com/patricio-quezada/tvlens/issues/20), together with a limitation the
+same measurement exposed: novelty is binary, so a user with no Crime rating sees *every*
+Crime-tagged show score as fully novel, and a seed whose neighbourhood is one cluster can fill
+most of the row with that cluster. Genre affinity has more resolution than has-genre /
+has-not, and Layer 2 already keeps a signed number per genre.
+
+### Alternatives considered for this amendment
+**Normalize strength against the strongest edge in the user's own pool.** Scale-free and
+tempting, but it makes a pick's score depend on which *other* shows happened to be in the pool,
+so the same show scores differently for two users with the same edge to it. `log1p` is a fixed
+function of the edge and nothing else.
+
+**Divide by the seed count outright rather than its square root.** A plain reciprocal costs a
+show reached by three seeds two thirds of its score, which disqualifies rather than
+discounts. Being reached twice should cost something; it should not be fatal.
+
+**Go three or more hops.** Untested and probably not useful at this catalog size, where two
+hops already reach 43 percent of the shows. `SIDE_QUEST_MAX_HOPS` is a named constant so this
+is a measurement away rather than a rewrite, and it belongs with #20.
+
+**Fix the ordering and leave the walk at one hop.** This would have addressed the visible
+symptom, since log compression alone moves Person of Interest off the top. It would not have
+addressed what Patricio actually identified: a row that can only ever re-order the
+recommendation list is not a different row.
+
 ## Decision
-**A side quest is a strong Layer 1 edge, out of a show this user rated highly, that lands in
-genres this user has never rated highly.** Four parts, in the order the code applies them.
+**A side quest is a strong Layer 1 connection, out of a show this user rated highly, that
+lands in genres this user has never rated highly and that few of their favorites point at.** Four parts, in the order the code applies them.
 
 **Seeds.** The shows the user rated at or above 4.0. That is the same "high" line the home
 page already uses to glow a favorite genre and that ADR-08 personalizes from, so every
@@ -75,23 +164,30 @@ to recur, and therefore the smallest history in which its *absence* means someth
 Anonymous visitors get no row and no copy: they cannot rate anything without an account, so
 the unlock instruction would be a dead end.
 
-**The walk: only the strong half of each seed's stored list**, ranks 0 through 5 of the 12
-Layer 1 keeps per show (ADR-07). A side quest has to be a *confident* connection. The weak
-tail of a list is mostly coincidence, so a strange genre found down there is noise wearing a
-surprise costume. This is the same finding that killed alternative E below, applied as a
-gate rather than as a warning.
+**The walk: the strong half of each seed's stored list, and then the strong half of the
+lists belonging to what that reached.** Ranks 0 through 5 of the 12 Layer 1 keeps per show
+(ADR-07), followed one hop further out. The rank cap holds at every hop, because a side quest
+has to be a *confident* connection and the weak tail of a list is mostly coincidence, so a
+strange genre found down there is noise wearing a surprise costume (alternative E below). But
+one hop is exactly the seed's own recommendation list, so a one-hop row can re-order that pool
+and never leave it. The second hop is what gives distance somewhere to vary. A show the user
+has already watched is never a pick and always a bridge: it is a real connection, not a dead
+end.
 
 **Surprise: the share of a candidate's genres the user has no positive history with.**
 Collect the genres of the seeds; call that the demonstrated taste. For each candidate,
 novelty is the number of its genres outside that set divided by the number of genres it has.
 A candidate with novelty 0 is not a side quest and is dropped, however strong its edge.
 
-**The order is the Layer 1 score multiplied by that novelty.** Both halves have to be
-present. A blockbuster edge into more of the same sinks on novelty; a thin edge into a
-strange genre sinks on strength. For a Crime and Drama viewer, Better Call Saul reaching The
-Boys is 1.865 x 1.00 = 1.865 and leads the row, while Better Call Saul reaching The Blacklist
-is a strong 1.138 x 0.33 = 0.379 and sits sixth, because two thirds of The Blacklist is more
-crime drama.
+**The order is strength x novelty x centrality.** Strength is `log1p` of the reaching edge's
+Layer 1 score, taken at the weakest link of the path and decayed once per extra hop. Novelty
+is the share above. Centrality divides by the square root of how many seeds reached the
+candidate. All three have to be present: a blockbuster edge into more of the same sinks on
+novelty, a thin edge into a strange genre sinks on strength, and a show every favorite points
+at sinks on centrality. The log is not cosmetic. Raw Layer 1 scores span more than an order of
+magnitude while novelty is a share bounded at 1, so a plain product let the strongest edge in
+the pool win on strength alone, which is precisely how the row came to read as a
+recommendation list.
 
 The only new number is a multiplier on Layer 1's own score. No show is scored a second time
 and no second engine runs over the catalog, which keeps this inside ADR-08's rule that Layer
@@ -112,6 +208,12 @@ order: Side Quests sits below Recently added on the page but claims its shows be
 show only ever falls down that chain.
 
 ### What the numbers say
+**These figures predate the second amendment.** They measured the one-hop walk ordered by
+`score x novelty`, and they remain here because what they establish still holds: the row is
+personal rather than global, it is not a chart, and it is honestly short at 100 shows. Row
+sizes and specific orderings will have moved. Re-running the samplers against the current rule
+belongs with [#20](https://github.com/patricio-quezada/tvlens/issues/20).
+
 There is one rating in the development database, so the row was measured against 4000
 synthetic three-seed users per sampler: **uniform**, three shows drawn at random, and
 **coherent**, three shows drawn from a single genre, which is the harder and more realistic
@@ -235,3 +337,9 @@ genre the user has never rated highly, the graph's strongest edge is refused whe
 of the same, distance can beat a stronger edge and cannot win on its own, only the strong half
 of a seed's list is walked, only the user's own favorites are walked, and an unlocked user
 with nothing new gets no section rather than the locked copy.
+
+`SideQuestsRankingTests` freezes the second amendment: a blockbuster edge no longer outranks a
+novel one while strength still separates two equally novel shows, a show two hops out can be a
+pick and loses to an identical show one hop in, a watched show is never a pick and still
+carries the walk, a show every seed reaches ranks below one that only a single seed found, and
+the surprise arithmetic is written out once against a known pick.

@@ -5,6 +5,7 @@ so a later layer that reweights this edge, or an ingest change that shifts the
 data, fails loudly here instead of silently reranking the catalog.
 """
 
+import math
 from io import StringIO
 
 from django.contrib.auth.models import AnonymousUser, User
@@ -25,6 +26,8 @@ from .models import (
     WatchHistory,
 )
 from .personalization import (
+    SIDE_QUEST_CENTRALITY_EXPONENT,
+    SIDE_QUEST_HOP_DECAY,
     SIDE_QUEST_SEED_FLOOR,
     build_profile,
     rerank,
@@ -1258,9 +1261,13 @@ class SideQuestsTests(TestCase):
     def test_the_locked_row_shows_the_exact_copy(self):
         self.client.force_login(self._user("newcomer"))
         response = self.client.get(reverse("shows:index"))
+        # The gate is not "three shows", it is three shows rated at or above
+        # the seed floor, and the copy has to say the rule the code enforces.
         self.assertContains(
-            response, "Side quests locked. Rate three shows to unlock."
+            response,
+            "Side quests locked. Rate three shows 4 stars or higher to unlock.",
         )
+        self.assertContains(response, "0 of 3 logged")
 
     def test_an_unlocked_user_with_nothing_new_gets_no_row_at_all(self):
         # This user is past the gate, but their own favorites reach only shows
@@ -1342,7 +1349,11 @@ class SideQuestsTests(TestCase):
         quest = side_quests(self._rater())[0]
         self.assertEqual(quest.quest_from, self.alpha)
         self.assertAlmostEqual(quest.quest_score, 0.8)
-        self.assertAlmostEqual(quest.quest_surprise, 0.8)
+        # quest_score stays Layer 1's own number; quest_surprise is the ordering
+        # product, and strength is log-compressed so novelty can outweigh it.
+        self.assertAlmostEqual(quest.quest_surprise, math.log1p(0.8))
+        self.assertEqual(quest.quest_hops, 1)
+        self.assertEqual(quest.quest_reach, 1)
         self.assertEqual(
             sorted(g.name for g in quest.quest_new_genres), ["SciFi", "Western"]
         )
@@ -1376,3 +1387,174 @@ class SideQuestsTests(TestCase):
         self.assertContains(response, "Side Quests")
         self.assertContains(response, "FullyNew")
         self.assertNotContains(response, "Side quests locked")
+
+
+class SideQuestsRankingTests(TestCase):
+    """What orders the row (ADR-09, amended twice).
+
+    The first amendment walked one hop and ordered by score x novelty. That made
+    the candidate pool identical to the seeds' own recommendation lists, and
+    because raw Layer 1 scores span an order of magnitude while novelty is a
+    share bounded at 1, the strongest edge in the pool won on strength alone.
+    The row was the recommendation row wearing a different title.
+
+    These freeze the three terms that fixed it: strength is log-compressed so
+    novelty can actually outweigh it, the walk goes a second hop at a discount
+    so distance is a real axis, and a show that several seeds all reach is
+    pushed down as central to the taste rather than on its edge.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        crime = Genre.objects.create(tmdb_id=1, name="Crime")
+        drama = Genre.objects.create(tmdb_id=2, name="Drama")
+        mystery = Genre.objects.create(tmdb_id=3, name="Mystery")
+        western = Genre.objects.create(tmdb_id=4, name="Western")
+        animation = Genre.objects.create(tmdb_id=5, name="Animation")
+
+        def show(tmdb_id, name, genres):
+            s = Show.objects.create(
+                tmdb_id=tmdb_id, name=name, number_of_episodes=10
+            )
+            s.genres.set(genres)
+            return s
+
+        home = [crime, drama, mystery]
+        cls.seed_a = show(1, "SeedA", home)
+        cls.seed_b = show(2, "SeedB", home)
+        cls.seed_c = show(3, "SeedC", home)
+
+        # Strength vs novelty. Blockbuster sits on the biggest edge here but is
+        # three quarters what the user already watches; Modest is a fifth of
+        # that edge and entirely new.
+        cls.blockbuster = show(4, "Blockbuster", home + [western])
+        cls.modest = show(5, "Modest", [western, animation])
+
+        # Distance. Bridge is all demonstrated genres, so it is never a quest
+        # itself, but it is a real connection and the walk goes through it.
+        cls.bridge = show(6, "Bridge", [crime, drama])
+        cls.far_new = show(7, "FarNew", [animation])
+        cls.near_new = show(8, "NearNew", [animation])
+
+        # Centrality. Identical edges and identical novelty; the only
+        # difference is how many seeds find them.
+        cls.everyone = show(9, "Everyone", [western])
+        cls.only_one = show(10, "OnlyOne", [western])
+
+        def edge(source, target, rank, score):
+            SimilarShow.objects.create(
+                source=source, target=target, rank=rank, score=score,
+                shared_people=1, mode="weighted",
+            )
+
+        edge(cls.seed_a, cls.blockbuster, 0, 5.0)
+        edge(cls.seed_a, cls.modest, 1, 0.8)
+
+        edge(cls.seed_b, cls.bridge, 0, 3.0)
+        edge(cls.bridge, cls.far_new, 0, 3.0)
+        edge(cls.seed_b, cls.near_new, 1, 3.0)
+
+        edge(cls.seed_a, cls.everyone, 2, 2.0)
+        edge(cls.seed_b, cls.everyone, 2, 2.0)
+        edge(cls.seed_c, cls.everyone, 0, 2.0)
+        edge(cls.seed_c, cls.only_one, 1, 2.0)
+
+    def _rater(self, name="rater"):
+        user = User.objects.create_user(name, password="x")
+        for seed in (self.seed_a, self.seed_b, self.seed_c):
+            Rating.objects.create(user=user, show=seed, score=5.0)
+        return user
+
+    def _order(self, quests):
+        return [s.name for s in quests]
+
+    def _rank_of(self, quests, name):
+        return self._order(quests).index(name)
+
+    # ── strength is compressed so novelty can win ───────────────────────────
+
+    def test_a_blockbuster_edge_no_longer_outranks_a_novel_one(self):
+        # Blockbuster's edge is 5.0 against Modest's 0.8, but only one of its
+        # four genres is new to this user while all of Modest's are. Multiplying
+        # the raw scores put Blockbuster first (5.0 x 0.25 = 1.25 beats
+        # 0.8 x 1.00); log1p compresses strength onto novelty's scale, so
+        # 1.79 x 0.25 = 0.45 now loses to 0.59. This is the ordering that made
+        # the row read as a recommendation list.
+        quests = side_quests(self._rater("cmp"))
+        self.assertLess(
+            self._rank_of(quests, "Modest"), self._rank_of(quests, "Blockbuster")
+        )
+
+    def test_strength_still_counts_for_something(self):
+        # Compression is not erasure: between two fully novel shows, the one on
+        # the better edge still wins. NearNew (3.0) outranks Modest (0.8), and
+        # both are 100% new.
+        quests = side_quests(self._rater("still"))
+        self.assertLess(
+            self._rank_of(quests, "NearNew"), self._rank_of(quests, "Modest")
+        )
+
+    # ── the walk goes a second hop, at a discount ───────────────────────────
+
+    def test_a_show_two_hops_out_can_be_a_quest(self):
+        # FarNew is reachable only as SeedB -> Bridge -> FarNew. Under the
+        # one-hop walk it did not exist as a candidate at all.
+        quests = side_quests(self._rater("far"))
+        self.assertIn("FarNew", self._order(quests))
+        pick = next(s for s in quests if s.name == "FarNew")
+        self.assertEqual(pick.quest_hops, 2)
+        self.assertEqual(pick.quest_from, self.seed_b)
+
+    def test_a_second_hop_competes_at_a_discount(self):
+        # NearNew and FarNew are the same genre, the same novelty, and sit on
+        # edges of the same 3.0 strength. The only difference is that FarNew is
+        # a hop further out, so distance has to be earned rather than assumed.
+        quests = side_quests(self._rater("decay"))
+        self.assertLess(
+            self._rank_of(quests, "NearNew"), self._rank_of(quests, "FarNew")
+        )
+
+    def test_a_watched_show_is_never_a_quest_but_still_carries_the_walk(self):
+        # Bridge is all demonstrated genres AND is marked watched, so it can
+        # never appear. It still has to conduct the walk to FarNew: a show you
+        # have already seen is a real connection, not a dead end.
+        user = self._rater("bridged")
+        Rating.objects.create(user=user, show=self.bridge, score=2.0)
+        quests = side_quests(user)
+        self.assertNotIn("Bridge", self._order(quests))
+        self.assertIn("FarNew", self._order(quests))
+
+    # ── the centre of a taste is not its edge ───────────────────────────────
+
+    def test_a_show_every_seed_reaches_is_pushed_down(self):
+        # Everyone and OnlyOne are the same genre, the same novelty, and sit on
+        # edges of the same 2.0 strength. Everyone is reached by all three
+        # seeds, which makes it central to this taste rather than peripheral to
+        # it, so it ranks below the show only one seed found.
+        quests = side_quests(self._rater("central"))
+        self.assertEqual(
+            next(s for s in quests if s.name == "Everyone").quest_reach, 3
+        )
+        self.assertEqual(
+            next(s for s in quests if s.name == "OnlyOne").quest_reach, 1
+        )
+        self.assertLess(
+            self._rank_of(quests, "OnlyOne"), self._rank_of(quests, "Everyone")
+        )
+
+    # ── the arithmetic, stated once ─────────────────────────────────────────
+
+    def test_surprise_is_strength_times_novelty_times_centrality(self):
+        # One pick, spelled out, so the formula is readable in one place.
+        quests = side_quests(self._rater("math"))
+        pick = next(s for s in quests if s.name == "Everyone")
+        expected = math.log1p(2.0) * 1.0 * (3 ** -SIDE_QUEST_CENTRALITY_EXPONENT)
+        self.assertAlmostEqual(pick.quest_surprise, expected)
+        self.assertAlmostEqual(pick.quest_score, 2.0)
+
+    def test_a_two_hop_path_is_only_as_strong_as_its_weakest_link(self):
+        quests = side_quests(self._rater("chain"))
+        pick = next(s for s in quests if s.name == "FarNew")
+        expected = min(math.log1p(3.0), math.log1p(3.0)) * SIDE_QUEST_HOP_DECAY
+        self.assertAlmostEqual(pick.quest_surprise, expected)
+

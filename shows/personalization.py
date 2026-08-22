@@ -29,10 +29,12 @@ row ever ranks by popularity, no row ever shows a user what other users are
 watching, and neither row exists at all for a user who has rated nothing.
 """
 
+import math
+
 from django.db.models import Avg, Count
 
 from .models import Genre, Rating, Show, ShowTag, SimilarShow
-from .recommenders import RankedShows
+from .recommenders import SQLITE_MAX_VARS_SAFE, RankedShows
 
 # A rating at NEUTRAL_SCORE says nothing about taste; above it is a positive
 # signal, below it a negative one. 3.0 is the conventional middle of a 5-star
@@ -361,6 +363,26 @@ SIDE_QUEST_MIN_SEEDS = 3
 # than surprise.
 SIDE_QUEST_MAX_RANK = 5
 
+# How far out the walk goes. One hop is the seeds' own recommendation lists, so
+# a one-hop row can only ever re-order the pool a "more like this" row would
+# already show. The second hop is what makes distance a real axis instead of a
+# constant pinned at its minimum (ADR-09, amended twice).
+SIDE_QUEST_MAX_HOPS = 2
+
+# What an extra hop costs. A two-hop path is worth half a direct edge of the
+# same strength, so a further-out pick has to be genuinely well connected to
+# beat a near one rather than winning on distance alone. Tuned against a
+# 100-show catalog, which is small enough that two hops already reach 43% of it;
+# this constant is expected to need re-fitting at real catalog scale (#20).
+SIDE_QUEST_HOP_DECAY = 0.5
+
+# How hard to push down a show that many seeds reach. A candidate every seed
+# finds is at the centre of this taste, not on its edge, so its score is divided
+# by (number of seeds that found it) ** this. 0.5 halves the penalty a plain
+# reciprocal would apply: being reached twice should cost something, but it
+# should not disqualify.
+SIDE_QUEST_CENTRALITY_EXPONENT = 0.5
+
 
 class SideQuests(list):
     """The Side Quests row: shows, plus the one fact the page needs about it.
@@ -375,9 +397,14 @@ class SideQuests(list):
     so callers that expect a list keep working.
     """
 
-    def __init__(self, shows=(), locked=False):
+    def __init__(self, shows=(), locked=False, seeds_have=0):
         super().__init__(shows)
         self.locked = locked
+        # What the locked copy reports. The gate is not "three shows", it is
+        # three shows rated at or above the seed floor, and the copy has to say
+        # the rule the code actually enforces.
+        self.seeds_have = seeds_have
+        self.seeds_needed = SIDE_QUEST_MIN_SEEDS
 
 
 def _genre_ids_by_show():
@@ -393,11 +420,11 @@ def _genre_ids_by_show():
 
 
 def side_quests(user, limit=12, exclude_ids=()):
-    """The Side Quests row: strong edges into genres you have not shown you like.
+    """The Side Quests row: shows on the edge of a taste, not at its centre.
 
     A side quest is a show that is surprising *for this user*, and surprise is
     only definable against an expectation. So the row is built from the user's
-    own demonstrated taste and from nothing else (ADR-09, amended):
+    own demonstrated taste and from nothing else (ADR-09, amended twice):
 
       seeds        the shows this user rated >= SIDE_QUEST_SEED_FLOOR. Fewer
                    than SIDE_QUEST_MIN_SEEDS of them and the row is locked, not
@@ -407,28 +434,48 @@ def side_quests(user, limit=12, exclude_ids=()):
       demonstrated the genres those seeds carry. This is the expectation the row
                    is measured against.
       candidates   the strong Layer 1 edges out of the seeds (rank <=
-                   SIDE_QUEST_MAX_RANK), so every pick rests on real shared
-                   people that the graph is confident about (ADR-04, ADR-07).
-      surprise     how far a candidate lands from the demonstrated genres:
-                   the share of the candidate's own genres the user has NO
-                   positive history with. A candidate with no such genre is not
-                   a side quest at all and is dropped.
+                   SIDE_QUEST_MAX_RANK), and then the strong edges out of THOSE,
+                   up to SIDE_QUEST_MAX_HOPS. The first amendment walked one hop
+                   only, which made the candidate pool identical to the seeds'
+                   own recommendation lists: the row could re-order that pool
+                   but never leave it, so it read as "more like what you rated".
+                   A second hop is what lets a pick sit further out in the graph
+                   than a recommendation row would ever reach.
 
-    The order is the edge's Layer 1 score multiplied by that novelty share, so
-    both halves have to be there: a blockbuster edge into more of the same sinks
-    on novelty, and a thin edge into a strange genre sinks on strength. No show
-    is scored a second time, the only new number is a multiplier on Layer 1's
-    own score, which keeps this inside ADR-08's rule that Layer 2 re-ranks
+    Three terms decide the order, and this amendment exists because the first
+    version effectively had one of them:
+
+      strength   log1p of the reaching edge's Layer 1 score, decayed once per
+                 extra hop. Raw Layer 1 scores span more than an order of
+                 magnitude while novelty is a share bounded at 1, so plain
+                 multiplication let the single strongest edge in the pool win on
+                 strength alone -- the top pick was simply the top
+                 recommendation. The log compresses strength to novelty's order,
+                 which is the only reason "both halves have to be there" is true.
+      novelty    the share of the candidate's own genres this user has NO
+                 positive history with. A candidate with no such genre is not a
+                 side quest at all and is dropped.
+      centrality a show that several seeds all reach is at the CENTRE of this
+                 taste, not on its edge, so it is divided down by how many seeds
+                 found it (SIDE_QUEST_CENTRALITY_EXPONENT).
+
+    A two-hop path is only as strong as its weakest link and competes at
+    SIDE_QUEST_HOP_DECAY of a direct edge, so distance is earned rather than
+    assumed. A show the user has already watched is never a quest, but it is
+    still a real connection, so it can carry the walk further out as a bridge.
+
+    Nothing here re-scores a show: the only new numbers are multipliers on Layer
+    1's own score, which keeps this inside ADR-08's rule that Layer 2 re-ranks
     rather than re-scores.
 
     Shows the user has already watched never appear, and neither does anything
     in `exclude_ids` (the home page passes Top Picks, one show one row).
 
     Returns a SideQuests list of Show objects, each annotated with `.quest_from`
-    (the seed whose edge reached it), `.quest_score` (that edge's Layer 1
-    score), `.quest_new_genres` (the genres this user has no positive history
-    with) and `.quest_surprise` (the product the row is ordered by), so a pick
-    can always say why it is there.
+    (the seed whose path reached it), `.quest_score` (the reaching edge's Layer 1
+    score), `.quest_hops`, `.quest_reach` (how many seeds found it),
+    `.quest_new_genres` and `.quest_surprise` (the product the row is ordered
+    by), so a pick can always say why it is there.
     """
     # Anonymous visitors have no demonstrated taste, so there is nothing to
     # surprise them against. No row, and no locked copy either: the page only
@@ -442,7 +489,7 @@ def side_quests(user, limit=12, exclude_ids=()):
         .values_list("show_id", flat=True)
     )
     if len(seed_ids) < SIDE_QUEST_MIN_SEEDS:
-        return SideQuests(locked=True)
+        return SideQuests(locked=True, seeds_have=len(seed_ids))
 
     genres_by_show = _genre_ids_by_show()
     demonstrated = set()
@@ -453,13 +500,27 @@ def side_quests(user, limit=12, exclude_ids=()):
     blocked = set(exclude_ids) | set(
         Show.objects.watched_by(user).order_by("id").values_list("id", flat=True)
     )
+    seed_set = set(seed_ids)
 
-    # seed_ids is bounded by the catalog (one rating per user per show), so this
-    # stays far under the SQLite variable ceiling ADR-06 batches for.
-    # Ordering is explicit and the sort below is stable, so equal-surprise picks
-    # keep this deterministic order (Show and SimilarShow both carry a different
-    # Meta default; Show's is -popularity, which ADR-05 forbids ranking by).
-    candidates = []
+    # best[target_id] = (strength, seed_id, raw_score, hops); the strongest path
+    # found to that show. reach[target_id] = the distinct seeds that found it,
+    # which is what the centrality term divides by.
+    best = {}
+    reach = {}
+
+    def offer(target_id, strength, seed_id, raw_score, hops):
+        reach.setdefault(target_id, set()).add(seed_id)
+        current = best.get(target_id)
+        if current is None or strength > current[0]:
+            best[target_id] = (strength, seed_id, raw_score, hops)
+
+    # Hop 1: the seeds' own strong edges. Ordering is explicit because Show and
+    # SimilarShow both carry a different Meta default; Show's is -popularity,
+    # which ADR-05 forbids ranking by.
+    #
+    # A watched show is not a quest, but it is still a real shared-people
+    # connection, so it stays in `bridges` and can carry the walk further out.
+    bridges = {}
     for source_id, target_id, score in (
         SimilarShow.objects.filter(
             source_id__in=seed_ids, rank__lte=SIDE_QUEST_MAX_RANK
@@ -467,8 +528,40 @@ def side_quests(user, limit=12, exclude_ids=()):
         .order_by("-score", "target__name", "source__name")
         .values_list("source_id", "target_id", "score")
     ):
-        if target_id in blocked:
+        if target_id in seed_set:
             continue
+        strength = math.log1p(score)
+        by_seed = bridges.setdefault(target_id, {})
+        if by_seed.get(source_id, -1.0) < strength:
+            by_seed[source_id] = strength
+        if target_id not in blocked:
+            offer(target_id, strength, source_id, score, 1)
+
+    # Hop 2: the strong edges out of those bridges. seed_ids is bounded by the
+    # catalog, but a heavy rater's bridge set is not, so this batches under
+    # SQLite's variable ceiling the way ADR-06 does.
+    if SIDE_QUEST_MAX_HOPS >= 2 and bridges:
+        bridge_ids = sorted(bridges)
+        for start in range(0, len(bridge_ids), SQLITE_MAX_VARS_SAFE):
+            batch = bridge_ids[start:start + SQLITE_MAX_VARS_SAFE]
+            for bridge_id, target_id, score in (
+                SimilarShow.objects.filter(
+                    source_id__in=batch, rank__lte=SIDE_QUEST_MAX_RANK
+                )
+                .order_by("-score", "target__name", "source__name")
+                .values_list("source_id", "target_id", "score")
+            ):
+                if target_id in seed_set or target_id in blocked:
+                    continue
+                second = math.log1p(score)
+                for seed_id, first in bridges[bridge_id].items():
+                    # A chain is only as strong as its weakest link, and the
+                    # extra hop competes at a discount.
+                    strength = min(first, second) * SIDE_QUEST_HOP_DECAY
+                    offer(target_id, strength, seed_id, score, 2)
+
+    candidates = []
+    for target_id, (strength, seed_id, raw_score, hops) in best.items():
         target_genres = genres_by_show.get(target_id)
         # A show with no genres cannot be measured for distance from a taste.
         # Every show in the catalog carries genres today; an import that landed
@@ -480,22 +573,19 @@ def side_quests(user, limit=12, exclude_ids=()):
         if not new_genre_ids:
             continue
         novelty = len(new_genre_ids) / len(target_genres)
-        candidates.append((score * novelty, target_id, source_id, score, new_genre_ids))
+        found_by = len(reach[target_id])
+        centrality = found_by ** -SIDE_QUEST_CENTRALITY_EXPONENT
+        surprise = strength * novelty * centrality
+        candidates.append(
+            (surprise, target_id, seed_id, raw_score, new_genre_ids, hops, found_by)
+        )
 
-    candidates.sort(key=lambda c: -c[0])
-
-    chosen = []
-    taken = set()
-    for candidate in candidates:
-        if len(chosen) >= limit:
-            break
-        if candidate[1] in taken:
-            continue
-        taken.add(candidate[1])
-        chosen.append(candidate)
-
+    # Ties break on the show id so the row is stable for a given database
+    # regardless of the order paths happened to be discovered in.
+    candidates.sort(key=lambda c: (-c[0], c[1]))
+    chosen = candidates[:limit]
     if not chosen:
-        return SideQuests()
+        return SideQuests(seeds_have=len(seed_ids))
 
     # One fetch for the picks and the seeds they came from. Explicitly ordered:
     # Show's Meta default is -popularity, and nothing in this path may rank by
@@ -509,13 +599,15 @@ def side_quests(user, limit=12, exclude_ids=()):
     }
 
     quests = []
-    for surprise, target_id, source_id, score, new_genre_ids in chosen:
+    for surprise, target_id, source_id, score, new_genre_ids, hops, found_by in chosen:
         show = by_id[target_id]
         show.quest_from = by_id[source_id]
         show.quest_score = score
         show.quest_surprise = surprise
+        show.quest_hops = hops
+        show.quest_reach = found_by
         show.quest_new_genres = [
             g for g in show.genres.all() if g.id in new_genre_ids
         ]
         quests.append(show)
-    return SideQuests(quests)
+    return SideQuests(quests, seeds_have=len(seed_ids))
