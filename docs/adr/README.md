@@ -24,4 +24,4 @@ Copy `00-adr-template.md` to start a new one.
 - [06 - Lift the SQL variable ceiling in the recommenders](06-sql-variable-ceiling.md)
 - [07 - Materialize the Layer 1 ranking and serve reads from a table](07-materialized-recommendations.md)
 - [08 - Layer 2: personalize by re-ranking the graph per user](08-layer2-personalized-reranking.md)
-- [09 - Side Quests: the catalog's strongest cross-genre edges](09-side-quests-cross-genre-edges.md)
+- [09 - Side Quests: strong edges into genres you have not shown you like](09-side-quests-cross-genre-edges.md) *(amended 2026-08-21: the cold-start global row is withdrawn)*
