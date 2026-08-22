@@ -37,7 +37,17 @@
         font-size: 4rem; line-height: 0.95; letter-spacing: 0.02em;
         color: var(--text-primary); margin-bottom: 0.5rem;
     }
-    .hero-title .hero-year { color: var(--text-tertiary); }
+    /* The year sat at the title's full 4rem in near-black, so it was loud in
+       size and invisible in colour -- and invisible twice over where the hero
+       backdrop photo sits behind it. Smaller, raised, lighter, and shadowed so
+       it holds against a photo (#16, item 7). */
+    .hero-title .hero-year {
+        font-size: 0.45em;
+        vertical-align: 0.35em;
+        letter-spacing: 0.04em;
+        color: var(--text-secondary);
+        text-shadow: 0 2px 8px rgba(0, 0, 0, 0.9);
+    }
     .hero-tagline {
         font-style: italic; font-weight: 300; font-size: 1.2rem;
         color: var(--accent); margin-bottom: 1.5rem; letter-spacing: 0.01em;

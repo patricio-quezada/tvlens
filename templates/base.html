@@ -244,9 +244,12 @@
         .card-genre.favorite { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-glow); }
 
         .genre-pills { display: flex; flex-wrap: wrap; gap: 0.5rem; }
-        .genre-pill { padding: 0.4rem 0.8rem; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; font-size: 0.85rem; color: var(--accent); display: inline-flex; align-items: center; gap: 0.4rem; }
-        .genre-pill:hover { background: var(--surface-2); text-decoration: none; }
-        .genre-pill span { color: var(--text-tertiary); font-size: 0.75rem; }
+        /* Filled, not outlined. --surface on --bg is a four-value difference
+           and the border was amber at 0.12 alpha, so a pill was very nearly
+           the page it sat on (#16, item 10). */
+        .genre-pill { padding: 0.4rem 0.85rem; background: var(--surface-2); border: 1px solid rgba(232, 155, 45, 0.2); border-radius: 999px; font-size: 0.85rem; color: var(--text-primary); display: inline-flex; align-items: center; gap: 0.4rem; }
+        .genre-pill:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); text-decoration: none; }
+        .genre-pill span { color: var(--text-secondary); font-size: 0.75rem; }
         /* A favorite genre is a preference, not a selection. The halo this
            used to carry (box-shadow, amber) is the universal language for
            "currently active", so a pill that lit up the moment a user rated a
@@ -255,7 +258,7 @@
            the genre page is a URL, and no view holds selection state. The star
            and a tinted border say "you like this" without claiming to be a
            state. */
-        .genre-pill.favorite { border-color: var(--accent-soft); color: var(--accent); }
+        .genre-pill.favorite { color: var(--accent); border-color: rgba(232, 155, 45, 0.4); }
         .genre-pill.favorite::before { content: "★ "; font-family: var(--star-font); color: var(--accent); margin-right: 0.1rem; }
 
         /* Empty-state row */
