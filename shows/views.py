@@ -209,9 +209,18 @@ def detail(request, slug):
             .first()
         )
 
+    # Capping the list (#16, item 6) strands the rest of a stored ranking
+    # unless the page can be asked for it, and nothing else in the product
+    # links to the full list. ?all=1 is a stateless request for more of this
+    # same page: nothing is stored, and leaving the URL leaves the state. That
+    # distinction is the whole of #9, where a preference wearing the costume of
+    # persistent state was the bug.
+    show_all = request.GET.get("all") == "1"
+    shown = list(ranked) if show_all else list(ranked)[:DETAIL_RECOMMENDATION_LIMIT]
+
     source_index = role_index(show)
     recommendations = []
-    for candidate in ranked[:DETAIL_RECOMMENDATION_LIMIT]:
+    for candidate in shown:
         connections = shared_connections(
             show, source_index, candidate, role_index(candidate)
         )
@@ -225,6 +234,8 @@ def detail(request, slug):
         {
             "show": show,
             "recommendations": recommendations,
+            "total_recommendations": len(ranked),
+            "showing_all": show_all,
             "mode": ranked.mode,
             "personalized": ranked.personalized,
             "user_rating": user_rating,

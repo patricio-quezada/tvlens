@@ -1976,3 +1976,65 @@ class GenreOrderingTests(TestCase):
         Rating.objects.create(user=self.user, show=self.best_show, score=1.0)
         self.client.force_login(self.user)
         self.assertEqual(self._order(self.client.get(reverse("shows:index")))[-1], "Best")
+
+
+class RecommendationCountTests(TestCase):
+    """The show page caps its list, and can still be asked for all of it.
+
+    Capping at DETAIL_RECOMMENDATION_LIMIT (#16, item 6) would otherwise strand
+    the tail of a stored ranking: nothing else in the product links to the full
+    list, and the one view that renders it is orphaned and unstyled.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.source = Show.objects.create(
+            tmdb_id=1, name="Source", number_of_episodes=10
+        )
+        person = Person.objects.create(tmdb_id=1, name="Shared Lead")
+        CastMember.objects.create(
+            show=cls.source, person=person, order=0, character="Lead",
+            episode_count=10,
+        )
+        for i in range(10):
+            s = Show.objects.create(
+                tmdb_id=100 + i, name=f"Candidate {i}", number_of_episodes=10
+            )
+            CastMember.objects.create(
+                show=s, person=person, order=0, character="Lead", episode_count=10
+            )
+        call_command("rebuild_similar_shows", stdout=StringIO())
+        cls.small = Show.objects.create(
+            tmdb_id=900, name="Lonely", number_of_episodes=10
+        )
+
+    def test_the_page_offers_a_route_to_the_ones_it_cut(self):
+        resp = self.client.get(self.source.get_absolute_url())
+        total = resp.context["total_recommendations"]
+        self.assertGreater(total, DETAIL_RECOMMENDATION_LIMIT)
+        self.assertContains(resp, f"See all {total}")
+
+    def test_asking_for_all_of_them_returns_all_of_them(self):
+        resp = self.client.get(self.source.get_absolute_url(), {"all": "1"})
+        self.assertEqual(
+            len(resp.context["recommendations"]), resp.context["total_recommendations"]
+        )
+        self.assertTrue(resp.context["showing_all"])
+        self.assertContains(resp, "Show fewer")
+
+    def test_the_expanded_view_is_not_remembered(self):
+        # ?all=1 is a request for this page, not a setting. Leaving the URL
+        # leaves the state (#9).
+        self.client.get(self.source.get_absolute_url(), {"all": "1"})
+        resp = self.client.get(self.source.get_absolute_url())
+        self.assertFalse(resp.context["showing_all"])
+        self.assertEqual(
+            len(resp.context["recommendations"]), DETAIL_RECOMMENDATION_LIMIT
+        )
+
+    def test_a_show_with_few_connections_offers_no_link(self):
+        resp = self.client.get(self.small.get_absolute_url())
+        self.assertLessEqual(
+            resp.context["total_recommendations"], DETAIL_RECOMMENDATION_LIMIT
+        )
+        self.assertNotContains(resp, "See all")
