@@ -10,6 +10,7 @@ from io import StringIO
 
 from django.contrib.auth.models import AnonymousUser, User
 from django.core.management import call_command
+from django.db.models import Max
 from django.test import TestCase
 from django.urls import reverse
 
@@ -1900,3 +1901,78 @@ class DemoPapercutTests(TestCase):
         shown = [r["show"].pk for r in resp.context["recommendations"]]
         ranked = [s.pk for s in stored_similar(self.source)]
         self.assertEqual(shown, ranked[:DETAIL_RECOMMENDATION_LIMIT])
+
+
+class GenreOrderingTests(TestCase):
+    """Browse by genre follows the cold-start ladder (#16, item 12).
+
+    Patricio's call: "learned preference when the user starts adding ratings,
+    TMDb rating for a user with no ratings." That is the same shape ADR-05 and
+    ADR-08 already use, and both halves already existed in Layer 2, so nothing
+    new is computed here. Quality means vote_average, never popularity.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.best = Genre.objects.create(tmdb_id=1, name="Best")
+        cls.middle = Genre.objects.create(tmdb_id=2, name="Middle")
+        cls.worst = Genre.objects.create(tmdb_id=3, name="Worst")
+        cls.user = User.objects.create_user("viewer", password="pw-viewer-12")
+
+        def show(tmdb_id, name, genre, vote, popularity):
+            s = Show.objects.create(
+                tmdb_id=tmdb_id, name=name, number_of_episodes=10,
+                vote_average=vote, vote_count=500, popularity=popularity,
+            )
+            s.genres.set([genre])
+            return s
+
+        # Popularity runs OPPOSITE to quality, so a popularity ordering would
+        # be visibly wrong rather than accidentally right (ADR-05).
+        cls.best_show = show(10, "Best Show", cls.best, 9.0, 1.0)
+        cls.middle_show = show(11, "Middle Show", cls.middle, 7.0, 50.0)
+        cls.worst_show = show(12, "Worst Show", cls.worst, 5.0, 999.0)
+
+    def _order(self, response):
+        return [g.name for g in response.context["genres"]]
+
+    def test_a_visitor_with_no_account_gets_the_tmdb_quality_ordering(self):
+        order = self._order(self.client.get(reverse("shows:index")))
+        self.assertEqual(order, ["Best", "Middle", "Worst"])
+
+    def test_a_signed_in_user_who_has_rated_nothing_gets_the_same(self):
+        # Cold start is about having said nothing, not about being anonymous.
+        self.client.force_login(self.user)
+        order = self._order(self.client.get(reverse("shows:index")))
+        self.assertEqual(order, ["Best", "Middle", "Worst"])
+
+    def test_the_ordering_is_not_a_popularity_chart(self):
+        # Popularity in this fixture runs opposite to quality, so a row that
+        # ranked by engagement would come out exactly backwards (ADR-05).
+        order = self._order(self.client.get(reverse("shows:index")))
+        by_popularity = [
+            g.name for g in Genre.objects.annotate(
+                p=Max("shows__popularity")
+            ).order_by("-p")
+        ]
+        self.assertEqual(by_popularity, ["Worst", "Middle", "Best"])
+        self.assertNotEqual(order, by_popularity)
+
+    def test_one_rating_moves_that_genre_to_the_front(self):
+        # The worst-rated genre in the catalog, led by the user's own taste.
+        Rating.objects.create(user=self.user, show=self.worst_show, score=5.0)
+        self.client.force_login(self.user)
+        self.assertEqual(self._order(self.client.get(reverse("shows:index")))[0], "Worst")
+
+    def test_genres_the_user_has_said_nothing_about_still_sort_by_quality(self):
+        # The tail must not go arbitrary just because the head is personal.
+        Rating.objects.create(user=self.user, show=self.worst_show, score=5.0)
+        self.client.force_login(self.user)
+        order = self._order(self.client.get(reverse("shows:index")))
+        self.assertEqual(order, ["Worst", "Best", "Middle"])
+
+    def test_a_disliked_genre_sinks_below_the_ones_never_mentioned(self):
+        # A low rating is information: it says "less of this" (ADR-08).
+        Rating.objects.create(user=self.user, show=self.best_show, score=1.0)
+        self.client.force_login(self.user)
+        self.assertEqual(self._order(self.client.get(reverse("shows:index")))[-1], "Best")

@@ -11,7 +11,14 @@ from django.views.decorators.http import require_POST
 
 from .forms import RegistrationForm
 from .models import Genre, Rating, Show
-from .personalization import rated_shows, rerank, side_quests, top_picks
+from .personalization import (
+    build_profile,
+    genre_quality,
+    rated_shows,
+    rerank,
+    side_quests,
+    top_picks,
+)
 from .recommenders import (
     compose_callout,
     name_connections,
@@ -106,10 +113,34 @@ def index(request):
     recently_added = (
         base_qs.exclude(pk__in=pick_ids | quest_ids).order_by("-created_at")[:12]
     )
-    genres = (
-        Genre.objects.annotate(n=Count("shows"))
-        .filter(n__gt=0)
-        .order_by("-n")
+    # Browse by genre, ordered by the same cold-start ladder the rest of the
+    # recommender uses (ADR-05, ADR-08). A user with no ratings has told us
+    # nothing, so the row leads with the genres whose shows TMDb rates highest
+    # -- quality, never popularity, which is the one thing ADR-05 forbids.
+    # Once a user starts rating, their own learned affinity takes over.
+    #
+    # Both halves already exist in Layer 2 and neither is recomputed here.
+    # _catalog_quality_prior() is literally "each genre's mean vote_average
+    # minus the catalog mean", which IS the TMDb-rating ordering, and it is
+    # what genre_weights holds on its own at cold start.
+    #
+    # For a user with ratings the sort key is their learned signal alone, not
+    # the effective weight: the prior is deliberately scaled to stay meaningful
+    # early, so including it would keep a three-rating user looking at a TMDb
+    # ordering. Genres they have said nothing about score 0.0 and fall through
+    # to the prior, so the untouched tail still sorts by quality rather than
+    # arbitrarily. Catalog count and then name break the remaining ties.
+    profile = build_profile(request.user)
+    learned = {} if profile.is_cold_start else profile.learned_genre_weights
+    quality = profile.genre_weights if profile.is_cold_start else genre_quality()
+    genres = sorted(
+        Genre.objects.annotate(n=Count("shows")).filter(n__gt=0),
+        key=lambda g: (
+            -learned.get(g.id, 0.0),
+            -quality.get(g.id, 0.0),
+            -g.n,
+            g.name,
+        ),
     )
     return render(
         request,
