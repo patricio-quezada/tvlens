@@ -1,56 +1,163 @@
-<!DOCTYPE html>
+{% load static %}<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}TVLens{% endblock %}</title>
     <style>
+        /* Bebas Neue and DM Sans, served from this origin instead of Google's
+           CDN (ADR-11). Self-hosting is what actually makes the type identical
+           on every device: it renders the same behind a privacy blocker, on a
+           network that cannot reach fonts.gstatic.com, and offline. It also
+           stops handing every visitor's IP to a third party for a font.
+           Both faces are SIL Open Font Licensed, so redistributing them here
+           is permitted; the licence travels with them in static/fonts.
+
+           DM Sans upright is the VARIABLE file: one download covers every
+           weight from 100 to 1000, which is both smaller than shipping three
+           static weights and the reason 600 and 700 are now real rather than
+           synthesised. Italic stays a single static 300, because that is the
+           only italic the product uses. */
+        @font-face {
+            font-family: 'Bebas Neue';
+            font-style: normal;
+            font-weight: 400;
+            font-display: swap;
+            src: url({% static 'fonts/bebas-neue-400-latin-ext.woff2' %}) format('woff2');
+            unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+        }
+        @font-face {
+            font-family: 'Bebas Neue';
+            font-style: normal;
+            font-weight: 400;
+            font-display: swap;
+            src: url({% static 'fonts/bebas-neue-400-latin.woff2' %}) format('woff2');
+            unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+        }
+        @font-face {
+            font-family: 'DM Sans';
+            font-style: italic;
+            font-weight: 300;
+            font-display: swap;
+            src: url({% static 'fonts/dm-sans-300-italic-latin-ext.woff2' %}) format('woff2');
+            unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+        }
+        @font-face {
+            font-family: 'DM Sans';
+            font-style: italic;
+            font-weight: 300;
+            font-display: swap;
+            src: url({% static 'fonts/dm-sans-300-italic-latin.woff2' %}) format('woff2');
+            unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+        }
+        @font-face {
+            font-family: 'DM Sans';
+            font-style: normal;
+            font-weight: 100 1000;
+            font-display: swap;
+            src: url({% static 'fonts/dm-sans-var-latin-ext.woff2' %}) format('woff2');
+            unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+        }
+        @font-face {
+            font-family: 'DM Sans';
+            font-style: normal;
+            font-weight: 100 1000;
+            font-display: swap;
+            src: url({% static 'fonts/dm-sans-var-latin.woff2' %}) format('woff2');
+            unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+        }
+
+        /* The tvlens.org palette, taken from the landing page itself rather
+           than from a copy of it (ADR-11). Names on the right are the landing
+           page's own variable names, so the two can be diffed by eye. One
+           product, one identity: every page inherits this and nothing
+           overrides it.
+
+           The landing page lives in the landing-pages repo at tvlens/index.html
+           and carries the same values under its own names, plus a note pointing
+           back here. The two are kept in sync by hand and on purpose: if a
+           colour moves on one side, move it on the other. */
         :root {
-            /* Pantone 2026 Color of the Year — Cloud Dancer (PANTONE 11-4201) */
-            --cloud-dancer: #f0eee6;
-            --cloud-dancer-muted: #a8a195;
-            --cloud-dancer-deep: #7a7468;
+            --bg: #08080a;                          /* --bg-deep */
+            --surface: #111115;                     /* --bg-card */
+            --surface-2: #17171d;
+            --border: rgba(232, 155, 45, 0.12);
 
-            /* Warm dark theme — Cloud Dancer's dark companion */
-            --bg: #1a1814;
-            --surface: #26221c;
-            --surface-2: #2e2a22;
-            --border: #3a352d;
+            --text-primary: #f0ebe3;                /* --text-primary */
+            --text-secondary: #7a756c;              /* --text-secondary */
+            --text-tertiary: #4a463f;               /* --text-muted */
 
-            /* Foreground */
-            --text-primary: var(--cloud-dancer);
-            --text-secondary: var(--cloud-dancer-muted);
-            --text-tertiary: var(--cloud-dancer-deep);
+            --accent: #e89b2d;                      /* --amber */
+            --accent-bright: #f5a623;               /* --amber-glow */
+            --accent-dim: #c27d1a;                  /* --amber-dim */
+            --accent-soft: rgba(232, 155, 45, 0.12);
+            --accent-glow: rgba(232, 155, 45, 0.35);
+            --rating: #e89b2d;
+            --star-preview: var(--accent-dim);
 
-            /* Accents — warm gold (complementary to Cloud Dancer's cream) */
-            --accent: #d4a574;
-            --accent-soft: rgba(212, 165, 116, 0.15);
-            --accent-glow: rgba(212, 165, 116, 0.35);
-            --rating: #c89b5a;
-
-            /* Semantic */
             --error: #e89180;
             --success: #a8c490;
+
+            --grain-opacity: 0.035;
+            /* DM Sans has no U+2605, so every star in the product pins the
+               same symbol stack or the glyph clips differently per platform
+               (#12). */
+            --star-font: 'Noto Sans Symbols 2', 'Adwaita Sans', 'Apple Symbols',
+                         'Segoe UI Symbol', sans-serif;
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text-primary); line-height: 1.5; }
+        body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text-primary); line-height: 1.5; }
+
+        /* Film grain and the warm top glow, both straight from the landing
+           page. On body rather than in a template so every page carries them
+           without markup of its own. */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            z-index: 100;
+            pointer-events: none;
+            opacity: var(--grain-opacity);
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+            background-repeat: repeat;
+            background-size: 256px 256px;
+        }
+        body::after {
+            content: '';
+            position: fixed;
+            top: -40%; left: 50%; transform: translateX(-50%);
+            width: 140%; height: 70%;
+            background: radial-gradient(ellipse at center, rgba(232, 155, 45, 0.07) 0%, transparent 65%);
+            pointer-events: none;
+            z-index: 0;
+        }
         a { color: var(--accent); text-decoration: none; }
         a:hover { text-decoration: underline; }
         :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
         code { background: var(--surface); padding: 0.1rem 0.4rem; border-radius: 4px; font-size: 0.9rem; }
 
-        nav { padding: 1rem 2rem; border-bottom: 1px solid var(--border); display: flex; gap: 1.5rem; align-items: center; background: var(--bg); }
-        nav .brand { font-weight: 700; color: var(--accent); margin-right: auto; font-size: 1.1rem; letter-spacing: 0.02em; }
+        nav { padding: 1rem 2rem; border-bottom: 1px solid var(--border); display: flex; gap: 1.5rem; align-items: center; background: var(--bg); position: relative; z-index: 1; }
+        /* The logo reads TV + LENS, the second half amber, exactly as on the
+           landing page. The anchor's text is "TVLens"; font-size 0 hides it and
+           the two pseudo-elements rebuild it, so the link text stays readable
+           to a screen reader and to anything that follows the markup. */
+        nav .brand {
+            font-family: 'Bebas Neue', sans-serif;
+            margin-right: auto; letter-spacing: 0.08em;
+            color: var(--text-primary); font-size: 0;
+        }
+        nav .brand::before { content: 'TV'; font-size: 1.5rem; }
+        nav .brand::after { content: 'LENS'; font-size: 1.5rem; color: var(--accent); }
         nav .user { color: var(--text-secondary); }
         nav form { display: inline; }
         nav button { background: none; border: none; color: var(--accent); cursor: pointer; font-family: inherit; font-size: inherit; padding: 0; }
         nav button:hover { text-decoration: underline; }
 
-        main { max-width: 1200px; margin: 0 auto; padding: 2rem; }
+        main { max-width: 1200px; margin: 0 auto; padding: 2rem; position: relative; z-index: 1; }
 
         .form-card { max-width: 400px; margin: 2rem auto; }
-        .form-card h1 { margin-bottom: 1rem; }
+        .form-card h1 { font-family: 'Bebas Neue', sans-serif; font-weight: 400; font-size: 2rem; letter-spacing: 0.06em; margin-bottom: 1rem; }
         .form-card p { margin-top: 0.75rem; }
         .form-card label { color: var(--text-secondary); font-size: 0.85rem; display: block; margin-top: 0.5rem; }
         .form-card input, .form-card textarea { width: 100%; padding: 0.5rem; margin-top: 0.25rem; background: var(--surface); border: 1px solid var(--border); color: var(--text-primary); border-radius: 4px; font-family: inherit; font-size: 1rem; }
@@ -64,7 +171,7 @@
         .messages li { padding: 0.5rem 1rem; background: var(--accent-soft); border-left: 3px solid var(--accent); border-radius: 4px; margin-bottom: 0.5rem; color: var(--text-primary); }
 
         .page-header { text-align: center; margin-bottom: 2rem; }
-        .page-header h1 { font-size: 2rem; color: var(--accent); letter-spacing: 0.02em; }
+        .page-header h1 { font-family: 'Bebas Neue', sans-serif; font-weight: 400; font-size: 3rem; color: var(--text-primary); letter-spacing: 0.06em; line-height: 1; }
         .page-header p { color: var(--text-secondary); margin-top: 0.5rem; }
 
         .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 1.5rem; }
@@ -74,7 +181,7 @@
            Baseline-aligned so the sentence reads as a caption rather than a
            second heading, and wrapping to its own line when there is no room. */
         .row-head { display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
-        .row-title { font-size: 1.2rem; color: var(--text-primary); font-weight: 600; letter-spacing: 0.01em; }
+        .row-title { font-family: 'Bebas Neue', sans-serif; font-size: 1.6rem; color: var(--text-primary); font-weight: 400; letter-spacing: 0.06em; }
         .row-subtitle { font-size: 0.85rem; color: var(--text-secondary); font-weight: 400; }
         .row-scroller {
             display: flex;
@@ -105,7 +212,7 @@
             position: absolute;
             left: 0; right: 0; bottom: 0;
             height: 35%;
-            background: linear-gradient(to top, rgba(26, 24, 20, 0.85), transparent);
+            background: linear-gradient(to top, rgba(8, 8, 10, 0.85), transparent);
             pointer-events: none;
             border-radius: 0 0 8px 8px;
         }
@@ -115,14 +222,14 @@
             bottom: 0.5rem;
             transform: translateX(-50%);
             font-size: 0.78rem;
-            color: rgba(240, 238, 230, 0.92);
+            color: rgba(240, 235, 227, 0.92);
             font-weight: 500;
             letter-spacing: 0.04em;
             text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
             z-index: 1;
             white-space: nowrap;
         }
-        .poster-rating.empty { color: rgba(240, 238, 230, 0.5); font-style: italic; }
+        .poster-rating.empty { color: rgba(240, 235, 227, 0.45); font-style: italic; }
         /* Amber is always the user's own number, matching the rating widget on
            the detail page. Muted white is the world's (#19). */
         .poster-rating.yours { color: var(--accent); font-weight: 600; }
@@ -140,7 +247,7 @@
         .genre-pill:hover { background: var(--surface-2); text-decoration: none; }
         .genre-pill span { color: var(--text-tertiary); font-size: 0.75rem; }
         .genre-pill.favorite { border-color: var(--accent); box-shadow: 0 0 10px var(--accent-glow); }
-        .genre-pill.favorite::before { content: "★ "; color: var(--accent); margin-right: 0.1rem; }
+        .genre-pill.favorite::before { content: "★ "; font-family: var(--star-font); color: var(--accent); margin-right: 0.1rem; }
 
         /* Empty-state row */
         .row-empty {
