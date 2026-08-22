@@ -171,6 +171,10 @@
         .messages li { padding: 0.5rem 1rem; background: var(--accent-soft); border-left: 3px solid var(--accent); border-radius: 4px; margin-bottom: 0.5rem; color: var(--text-primary); }
 
         .page-header { text-align: center; margin-bottom: 2rem; }
+        /* The genre page is a catalog, so its header gets out of the way
+           instead of pushing the shows below the fold (#9). */
+        .genre-header { text-align: left; margin-bottom: 1.25rem; }
+        .genre-header p { display: flex; gap: 1rem; align-items: baseline; flex-wrap: wrap; }
         .page-header h1 { font-family: 'Bebas Neue', sans-serif; font-weight: 400; font-size: 3rem; color: var(--text-primary); letter-spacing: 0.06em; line-height: 1; }
         .page-header p { color: var(--text-secondary); margin-top: 0.5rem; }
 
@@ -193,14 +197,11 @@
             scrollbar-color: var(--border) transparent;
             align-items: start;
         }
-        .row-scroller .card {
-            flex: 0 0 180px;
-            scroll-snap-align: start;
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
-        }
-        .card { text-align: center; }
+        /* A card is the same object in a scroller and in a grid, so its own
+           layout lives on .card and the scroller only adds what makes it
+           scroll (#9). */
+        .card { text-align: center; display: flex; flex-direction: column; gap: 0.5rem; }
+        .row-scroller .card { flex: 0 0 180px; scroll-snap-align: start; }
         .card-link { color: inherit; text-decoration: none; }
         .card-link:hover { text-decoration: none; }
         .card-link:hover h3 { color: var(--accent); }
@@ -235,7 +236,7 @@
         .poster-rating.yours { color: var(--accent); font-weight: 600; }
 
         .card-title { display: flex; align-items: center; justify-content: center; }
-        .row-scroller .card h3 { font-size: 0.9rem; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; color: var(--text-primary); text-align: center; margin: 0; }
+        .card h3 { font-size: 0.9rem; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; color: var(--text-primary); text-align: center; margin: 0; }
         .card-meta { display: flex; flex-direction: column; align-items: center; gap: 0.5rem; }
         .card-year { color: var(--text-tertiary); font-size: 0.75rem; }
         .card-genres { display: flex; gap: 0.25rem; flex-wrap: wrap; justify-content: center; }
@@ -246,7 +247,15 @@
         .genre-pill { padding: 0.4rem 0.8rem; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; font-size: 0.85rem; color: var(--accent); display: inline-flex; align-items: center; gap: 0.4rem; }
         .genre-pill:hover { background: var(--surface-2); text-decoration: none; }
         .genre-pill span { color: var(--text-tertiary); font-size: 0.75rem; }
-        .genre-pill.favorite { border-color: var(--accent); box-shadow: 0 0 10px var(--accent-glow); }
+        /* A favorite genre is a preference, not a selection. The halo this
+           used to carry (box-shadow, amber) is the universal language for
+           "currently active", so a pill that lit up the moment a user rated a
+           show in that genre read as a filter stuck on forever -- which is
+           exactly how it was reported in #9. Nothing here is ever selected:
+           the genre page is a URL, and no view holds selection state. The star
+           and a tinted border say "you like this" without claiming to be a
+           state. */
+        .genre-pill.favorite { border-color: var(--accent-soft); color: var(--accent); }
         .genre-pill.favorite::before { content: "★ "; font-family: var(--star-font); color: var(--accent); margin-right: 0.1rem; }
 
         /* Empty-state row */

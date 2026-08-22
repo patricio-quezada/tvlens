@@ -32,7 +32,10 @@
 
 {% if genres %}
 <section class="row">
-    <h2 class="row-title">Browse by genre</h2>
+    <div class="row-head">
+        <h2 class="row-title">Browse by genre</h2>
+        <p class="row-subtitle">★ marks the genres you rate highly.</p>
+    </div>
     <div class="genre-pills">
         {% for g in genres %}
         <a href="{% url 'shows:genre' g.id %}" class="genre-pill{% if g.id in favorite_genre_ids %} favorite{% endif %}">{{ g.name }} <span>{{ g.n }}</span></a>
