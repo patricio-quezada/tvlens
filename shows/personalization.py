@@ -69,6 +69,16 @@ RANK_STEP = 1.0
 PREFERENCE_WEIGHT = 1.0
 
 
+def genre_quality():
+    """Each genre's TMDb quality, exposed for callers outside Layer 2.
+
+    The home page's "Browse by genre" row orders by this for a user who has
+    rated nothing (#16, item 12). Same numbers the cold-start prior is built
+    from, named so a caller does not have to reach for a private helper.
+    """
+    return _catalog_quality_prior()
+
+
 def _catalog_quality_prior():
     """A signed genre affinity from TMDb quality, not popularity (ADR-08 cold start).
 
