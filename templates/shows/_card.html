@@ -1,0 +1,27 @@
+    <a class="card card-link" href="{{ show.get_absolute_url }}">
+        <div class="card-poster">
+            {% if show.poster_url %}
+            <img src="{{ show.poster_url }}" alt="{{ show.name }}" loading="lazy">
+            {% else %}
+            <div class="poster-placeholder"></div>
+            {% endif %}
+            {% comment %}Whose number this is, said in colour: amber is the user's own
+   rating, muted is the world's. Top Picks is built from shows this user rated
+   and top_picks() annotates each one with .user_score, so the row was showing
+   TMDb's opinion of a show on the one row whose whole thesis is the user's
+   distance from it (#19). Rows of shows the user has NOT rated carry no
+   user_score and fall through to TMDb, on the same 0.5-5 scale.{% endcomment %}
+            <div class="poster-rating{% if show.user_score %} yours{% elif not show.vote_count %} empty{% endif %}">
+                {% if show.user_score %}★ {{ show.user_score|floatformat:1 }}{% elif show.vote_count %}★ {{ show.tmdb_score_5|floatformat:1 }}{% else %}—{% endif %}
+            </div>
+        </div>
+        <div class="card-title"><h3>{{ show.name }}</h3></div>
+        <div class="card-meta">
+            {% if show.first_air_date %}<span class="card-year">{{ show.first_air_date.year }}</span>{% endif %}
+            <div class="card-genres">
+                {% for g in show.genres.all|slice:":2" %}
+                <span class="card-genre{% if g.id in favorite_genre_ids %} favorite{% endif %}">{{ g.name }}</span>
+                {% endfor %}
+            </div>
+        </div>
+    </a>

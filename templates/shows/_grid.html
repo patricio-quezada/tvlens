@@ -1,0 +1,13 @@
+{% comment %}A catalog grid of the same cards _row.html scrolls horizontally. A
+   horizontal strip is right for a handful of picks on a busy home page and
+   wrong for "every show in this genre", where it hides most of the results
+   off-screen behind a scroll nobody performs (#9).{% endcomment %}
+{% if shows %}
+<div class="grid">
+    {% for show in shows %}
+    {% include "shows/_card.html" %}
+    {% endfor %}
+</div>
+{% else %}
+<p class="empty">Nothing here yet.</p>
+{% endif %}

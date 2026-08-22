@@ -1666,6 +1666,7 @@ class StarScaleTests(TestCase):
         self.assertNotIn("★ 7.0", body)
         self.assertNotIn('class="poster-rating yours"', body)
 
+
 class MyRatingsTests(TestCase):
     """The user's own record of what they have said (#11).
 
@@ -1780,3 +1781,80 @@ class MyRatingsTests(TestCase):
         signed_in = self.client.get(reverse("shows:index")).content.decode()
         self.assertIn("My Ratings", signed_in)
 
+
+class GenrePageTests(TestCase):
+    """The genre page is a catalog, and nothing is ever "selected" (#9).
+
+    Two complaints came in together: a genre page that hid most of its results
+    behind a horizontal scroll, and a genre that appeared to stay selected on
+    the home page after navigating away. The first was real. The second was the
+    favorite-genre marker being read as a selection, which these freeze apart:
+    no view holds genre state, and a pill is marked because of a rating.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.drama = Genre.objects.create(tmdb_id=1, name="Drama")
+        cls.comedy = Genre.objects.create(tmdb_id=2, name="Comedy")
+        cls.user = User.objects.create_user("viewer", password="pw-viewer-9")
+        for i in range(3):
+            s = Show.objects.create(
+                tmdb_id=10 + i, name=f"Drama {i}", number_of_episodes=10,
+                vote_average=8.0 - i, vote_count=100,
+            )
+            s.genres.set([cls.drama])
+            setattr(cls, f"drama{i}", s)
+        c = Show.objects.create(
+            tmdb_id=20, name="A Comedy", number_of_episodes=10,
+            vote_average=7.0, vote_count=100,
+        )
+        c.genres.set([cls.comedy])
+        cls.a_comedy = c
+
+    def test_the_genre_page_is_a_grid_not_a_horizontal_scroller(self):
+        body = self.client.get(
+            reverse("shows:genre", args=[self.drama.id])
+        ).content.decode()
+        self.assertIn('class="grid"', body)
+        # The element, not the word: base.html carries .row-scroller CSS on
+        # every page, so a bare substring check would always match.
+        self.assertNotIn('class="row-scroller"', body)
+
+    def test_the_genre_page_shows_only_that_genre(self):
+        body = self.client.get(
+            reverse("shows:genre", args=[self.drama.id])
+        ).content.decode()
+        for i in range(3):
+            self.assertIn(f"Drama {i}", body)
+        self.assertNotIn("A Comedy", body)
+
+    def test_visiting_a_genre_leaves_no_trace_on_the_home_page(self):
+        # The reported "stuck genre". No view reads a session, a cookie or a
+        # query string, so the home page cannot remember a visit: rendered
+        # before and after, it is byte-identical.
+        before = self.client.get(reverse("shows:index")).content.decode()
+        self.client.get(reverse("shows:genre", args=[self.drama.id]))
+        after = self.client.get(reverse("shows:index")).content.decode()
+        self.assertEqual(before, after)
+
+    def test_a_pill_is_marked_by_a_rating_not_by_a_visit(self):
+        # What actually lights a pill, and the thing that was mistaken for a
+        # selection: rating a show in that genre at or above the favorite line.
+        self.client.force_login(self.user)
+        visited = self.client.get(reverse("shows:index")).context["favorite_genre_ids"]
+        self.assertEqual(set(visited), set())
+
+        self.client.get(reverse("shows:genre", args=[self.drama.id]))
+        still_none = self.client.get(reverse("shows:index")).context["favorite_genre_ids"]
+        self.assertEqual(set(still_none), set())
+
+        Rating.objects.create(user=self.user, show=self.drama0, score=4.5)
+        now = self.client.get(reverse("shows:index")).context["favorite_genre_ids"]
+        self.assertEqual(set(now), {self.drama.id})
+
+    def test_the_home_page_says_what_the_star_means(self):
+        self.client.force_login(self.user)
+        self.assertContains(
+            self.client.get(reverse("shows:index")),
+            "marks the genres you rate highly",
+        )
