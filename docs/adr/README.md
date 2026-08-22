@@ -26,3 +26,4 @@ Copy `00-adr-template.md` to start a new one.
 - [08 - Layer 2: personalize by re-ranking the graph per user](08-layer2-personalized-reranking.md)
 - [09 - Side Quests: strong edges into genres you have not shown you like](09-side-quests-cross-genre-edges.md) *(amended 2026-08-21: the cold-start global row is withdrawn; amended 2026-08-22: the walk goes two hops and the ranking is rebalanced)*
 - [10 - Rating saves in place, and TVLens takes its first script](10-rating-saves-in-place.md)
+- [11 - One visual identity, defined once, taken from the landing page itself](11-one-visual-identity.md)
