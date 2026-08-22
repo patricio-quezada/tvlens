@@ -1,6 +1,9 @@
 {% if shows %}
 <section class="row"{% if anchor %} id="{{ anchor }}"{% endif %}>
-    <h2 class="row-title">{{ title }}</h2>
+    <div class="row-head">
+        <h2 class="row-title">{{ title }}</h2>
+        {% if subtitle %}<p class="row-subtitle">{{ subtitle }}</p>{% endif %}
+    </div>
     <div class="row-scroller">
         {% for show in shows %}
         <a class="card card-link" href="{{ show.get_absolute_url }}">
@@ -10,8 +13,14 @@
                 {% else %}
                 <div class="poster-placeholder"></div>
                 {% endif %}
-                <div class="poster-rating{% if show.vote_count == 0 %} empty{% endif %}">
-                    {% if show.vote_count > 0 %}★ {{ show.vote_average|floatformat:1 }}{% else %}—{% endif %}
+                {% comment %}Whose number this is, said in colour: amber is the user's own
+   rating, muted is the world's. Top Picks is built from shows this user rated
+   and top_picks() annotates each one with .user_score, so the row was showing
+   TMDb's opinion of a show on the one row whose whole thesis is the user's
+   distance from it (#19). Rows of shows the user has NOT rated carry no
+   user_score and fall through to TMDb, on the same 0.5-5 scale.{% endcomment %}
+                <div class="poster-rating{% if show.user_score %} yours{% elif not show.vote_count %} empty{% endif %}">
+                    {% if show.user_score %}★ {{ show.user_score|floatformat:1 }}{% elif show.vote_count %}★ {{ show.tmdb_score_5|floatformat:1 }}{% else %}—{% endif %}
                 </div>
             </div>
             <div class="card-title"><h3>{{ show.name }}</h3></div>

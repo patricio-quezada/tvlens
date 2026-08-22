@@ -725,10 +725,50 @@ class RatingTests(TestCase):
             reverse("shows:rate", args=[show.slug]), {"score": score}
         )
 
+    def _rate_in_place(self, show, score):
+        return self.client.post(
+            reverse("shows:rate", args=[show.slug]),
+            {"score": score},
+            headers={"x-requested-with": "fetch"},
+        )
+
+    def test_rating_in_place_answers_with_state_instead_of_redirecting(self):
+        # ADR-10: the widget asked to stay where it is, so nothing navigates and
+        # the response carries what the page needs to repaint itself.
+        self.client.force_login(self.alice)
+        resp = self._rate_in_place(self.show, "4.0")
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.json()
+        self.assertEqual(payload["score"], 4.0)
+        # The average sentence is rendered server-side from its own template, so
+        # its wording is never duplicated in JavaScript.
+        self.assertIn("★ 4.0", payload["meta_html"])
+        self.assertIn("1 rating on TVLens", payload["meta_html"])
+        self.assertEqual(
+            Rating.objects.get(user=self.alice, show=self.show).score, 4.0
+        )
+
+    def test_rating_in_place_queues_no_flash_message(self):
+        # Nothing navigates, so a queued message would have no page to land on
+        # and would surface later somewhere unrelated.
+        self.client.force_login(self.alice)
+        self._rate_in_place(self.show, "4.0")
+        body = self.client.get(self.show.get_absolute_url()).content.decode()
+        self.assertNotIn("You rated", body)
+
+    def test_the_scale_guards_still_apply_in_place(self):
+        # The endpoint is public whichever way it is called.
+        self.client.force_login(self.alice)
+        self.assertEqual(self._rate_in_place(self.other, "3.3").status_code, 400)
+        self.assertFalse(Rating.objects.filter(show=self.other).exists())
+
     def test_recording_a_rating_persists_the_score(self):
         self.client.force_login(self.alice)
         resp = self._rate(self.show, "3.5")
         self.assertEqual(resp.status_code, 302)
+        # Back to the widget, not the top of the page: the POST-redirect is a
+        # fresh navigation, so without the fragment the stars land off-screen.
+        self.assertTrue(resp["Location"].endswith("#rate"))
         self.assertEqual(
             Rating.objects.get(user=self.alice, show=self.show).score, 3.5
         )
@@ -767,9 +807,15 @@ class RatingTests(TestCase):
         Rating.objects.create(user=self.alice, show=self.show, score=3.5)
         self.client.force_login(self.alice)
         body = self.client.get(self.show.get_absolute_url()).content.decode()
-        # 3.5 is the fourth input in the high-to-low widget (5.0, 4.5, 4.0, 3.5).
-        self.assertIn('value="3.5" id="star-4" checked', body)
-        self.assertIn("Your rating: 3.5", body)
+        # 3.5 is the fourth button in the high-to-low widget (5.0, 4.5, 4.0,
+        # 3.5). The stars are the submit, so there is no radio to be :checked --
+        # the persisted fill starts from a server-rendered class (#18).
+        self.assertIn('value="3.5" class="half chosen"', body)
+        self.assertNotIn('class="rate-save"', body)
+        # The score reads on the page at full size, and no longer only inside
+        # the per-star title tooltip a touchscreen cannot summon (#12).
+        self.assertIn('<span class="score-label">Your rating</span>★ 3.5', body)
+        self.assertNotIn('title="3.5 stars"', body)
 
     def test_rating_requires_login(self):
         resp = self._rate(self.show, "3.0")
@@ -1558,3 +1604,62 @@ class SideQuestsRankingTests(TestCase):
         expected = min(math.log1p(3.0), math.log1p(3.0)) * SIDE_QUEST_HOP_DECAY
         self.assertAlmostEqual(pick.quest_surprise, expected)
 
+
+class StarScaleTests(TestCase):
+    """One scale behind every star in the product (#19).
+
+    TMDb rates 0-10 and TVLens rates 0.5-5 in half steps. Both were rendered
+    behind the same glyph, so a show the user rated 4.5 sat beside an 8.4 and
+    read as dislike. And Top Picks, built entirely from shows this user rated,
+    showed TMDb's opinion on the one row whose thesis is the user's distance
+    from the crowd. These freeze both halves: everything TMDb is halved, and the
+    user's own number wins where it exists.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user("viewer", password="pw-viewer-19")
+        cls.rated = Show.objects.create(
+            tmdb_id=1, name="Rated Show", number_of_episodes=10,
+            vote_average=8.4, vote_count=1200,
+        )
+        cls.unrated = Show.objects.create(
+            tmdb_id=2, name="Unrated Show", number_of_episodes=10,
+            vote_average=7.0, vote_count=500,
+        )
+        cls.unvoted = Show.objects.create(
+            tmdb_id=3, name="Unvoted Show", number_of_episodes=10,
+            vote_average=0, vote_count=0,
+        )
+
+    def test_tmdb_score_is_halved_onto_the_tvlens_scale(self):
+        self.assertAlmostEqual(self.rated.tmdb_score_5, 4.2)
+        self.assertAlmostEqual(self.unrated.tmdb_score_5, 3.5)
+
+    def test_a_show_nobody_voted_on_has_no_score(self):
+        self.assertIsNone(self.unvoted.tmdb_score_5)
+
+    def test_the_hero_shows_the_tvlens_scale_not_tmdbs(self):
+        body = self.client.get(self.rated.get_absolute_url()).content.decode()
+        self.assertIn("★ 4.2", body)
+        self.assertNotIn("★ 8.4", body)
+        # The vote count is TMDb's own and is not rescaled.
+        self.assertIn("1,200 votes", body)
+
+    def test_top_picks_shows_the_users_rating_not_the_crowds(self):
+        Rating.objects.create(user=self.user, show=self.rated, score=4.5)
+        self.client.force_login(self.user)
+        body = self.client.get(reverse("shows:index")).content.decode()
+        # Amber marks the user's own number; the card carries 4.5, not 4.2.
+        self.assertIn('class="poster-rating yours"', body)
+        self.assertIn("★ 4.5", body)
+
+    def test_a_row_of_unrated_shows_keeps_the_crowds_number(self):
+        # Patricio, on Recently added and Side Quests: "I can see the TMDb
+        # rating which is fine." Those shows carry no user_score, so the badge
+        # falls through to TMDb -- on the 0.5-5 scale, never 0-10.
+        self.client.force_login(self.user)
+        body = self.client.get(reverse("shows:index")).content.decode()
+        self.assertIn("★ 3.5", body)
+        self.assertNotIn("★ 7.0", body)
+        self.assertNotIn('class="poster-rating yours"', body)

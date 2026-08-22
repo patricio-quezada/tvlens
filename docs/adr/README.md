@@ -24,4 +24,5 @@ Copy `00-adr-template.md` to start a new one.
 - [06 - Lift the SQL variable ceiling in the recommenders](06-sql-variable-ceiling.md)
 - [07 - Materialize the Layer 1 ranking and serve reads from a table](07-materialized-recommendations.md)
 - [08 - Layer 2: personalize by re-ranking the graph per user](08-layer2-personalized-reranking.md)
-- [09 - Side Quests: strong edges into genres you have not shown you like](09-side-quests-cross-genre-edges.md) *(amended 2026-08-21: the cold-start global row is withdrawn)*
+- [09 - Side Quests: strong edges into genres you have not shown you like](09-side-quests-cross-genre-edges.md) *(amended 2026-08-21: the cold-start global row is withdrawn; amended 2026-08-22: the walk goes two hops and the ranking is rebalanced)*
+- [10 - Rating saves in place, and TVLens takes its first script](10-rating-saves-in-place.md)

@@ -4,8 +4,9 @@ from django.contrib import messages
 from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
 from django.db.models import Count
-from django.http import HttpResponseBadRequest
+from django.http import HttpResponseBadRequest, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.template.loader import render_to_string
 from django.views.decorators.http import require_POST
 
 from .forms import RegistrationForm
@@ -29,11 +30,16 @@ VALID_SCORES = [n / 2 for n in range(1, 11)]
 
 
 def star_steps(user_rating):
-    """The ten half-star inputs for the rating widget, high to low.
+    """The ten half-star submit buttons for the rating widget, high to low.
 
     The template renders these in DOM order 5.0 -> 0.5 so the pure-CSS widget can
     fill "this star and every lower one" with a sibling selector (see detail.html).
     Each even half-step is a full star, each odd one the left half of the next.
+
+    Each step is its own submit button carrying `name="score"`, so clicking a
+    star POSTs that score and rate() needs no client-side help (#18). `chosen`
+    marks the persisted rating: with no radio group there is no :checked to
+    select on, so the fill starts from a server-rendered class instead.
     """
     steps = []
     for n in range(10, 0, -1):
@@ -41,7 +47,7 @@ def star_steps(user_rating):
         steps.append({
             "value": value,
             "css_class": "full" if n % 2 == 0 else "half",
-            "checked": user_rating == value,
+            "chosen": user_rating == value,
         })
     return steps
 
@@ -209,8 +215,32 @@ def rate(request, slug):
     Rating.objects.update_or_create(
         user=request.user, show=show, defaults={"score": score}
     )
+
+    # The widget asked to stay where it is (ADR-10). Answer with the score it
+    # should light and the re-rendered average line, so the wording of that
+    # sentence lives in one template instead of being rebuilt in JavaScript.
+    # No success message on this path: nothing navigates, so the message would
+    # sit in the queue and surface later on an unrelated page.
+    if request.headers.get("X-Requested-With") == "fetch":
+        return JsonResponse({
+            "score": score,
+            "meta_html": render_to_string(
+                "shows/_rate_meta.html",
+                {
+                    "average_rating": show.average_rating,
+                    "rating_count": show.ratings.count(),
+                },
+                request=request,
+            ),
+        })
+
     messages.success(request, f"You rated {show.name} {score:g} stars.")
-    return redirect(show.get_absolute_url())
+    # Back to the stars, not to the top of the page. Rating is a plain POST and
+    # redirect (#18), so the response is a fresh navigation and the browser
+    # would otherwise land at the top with the widget scrolled out of sight --
+    # which reads as "the page reloaded and lost my click" even though the
+    # rating saved. The fragment costs nothing and needs no script.
+    return redirect(f"{show.get_absolute_url()}#rate")
 
 
 def similar(request, pk):
