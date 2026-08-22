@@ -28,6 +28,14 @@ from .recommenders import (
 # so equality checks against this set never suffer float drift.
 VALID_SCORES = [n / 2 for n in range(1, 11)]
 
+# How many recommendations the show page offers. ADR-07 stores 12 edges per
+# show and the page used to render all of them, each with its own prose
+# callout, which is a very long page and, in Patricio's demo note, "too many
+# now (paradox of choice)". Six is enough to feel like a choice without being a
+# list to work through, and the tail of a stored list is the weakest evidence
+# anyway. One constant so the count stays cheap to argue about (#16, item 6).
+DETAIL_RECOMMENDATION_LIMIT = 6
+
 
 def star_steps(user_rating):
     """The ten half-star submit buttons for the rating widget, high to low.
@@ -166,7 +174,7 @@ def detail(request, slug):
 
     source_index = role_index(show)
     recommendations = []
-    for candidate in ranked:
+    for candidate in ranked[:DETAIL_RECOMMENDATION_LIMIT]:
         connections = shared_connections(
             show, source_index, candidate, role_index(candidate)
         )

@@ -36,6 +36,7 @@ from .personalization import (
     side_quests,
     top_picks,
 )
+from .views import DETAIL_RECOMMENDATION_LIMIT
 from .recommenders import (
     SQLITE_MAX_VARS_SAFE,
     RankedShows,
@@ -1858,3 +1859,44 @@ class GenrePageTests(TestCase):
             self.client.get(reverse("shows:index")),
             "marks the genres you rate highly",
         )
+
+
+class DemoPapercutTests(TestCase):
+    """Small polish from the 2026-08-19 demo batch (#16)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.source = Show.objects.create(
+            tmdb_id=1, name="Source", number_of_episodes=10
+        )
+        # One person shared with every candidate, so Layer 1 connects all of
+        # them and the store fills past the display limit.
+        person = Person.objects.create(tmdb_id=1, name="Shared Lead")
+        CastMember.objects.create(
+            show=cls.source, person=person, order=0,
+            character="Lead", episode_count=10,
+        )
+        for i in range(10):
+            s = Show.objects.create(
+                tmdb_id=100 + i, name=f"Candidate {i}", number_of_episodes=10,
+            )
+            CastMember.objects.create(
+                show=s, person=person, order=0, character="Lead", episode_count=10,
+            )
+        call_command("rebuild_similar_shows", stdout=StringIO())
+
+    def test_the_show_page_offers_a_bounded_number_of_recommendations(self):
+        # ADR-07 stores 12 edges per show; the page used to render every one of
+        # them with its own prose callout (#16, item 6).
+        resp = self.client.get(self.source.get_absolute_url())
+        self.assertEqual(
+            len(resp.context["recommendations"]), DETAIL_RECOMMENDATION_LIMIT
+        )
+        self.assertGreater(len(stored_similar(self.source)), DETAIL_RECOMMENDATION_LIMIT)
+
+    def test_the_recommendations_kept_are_the_top_of_the_ranking(self):
+        # The cap takes from the front, so it drops the weakest evidence.
+        resp = self.client.get(self.source.get_absolute_url())
+        shown = [r["show"].pk for r in resp.context["recommendations"]]
+        ranked = [s.pk for s in stored_similar(self.source)]
+        self.assertEqual(shown, ranked[:DETAIL_RECOMMENDATION_LIMIT])
