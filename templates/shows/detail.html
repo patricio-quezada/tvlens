@@ -99,6 +99,7 @@
         content: ''; width: 6px; height: 6px; border-radius: 50%;
         background: var(--accent); box-shadow: 0 0 10px var(--accent-glow);
     }
+    .recs-steps { display: inline-flex; gap: 1.25rem; align-items: baseline; }
     .recs-more {
         font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.1em;
         text-transform: uppercase; font-size: 0.85rem;
@@ -350,11 +351,10 @@
             {% else %}Ranked by shared cast and crew.{% endif %}
             {% if personalized %}<span class="recs-personalized">reordered for {{ user.username }}</span>{% endif %}
         </p>
-        {% if showing_all %}
-        <a class="recs-more" href="{{ show.get_absolute_url }}">Show fewer</a>
-        {% elif total_recommendations > recommendations|length %}
-        <a class="recs-more" href="?all=1">See all {{ total_recommendations }} →</a>
-        {% endif %}
+        <span class="recs-steps">
+            {% if recommendation_step > 3 %}<a class="recs-more" href="{{ show.get_absolute_url }}">Show fewer</a>{% endif %}
+            {% if next_recommendation_step %}<a class="recs-more" href="?show={{ next_recommendation_step }}">See {{ next_recommendation_step }} →</a>{% endif %}
+        </span>
     </div>
 
     {% for rec in recommendations %}

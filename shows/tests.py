@@ -1978,63 +1978,108 @@ class GenreOrderingTests(TestCase):
         self.assertEqual(self._order(self.client.get(reverse("shows:index")))[-1], "Best")
 
 
-class RecommendationCountTests(TestCase):
-    """The show page caps its list, and can still be asked for all of it.
+class RecommendationLadderTests(TestCase):
+    """The show page opens at three and climbs 3 -> 5 -> 7 -> 9 -> 12.
 
-    Capping at DETAIL_RECOMMENDATION_LIMIT (#16, item 6) would otherwise strand
-    the tail of a stored ranking: nothing else in the product links to the full
-    list, and the one view that renders it is orphaned and unstyled.
+    The rungs are Patricio's numbers, from the Scottish Rite. Three is the
+    opening offer because the job of the section is one good next thing to
+    watch, not a list to work through. The ladder tops out at 12 because that
+    is what ADR-07 stores, so a reader who climbs every rung is never quietly
+    denied the last few -- the hole that capping the page opened in the first
+    place (#16, item 6).
     """
 
     @classmethod
     def setUpTestData(cls):
-        cls.source = Show.objects.create(
-            tmdb_id=1, name="Source", number_of_episodes=10
-        )
-        person = Person.objects.create(tmdb_id=1, name="Shared Lead")
-        CastMember.objects.create(
-            show=cls.source, person=person, order=0, character="Lead",
-            episode_count=10,
-        )
-        for i in range(10):
-            s = Show.objects.create(
-                tmdb_id=100 + i, name=f"Candidate {i}", number_of_episodes=10
+        lead = Person.objects.create(tmdb_id=1, name="Shared Lead")
+        second = Person.objects.create(tmdb_id=2, name="Second Lead")
+
+        def show(tmdb_id, name):
+            return Show.objects.create(
+                tmdb_id=tmdb_id, name=name, number_of_episodes=10
             )
+
+        def cast(s, person):
             CastMember.objects.create(
                 show=s, person=person, order=0, character="Lead", episode_count=10
             )
+
+        # Fourteen candidates, so the stored ranking fills ADR-07's 12 and the
+        # top of the ladder is a real ceiling rather than an accident of a
+        # short list.
+        cls.source = show(1, "Source")
+        cast(cls.source, lead)
+        cls.candidates = []
+        for i in range(14):
+            c = show(100 + i, f"Candidate {i:02d}")
+            cast(c, lead)
+            cls.candidates.append(c)
+
+        # Four connections: more than the opening step, fewer than the next.
+        cls.few = show(2, "Few")
+        cast(cls.few, second)
+        for c in cls.candidates[:4]:
+            cast(c, second)
+
+        cls.lonely = show(3, "Lonely")
         call_command("rebuild_similar_shows", stdout=StringIO())
-        cls.small = Show.objects.create(
-            tmdb_id=900, name="Lonely", number_of_episodes=10
-        )
 
-    def test_the_page_offers_a_route_to_the_ones_it_cut(self):
+    def _count(self, resp):
+        return len(resp.context["recommendations"])
+
+    def test_the_page_opens_at_three(self):
         resp = self.client.get(self.source.get_absolute_url())
-        total = resp.context["total_recommendations"]
-        self.assertGreater(total, DETAIL_RECOMMENDATION_LIMIT)
-        self.assertContains(resp, f"See all {total}")
+        self.assertEqual(self._count(resp), 3)
+        self.assertEqual(resp.context["recommendation_step"], 3)
 
-    def test_asking_for_all_of_them_returns_all_of_them(self):
-        resp = self.client.get(self.source.get_absolute_url(), {"all": "1"})
-        self.assertEqual(
-            len(resp.context["recommendations"]), resp.context["total_recommendations"]
-        )
-        self.assertTrue(resp.context["showing_all"])
+    def test_each_rung_offers_the_next(self):
+        for asked, expect_next in ((3, 5), (5, 7), (7, 9), (9, 12)):
+            resp = self.client.get(
+                self.source.get_absolute_url(), {"show": str(asked)}
+            )
+            self.assertEqual(self._count(resp), asked, asked)
+            self.assertEqual(
+                resp.context["next_recommendation_step"], expect_next, asked
+            )
+            self.assertContains(resp, f"See {expect_next}")
+
+    def test_the_top_of_the_ladder_is_everything_stored(self):
+        resp = self.client.get(self.source.get_absolute_url(), {"show": "12"})
+        self.assertEqual(self._count(resp), 12)
+        self.assertEqual(len(stored_similar(self.source)), 12)
+        self.assertIsNone(resp.context["next_recommendation_step"])
+
+    def test_a_step_off_the_ladder_falls_back_to_the_opening(self):
+        # The value comes off the URL, so it is checked against the ladder
+        # rather than trusted.
+        for junk in ("4", "13", "0", "-1", "abc", ""):
+            resp = self.client.get(self.source.get_absolute_url(), {"show": junk})
+            self.assertEqual(self._count(resp), 3, junk)
+
+    def test_a_show_with_four_connections_stops_at_four(self):
+        resp = self.client.get(self.few.get_absolute_url())
+        self.assertEqual(self._count(resp), 3)
+        self.assertEqual(resp.context["next_recommendation_step"], 5)
+        resp = self.client.get(self.few.get_absolute_url(), {"show": "5"})
+        self.assertEqual(self._count(resp), 4)
+        self.assertIsNone(resp.context["next_recommendation_step"])
+
+    def test_a_show_with_nothing_to_show_offers_no_rung(self):
+        resp = self.client.get(self.lonely.get_absolute_url())
+        self.assertEqual(self._count(resp), 0)
+        self.assertIsNone(resp.context["next_recommendation_step"])
+        self.assertNotContains(resp, "See 5")
+
+    def test_climbing_is_not_remembered(self):
+        # ?show=N describes this request, not a setting kept about a person.
+        # Leaving the URL leaves the expanded view behind (#9).
+        self.client.get(self.source.get_absolute_url(), {"show": "12"})
+        resp = self.client.get(self.source.get_absolute_url())
+        self.assertEqual(self._count(resp), 3)
+
+    def test_an_expanded_page_offers_the_way_back(self):
+        resp = self.client.get(self.source.get_absolute_url(), {"show": "7"})
         self.assertContains(resp, "Show fewer")
-
-    def test_the_expanded_view_is_not_remembered(self):
-        # ?all=1 is a request for this page, not a setting. Leaving the URL
-        # leaves the state (#9).
-        self.client.get(self.source.get_absolute_url(), {"all": "1"})
-        resp = self.client.get(self.source.get_absolute_url())
-        self.assertFalse(resp.context["showing_all"])
-        self.assertEqual(
-            len(resp.context["recommendations"]), DETAIL_RECOMMENDATION_LIMIT
+        self.assertNotContains(
+            self.client.get(self.source.get_absolute_url()), "Show fewer"
         )
-
-    def test_a_show_with_few_connections_offers_no_link(self):
-        resp = self.client.get(self.small.get_absolute_url())
-        self.assertLessEqual(
-            resp.context["total_recommendations"], DETAIL_RECOMMENDATION_LIMIT
-        )
-        self.assertNotContains(resp, "See all")
