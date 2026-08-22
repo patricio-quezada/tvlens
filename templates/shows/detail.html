@@ -25,6 +25,7 @@
         --accent-soft: rgba(232, 155, 45, 0.12);
         --accent-glow: rgba(232, 155, 45, 0.35);
         --rating: #e89b2d;
+        --star-preview: #9a6822;
         font-family: 'DM Sans', sans-serif;
         background: var(--bg);
     }
@@ -214,6 +215,15 @@
     .rate-panel {
         margin-top: 1.75rem; padding-top: 1.5rem;
         border-top: 1px solid var(--border); max-width: 62ch;
+        /* rate() redirects to #rate so the POST does not dump you at the top of
+           the page (#18). Landing the panel flush against the viewport top is
+           its own problem: the panel is short, so the rest of the screen fills
+           with "More shows like this" and it reads as having been thrown into
+           the recommendations. This sits it a third of the way down instead,
+           with the show above it and the recs below, which is roughly where it
+           was when you clicked. Browsers clamp when the panel is nearer the top
+           than this, so a short page simply does not scroll. */
+        scroll-margin-top: 30vh;
     }
     .rate-panel .rate-heading {
         font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.1em;
@@ -222,49 +232,87 @@
     }
     .rate-row { display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap; }
 
-    /* Pure-CSS half-star widget: ten radios, one per half-step, laid out
-       right-to-left (row-reverse) so a plain sibling selector can light "this
-       star and every lower one". Each half label is 0.5em wide and pulled over
-       the left half of the full star to its right, so clicking the left half of
-       a star picks the .5 value and the right half the .0 value. No JS anywhere
-       in TVLens: pick a star, then Save (a plain form POST, like login/register).
-       The three fill rules read: persisted rating is amber; hovering the widget
-       clears that amber; the hovered star and every lower one preview in glow. */
+    /* Pure-CSS half-star widget: ten submit buttons, one per half-step, laid
+       out right-to-left (row-reverse) so a plain sibling selector can light
+       "this star and every lower one". Each half button is 0.5em wide and pulled
+       over the left half of the full star to its right, so clicking the left
+       half of a star picks the .5 value and the right half the .0 value.
+
+       The stars ARE the submit (#18). Every button carries name="score", so a
+       click POSTs that score straight to rate() -- no radio group, no separate
+       Save step. With no :checked to select on, the persisted fill starts from
+       a server-rendered `chosen` class instead, and the same sibling selector
+       does the rest.
+
+       The widget still works with JavaScript off, which is the whole point of
+       building it this way: ADR-10 layers a script on top that POSTs the same
+       form over fetch so the page never navigates, and every failure path in it
+       falls back to this plain submit.
+
+       The glyph is pinned to a symbol font. DM Sans carries no U+2605, so the
+       star used to fall through to whatever fontconfig happened to pick -- a CJK
+       face on this machine, Apple Symbols on an iPhone -- while the old rule
+       clipped ::before to a flat 1em with overflow:hidden. Any face drawing a
+       star wider than 1em got its right edge sheared off, and the shear differed
+       per platform: #12's "stars do not fully fill". Full stars are no longer
+       clipped at all, and the half is cut with clip-path at 50% of the glyph's
+       own box, so a half stays a true half whichever face draws it. */
     .star-rating {
         display: inline-flex; flex-direction: row-reverse;
         justify-content: flex-end; border: 0; padding: 0; margin: 0;
         font-size: 2rem; line-height: 1;
     }
-    .star-rating input {
-        position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden;
-    }
-    .star-rating label {
+    .star-rating button {
         position: relative; width: 1em; height: 1em;
+        background: none; border: 0; padding: 0; margin: 0; font: inherit;
         color: var(--text-tertiary); cursor: pointer;
     }
-    .star-rating label::before {
+    .star-rating button::before {
         content: '★'; position: absolute; left: 0; top: 0;
-        overflow: hidden; transition: color 0.15s ease;
+        font-family: 'Noto Sans Symbols 2', 'Adwaita Sans', 'Apple Symbols',
+                     'Segoe UI Symbol', sans-serif;
+        transition: color 0.15s ease;
     }
-    .star-rating label.full::before { width: 1em; }
-    .star-rating label.half { width: 0.5em; margin-right: -0.5em; z-index: 1; }
-    .star-rating label.half::before { width: 0.5em; }
+    .star-rating button.half { width: 0.5em; margin-right: -0.5em; z-index: 1; }
+    .star-rating button.half::before { clip-path: inset(0 50% 0 0); }
 
-    .star-rating input:checked ~ label { color: var(--accent); }
-    .star-rating:hover input:checked ~ label { color: var(--text-tertiary); }
-    .star-rating:hover > label:hover,
-    .star-rating:hover > label:hover ~ label { color: var(--accent-glow); }
-    .star-rating input:focus-visible + label { outline: 2px solid var(--accent); outline-offset: 2px; }
-
-    .rate-save {
-        font-family: 'DM Sans', sans-serif; font-size: 0.82rem; letter-spacing: 0.02em;
-        padding: 0.5rem 1.1rem; background: var(--accent); color: #08080a;
-        border: 0; border-radius: 6px; cursor: pointer; font-weight: 500;
+    /* The saved rating is amber and stays amber. The preview is confined to
+       devices with a real pointer: :hover sticks after a tap on a touchscreen,
+       so the old unguarded rules left a phone parked in the preview state --
+       saved score wiped to grey, preview drawn at 35% alpha, which over this
+       background composites to #563b16, a shade off the empty star's #4a463f.
+       That is #12's "shows only faintly ... worse on mobile". The preview is now
+       a solid colour, and a touch device never enters that state at all. */
+    .star-rating .chosen,
+    .star-rating .chosen ~ button { color: var(--accent); }
+    @media (hover: hover) and (pointer: fine) {
+        .star-rating:hover .chosen,
+        .star-rating:hover .chosen ~ button { color: var(--text-tertiary); }
+        .star-rating:hover > button:hover,
+        .star-rating:hover > button:hover ~ button { color: var(--star-preview); }
     }
-    .rate-save:hover { filter: brightness(1.08); }
+    .star-rating button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    /* MovieLens-style: the saved score reads at full size next to the stars,
+       replacing the per-star title tooltip (#12's "hover box"), which no
+       touchscreen could summon anyway. */
+    .your-score {
+        display: inline-flex; flex-direction: column; gap: 0.15rem;
+        font-size: 1.35rem; font-weight: 500; color: var(--accent); line-height: 1.1;
+    }
+    .your-score .score-label {
+        font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase;
+        color: var(--text-secondary); font-weight: 400;
+    }
+    .your-score.unrated { font-size: 1rem; color: var(--text-secondary); }
+
+    .sr-only {
+        position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+        overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
+    }
+
     .rate-meta { font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.9rem; }
     .rate-meta .avg-score { color: var(--rating); font-weight: 500; }
-    .rate-meta .you { color: var(--accent); }
     .rate-login { font-size: 0.92rem; color: var(--text-secondary); }
     .rate-login a { color: var(--accent); }
 
@@ -302,7 +350,7 @@
                 {% for net in show.networks.all %}{% if not forloop.first %}<span class="dot">·</span>{% endif %}<span class="network">{{ net.name }}</span>{% endfor %}
                 {% if show.networks.all and show.number_of_seasons %}<span class="dot">·</span>{% endif %}
                 {% if show.number_of_seasons %}<span>{{ show.number_of_seasons }} season{{ show.number_of_seasons|pluralize }}, {{ show.number_of_episodes }} episode{{ show.number_of_episodes|pluralize }}</span>{% endif %}
-                {% if show.vote_count %}<span class="dot">·</span><span class="rating">★ {{ show.vote_average|floatformat:1 }}</span><span>from {{ show.vote_count|intcomma }} votes</span>{% endif %}
+                {% if show.vote_count %}<span class="dot">·</span><span class="rating">★ {{ show.tmdb_score_5|floatformat:1 }}</span><span>from {{ show.vote_count|intcomma }} votes</span>{% endif %}
                 {% if show.status %}<span class="dot">·</span><span class="status">{% if show.status == 'Returning Series' or show.status == 'In Production' %}<span class="dot-live"></span>{% endif %}{{ show.get_status_display }}</span>{% endif %}
             </div>
 
@@ -314,23 +362,19 @@
 
             {% if show.overview %}<p class="hero-overview">{{ show.overview }}</p>{% endif %}
 
-            <section class="rate-panel">
+            <section class="rate-panel" id="rate">
                 <div class="rate-heading">Rate this show</div>
                 {% if user.is_authenticated %}
-                <form class="rate-row" method="post" action="{% url 'shows:rate' show.slug %}">
+                <form class="rate-row" method="post" action="{% url 'shows:rate' show.slug %}" data-rate>
                     {% csrf_token %}
-                    <fieldset class="star-rating" aria-label="Your rating, half a star to five stars">
+                    <div class="star-rating" role="group" aria-label="Your rating, half a star to five stars">
                         {% for step in star_steps %}
-                        <input type="radio" name="score" value="{{ step.value }}" id="star-{{ forloop.counter }}"{% if step.checked %} checked{% endif %}>
-                        <label class="{{ step.css_class }}" for="star-{{ forloop.counter }}" title="{{ step.value|floatformat:1 }} stars"></label>
+                        <button type="submit" name="score" value="{{ step.value }}" class="{{ step.css_class }}{% if step.chosen %} chosen{% endif %}"><span class="sr-only">Rate {{ step.value|floatformat:1 }} stars</span></button>
                         {% endfor %}
-                    </fieldset>
-                    <button class="rate-save" type="submit">Save</button>
+                    </div>
+                    {% if user_rating %}<span class="your-score" data-your-score><span class="score-label">Your rating</span>★ {{ user_rating|floatformat:1 }}</span>{% else %}<span class="your-score unrated" data-your-score><span class="score-label">Your rating</span>Not rated yet</span>{% endif %}
                 </form>
-                <p class="rate-meta">
-                    {% if average_rating %}<span class="avg-score">★ {{ average_rating|floatformat:1 }}</span> average from {{ rating_count }} rating{{ rating_count|pluralize }} on TVLens.{% else %}Not yet rated on TVLens. Be the first.{% endif %}
-                    {% if user_rating %}<span class="you">Your rating: {{ user_rating|floatformat:1 }}.</span>{% endif %}
-                </p>
+                <p class="rate-meta" data-rate-meta>{% include "shows/_rate_meta.html" %}</p>
                 {% else %}
                 <p class="rate-login"><a href="{% url 'login' %}?next={{ request.path }}">Log in</a> to rate this show in half-stars.{% if average_rating %} <span class="avg-score">★ {{ average_rating|floatformat:1 }}</span> average from {{ rating_count }} rating{{ rating_count|pluralize }}.{% endif %}</p>
                 {% endif %}
@@ -374,4 +418,68 @@
     <p class="recs-empty">Nothing shares a person with this one yet.</p>
     {% endfor %}
 </section>
+
+{% if user.is_authenticated %}
+<script>
+/* The only script in TVLens, and it is optional (ADR-10).
+   Without it the stars are ten submit buttons and a plain POST-redirect, which
+   saves the rating and reloads the page. With it the same POST goes out over
+   fetch, nothing navigates, and the scroll position is therefore never lost --
+   there is no position to restore because the page never moved. Any failure
+   falls back to the plain submit, so the worst case is the old behaviour. */
+(function () {
+    var form = document.querySelector('[data-rate]');
+    if (!form || !window.fetch || !window.FormData) { return; }
+
+    var stars = form.querySelector('.star-rating');
+    var score = form.querySelector('[data-your-score]');
+    var meta = document.querySelector('[data-rate-meta]');
+
+    function fallback(button) {
+        /* form.submit() does not carry a submit button's own name and value,
+           so the score has to be put back by hand before giving up. */
+        var hidden = document.createElement('input');
+        hidden.type = 'hidden';
+        hidden.name = 'score';
+        hidden.value = button.value;
+        form.appendChild(hidden);
+        form.submit();
+    }
+
+    form.addEventListener('click', function (event) {
+        var button = event.target.closest && event.target.closest('button[name="score"]');
+        if (!button) { return; }
+        event.preventDefault();
+
+        var data = new FormData(form);
+        data.set('score', button.value);
+
+        fetch(form.action, {
+            method: 'POST',
+            body: data,
+            credentials: 'same-origin',
+            headers: { 'X-Requested-With': 'fetch' }
+        }).then(function (response) {
+            if (!response.ok) { throw new Error(response.status); }
+            return response.json();
+        }).then(function (state) {
+            Array.prototype.forEach.call(
+                stars.querySelectorAll('button'),
+                function (other) { other.classList.remove('chosen'); }
+            );
+            button.classList.add('chosen');
+            if (score) {
+                score.classList.remove('unrated');
+                score.innerHTML =
+                    '<span class="score-label">Your rating</span>\u2605 ' +
+                    state.score.toFixed(1);
+            }
+            if (meta) { meta.innerHTML = state.meta_html; }
+        }).catch(function () {
+            fallback(button);
+        });
+    });
+})();
+</script>
+{% endif %}
 {% endblock %}

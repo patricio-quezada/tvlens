@@ -1,5 +1,8 @@
 <section class="row">
-    <h2 class="row-title">{{ title }}</h2>
+    <div class="row-head">
+        <h2 class="row-title">{{ title }}</h2>
+        {% if subtitle %}<p class="row-subtitle">{{ subtitle }}</p>{% endif %}
+    </div>
     <div class="row-empty">
         <p>{{ message }}</p>
         {% if needed %}<p class="row-progress">{{ have }} of {{ needed }} logged</p>{% endif %}

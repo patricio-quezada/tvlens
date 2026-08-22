@@ -165,6 +165,26 @@ class Show(models.Model):
         return ""
 
     @property
+    def tmdb_score_5(self):
+        """TMDb's community score on TVLens's own 0.5-5 scale.
+
+        TMDb rates 0-10 and TVLens rates 0.5-5 in half steps. Rendering both
+        behind the same star put an 8.4 next to a user's 4.5 on one page, which
+        reads as dislike rather than as two scales (#19). Nothing displays
+        vote_average raw any more.
+
+        This is not a new conversion: personalization.top_picks already divides
+        vote_average by 2 for its cold-start baseline, so the repo had already
+        settled what a TMDb point is worth in TVLens stars. This makes that
+        conversion visible instead of leaving it buried in the ranking.
+
+        None when nothing has voted, which the templates render as a dash.
+        """
+        if not self.vote_count:
+            return None
+        return self.vote_average / 2
+
+    @property
     def average_rating(self):
         avg = self.ratings.aggregate(models.Avg("score"))["score__avg"]
         return round(avg, 1) if avg else None

@@ -1,0 +1,1 @@
+{% if average_rating %}<span class="avg-score">★ {{ average_rating|floatformat:1 }}</span> average from {{ rating_count }} rating{{ rating_count|pluralize }} on TVLens.{% else %}Not yet rated on TVLens. Be the first.{% endif %}
