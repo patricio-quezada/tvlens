@@ -1,10 +1,10 @@
 # 1. Exclude casting roles from crew matching
 
 ## Context
-When we looked at the data model, we found that casting directors, the people a studio
-hires to pick actors, were being counted by the recommendation engine as a reason two
-shows are similar. They should not be. A casting office works across many of a studio's
-shows, so two shows can share the same casting director without being anything alike.
+When we looked at the data model, we found the recommendation engine counting casting
+directors, the people a studio hires to pick actors, as a reason two shows are similar. They
+should not be. A casting office works across many of a studio's shows, so two shows can share
+the same casting director without being anything alike.
 
 For example, The Boys and Grey's Anatomy came back as similar because they shared four
 crew members, and all four were casting directors from the same office: a superhero

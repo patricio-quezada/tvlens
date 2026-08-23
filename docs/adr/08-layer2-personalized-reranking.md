@@ -24,19 +24,19 @@ what you have not seen; this holds no matter the score, a 1-star rating is still
 show. Watched on its own, with no rating, is a weaker, unsigned positive. These are the only
 inputs. We never infer taste from something the user did not deliberately do.
 
-**Personalization re-ranks the existing list, it does not run a second engine.** Layer 1
-stays exactly as it is: the global, materialized list of candidate shows. Layer 2 takes that
-list and re-orders everything in it to fit the user, rather than sending the request through
-a separate engine that scores every show from scratch. We nudge the order of a list that is
-already computed and stored; we never recompute the graph per user. This mirrors the split
-from ADR-07: what is the same for everyone is stored once, and what depends on the viewer is
-computed live over a handful of rows.
+**Personalization re-ranks the existing list, it does not run a second engine.** Layer 1 stays
+exactly as it is: the global, materialized list of candidate shows. Layer 2 takes that list and
+re-orders everything in it to fit the user, rather than sending the request through a separate
+engine that scores every show from scratch. We nudge the order of a list that is already
+computed and stored; we never recompute the graph per user. This mirrors the split from ADR-07:
+the store holds what is the same for everyone once, and the request computes what depends on
+the viewer live over a handful of rows.
 
 **The profile is signed weights over genres and tags.** For each user we keep an affinity
 number per genre and per tag. When a user rates a show, that show's genres and tags move the
 user's weights by a *signed* amount: a high rating pushes them up, a low rating pushes them
 down. A 1-star rating is information, not noise, it says "less of this", so it lowers those
-weights rather than being thrown away. A candidate show's Layer-2 score is then how well its
+weights rather than throwing them away. A candidate show's Layer-2 score is then how well its
 genres and tags line up with the user's weights.
 
 **Layer 1 owns people; Layer 2 owns genres and tags.** Cast and crew already drive Layer 1's

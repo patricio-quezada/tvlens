@@ -38,8 +38,8 @@ the candidate-side estimate I can still measure, so I kept the middle step.
 ## After Action Review
 For someone using TVLens, a brand new or barely-recorded show still shows a sensible list
 of similar shows instead of a blank space or a popularity chart in disguise. The list is
-honest about how sure it is: a full match, an estimate, or just a quality rating. Each of
-the three modes is locked in by tests, so a later change cannot quietly turn the estimate
-back into popularity.
+honest about how sure it is: a full match, an estimate, or just a quality rating. Tests
+lock each of the three modes in, so a later change cannot quietly turn the estimate back
+into popularity.
 
 Extends [ADR-04](04-episode-weighted-people-recommender.md).

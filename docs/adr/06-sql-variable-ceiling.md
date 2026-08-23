@@ -40,16 +40,16 @@ extra round trip to the database are gone, which is leaner than before. An empty
 returns no rows, so a show with no cast (or no qualifying crew) still yields an empty
 result, exactly as the old early return did.
 
-**People: keep the list, but feed it in safe-sized batches.** `similar_by_people` is
-different. It weights every shared person by episode share, so it needs each person's
-episode count in Python to compute the score. A subquery cannot hand those counts back for
-per-person arithmetic, so the list has to be materialized. Here the fix is to *chunk* it:
-split the person ids into batches of `SQLITE_MAX_VARS_SAFE` (900, comfortably under the
-oldest 999 cap) and run the candidate queries once per batch, folding each batch's rows
-into the same running totals. Because the fold takes each person's best episode count, the
-accumulated result across batches is identical to one unchunked query. The scoring, the
-fallback ladder ([ADR-05](05-no-signal-fallback-ladder.md)), and every recommendation
-result are untouched. Only the number of variables per query changed.
+**People: keep the list, but feed it in safe-sized batches.** `similar_by_people` is different.
+It weights every shared person by episode share, so it needs each person's episode count in
+Python to compute the score. A subquery cannot hand those counts back for per-person
+arithmetic, so the code has to materialize the list. Here the fix is to *chunk* it: split the
+person ids into batches of `SQLITE_MAX_VARS_SAFE` (900, comfortably under the oldest 999 cap)
+and run the candidate queries once per batch, folding each batch's rows into the same running
+totals. Because the fold takes each person's best episode count, the accumulated result across
+batches is identical to one unchunked query. The scoring, the fallback ladder ([ADR-05](05-no-
+signal-fallback-ladder.md)), and every recommendation result are untouched. Only the number of
+variables per query changed.
 
 I considered a third option from the issue: pin a modern SQLite version and document the
 ceiling. I rejected it as a non-fix. It moves the wall from 999 to 32,766 without removing
