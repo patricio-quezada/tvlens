@@ -17,11 +17,11 @@ The home page has three rows. Top Picks is the signed-in user's own rated shows 
 lift over a global baseline ([#15](https://github.com/patricio-quezada/tvlens/issues/15)).
 Recently added is the catalog. Side Quests was a stub: it rendered only for signed-in users,
 it was always empty, and its copy promised it would "unlock once you've rated a handful of
-shows". Patricio's demo note
+shows". My demo note
 ([#10](https://github.com/patricio-quezada/tvlens/issues/10)) was blunt about that: the row
 should load even for a user who has rated nothing.
 
-What the row is *for* is the harder half. In Patricio's words, Side Quests is "shows on the
+What the row is *for* is the harder half. As I put it at the time, Side Quests is "shows on the
 fringes of the recommender system, if you want to be spontaneous but stay within a taste
 profile. The best analogy is ordering something at a restaurant that you are unsure of but
 want to try anyways." So a pick has to be plausibly likeable and clearly not something you
@@ -53,19 +53,18 @@ That is the thing this project keeps refusing (ADR-05, ADR-07, ADR-08): not beca
 by popularity, it did not, but because a single list served to everyone is a chart whatever
 it is sorted by.
 
-**"The catalog's strongest cross-genre edges" is not the fringe.** Better Call Saul to The
-Boys scores 1.865, which is inside the top 10 percent of the whole graph. Unexpected in
+**"The catalog's strongest cross-genre edges" is not the fringe.** The strongest of them scores inside the top 10 percent of the whole graph. Unexpected in
 category, but the opposite of peripheral. Sorting the cross-genre subset by strength finds
 the loudest edges that happen to cross a line, not the quiet ones.
 
 This also overturns the literal ask in #10, "they should load even if the user has not rated
-any shows". Deliberately, and Patricio's call. Patricio wrote #10 during a demo when the row was an empty stub with no definition; once the definition is "surprising relative to what you
+any shows". Deliberately, and my own call. I wrote #10 during a demo when the row was an empty stub with no definition; once the definition is "surprising relative to what you
 have demonstrated you like", loading it for a user who has demonstrated nothing is not a
 feature, it is a contradiction. The row is now gated, and the page says so in as many words.
 
 ### How it changed again: the row was the recommendation row wearing a different title
 The first amendment fixed *who* the row is for. It left the ordering untouched, and
-with the row on the page that turned out to be the larger problem. Patricio, looking at his
+with the row on the page that turned out to be the larger problem. Looking at my
 own account:
 
 > side quests seem to be showing the top recommendations of the three shows I have rated. Is
@@ -126,25 +125,6 @@ Crime-tagged show score as fully novel, and a seed whose neighbourhood is one cl
 most of the row with that cluster. Genre affinity has more resolution than has-genre /
 has-not, and Layer 2 already keeps a signed number per genre.
 
-#### Alternatives considered when the ranking changed
-**Normalize strength against the strongest edge in the user's own pool.** Scale-free and
-tempting, but it makes a pick's score depend on which *other* shows happened to be in the pool,
-so the same show scores differently for two users with the same edge to it. `log1p` is a fixed
-function of the edge and nothing else.
-
-**Divide by the seed count outright rather than its square root.** A plain reciprocal costs a
-show reached by three seeds two thirds of its score, which disqualifies rather than
-discounts. Being reached twice should cost something; it should not be fatal.
-
-**Go three or more hops.** Untested and probably not useful at this catalog size, where two
-hops already reach 43 percent of the shows. `SIDE_QUEST_MAX_HOPS` is a named constant so this
-is a measurement away rather than a rewrite, and it belongs with #20.
-
-**Fix the ordering and leave the walk at one hop.** This would have addressed the visible
-symptom, since log compression alone moves Person of Interest off the top. It would not have
-addressed what Patricio actually identified: a row that can only ever re-order the
-recommendation list is not a different row.
-
 ## Decision
 **A side quest is a strong Layer 1 connection, out of a show this user rated highly, that
 lands in genres this user has never rated highly and that few of their favorites point at.** Four parts, in the order the code applies them.
@@ -164,8 +144,7 @@ the unlock instruction would be a dead end.
 **The walk: the strong half of each seed's stored list, and then the strong half of the
 lists belonging to what that reached.** Ranks 0 through 5 of the 12 Layer 1 keeps per show
 (ADR-07), followed one hop further out. The rank cap holds at every hop, because a side quest
-has to be a *confident* connection and the weak tail of a list is mostly coincidence, so a
-strange genre found down there is noise wearing a surprise costume (alternative E below). But
+has to be a *confident* connection and the weak tail of a list is mostly coincidence, so a strange genre found down there is noise wearing a surprise costume. But
 one hop is exactly the seed's own recommendation list, so a one-hop row can re-order that pool
 and never leave it. The second hop is what gives distance somewhere to vary. A show the user
 has already watched is never a pick and always a bridge: it is a real connection, not a dead
@@ -233,68 +212,8 @@ percent by construction.
 It is not a chart. Mean Spearman correlation between a row's order and its members'
 popularity rank is 0.156, and against vote_average rank 0.028. Both are noise.
 
-Hand-checked rows on the real catalog, run through the shipped function against a copy of the
-development database:
-
-- Breaking Bad, Better Call Saul, The Sopranos (Crime, Drama) leads with **The Boys**
-  (1.865, all new), then Westworld and The Mandalorian (0.652 each, all new), and only then
-  The Blacklist, whose bigger edge the novelty term discounts for landing back in crime.
-- Friends, The Office, Modern Family (Comedy) leads with **Bones** (0.633, Crime and Drama
-  both new), then The Simpsons, Grey's Anatomy, Castle.
-- Grey's Anatomy, House, Suits (Drama) leads with **Criminal Minds** (1.975 x 0.67), and
-  reaches The Boys and Lucifer further down.
-- Rick and Morty, The Simpsons, Family Guy gets only 4 picks, because that taste already
-  covers five genres including the two biggest, so little of the catalog is new to it. The
-  row is short rather than padded.
-
-### Alternatives, and why they lost
-**A. Keep a cold-start row of the catalog's strongest cross-genre edges.** This is the
-original decision, withdrawn above. It is one list for every visitor and surprising relative
-to nothing.
-
-**B. Require the pick to share NO genre at all with anything the user liked.** The strictest
-reading of "a genre they have no positive history with", and the one that sounds right until you measure it. At 100 shows it does not exist: 67 percent of coherent three-seed users get
-**nothing at all**, the median row is 0 picks, and the few picks that do survive are junk
-edges (median Layer 1 score 0.08, four fifths of them below the store's bottom quartile).
-Drama is the reason, on 66 of 100 shows: like almost anything, and two thirds of the catalog
-is disqualified from being fully novel. Rejected on the data, and named here rather than
-quietly loosened, the same way the strict single-hop reading died at 63/100.
-
-**C. Order by novelty first, edge strength second.** Fills exactly as well as the shipped
-rule, because the gate and not the sort decides who is in the pool, but the top of the row
-falls apart: median edge score of the first six picks drops to 0.29 against 0.88 under
-strength x distance, and 41 percent of them sit below the store's bottom quartile. It
-recreates, in a new place, the failure alternative E already measured.
-
-**D. Walk the whole stored list instead of its strong half.** Median row grows from 6 to 11,
-which is tempting, and the extra cards are the reason not to: positions 10 to 12 have a
-median edge score of 0.195, with 68 percent below the store's bottom quartile. That is a
-longer row of weaker reasons, and a side quest whose only claim is "one bit-part actor was in
-both" cannot be explained to the person looking at it.
-
-**E. A hard minimum edge score instead of a rank cap.** A floor at the store's median (0.439)
-leaves 31 percent of unlocked users with no row at all; even a floor at its bottom quartile
-costs 10 percent. A rank cap does the same job relative to each seed's own list, and it does
-not hardcode a number that will drift the next time the catalog grows.
-
-**F. Score the whole catalog a second time per user and take the middle band.** Rejected on principle before measurement, because it breaks ADR-08 twice over: it is a second engine
-scoring every show from scratch, and at cold start it collapses to the shared quality prior,
-which is one fixed ordering of the whole catalog shown to every visitor.
-
-**G. Random unwatched shows.** Ruled out by intent, and the data agrees: a row of no-reason
-cards cannot be explained, which is the thing ADR-08 says the product is.
-
-**H. The long tail, meaning the lowest-popularity shows.** A popularity chart read from the
-bottom. ADR-05 forbids ranking by popularity in either direction.
-
-**I. The weak tail of every show's own Layer 1 list, ranks 8 and below.** The intuition was
-that "fringe" means "weak edge". Those 313 edges are only 16 percent cross-genre and their
-median score is 0.255 against 1.154 for the top three ranks: the tail is mostly more of the
-same genre, held together by less evidence. Weakness is the wrong axis, and this finding is
-now built in as the rank cap.
-
 ### Tags are not available, and would sharpen this
-Patricio described the surprise as running on "connections and tags". The connections are Layer 1, and the row uses them. The tags are not: `Tag` and `ShowTag` are both empty, 0 rows, so genre
+I described the surprise as running on "connections and tags". The connections are Layer 1, and the row uses them. The tags are not: `Tag` and `ShowTag` are both empty, 0 rows, so genre
 is the only categorical signal the catalog has today. Genre is coarse for this job, as the
 Drama-on-66-shows number shows. Once the ingest lands tags, the same shape works with a finer vocabulary: the novelty share would run over tags as well as genres, which would let
 the row tell "a workplace comedy you have not tried" apart from "a comedy", and would push
@@ -307,7 +226,7 @@ Quests path is explicitly ordered and says so in a comment. Whether that default
 change repo-wide is a separate decision with a wider blast radius and is not settled here.
 
 ## After Action Review
-Pending. Only Patricio can say whether the row does what he asked for, which is that a pick
+Pending. Only using it will say whether the row does what I asked for, which is that a pick
 feels like something you were unsure of but wanted to try. Fill this in after using it against
 the local demo. Four things worth watching:
 
@@ -318,7 +237,7 @@ the local demo. Four things worth watching:
   the callout work (#4, #7) lands.
 - Anonymous visitors currently see no Side Quests section and no copy at all, mirroring Top
   Picks. If the signed-out home page feels empty, the alternative is a sign-up-shaped prompt,
-  which needs Patricio's words rather than an engineer's.
+  which needs my words rather than an engineer's.
 - The gate is 3 seeds. If the row often feels thin at exactly 3, the fix is more seeds rather
   than a looser surprise rule.
 

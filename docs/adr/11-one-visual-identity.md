@@ -10,7 +10,7 @@ TVLens had two looks.
 
 The show detail page was not the odd one out. It was the only page carrying the
 look of `tvlens.org`; every other page still wore the older warm-brown palette built
-around Pantone's Cloud Dancer. Patricio, finding it while verifying
+around Pantone's Cloud Dancer. I found it while verifying
 [#12](https://github.com/patricio-quezada/tvlens/issues/12):
 
 > the homepage for TVLens does not look like the landing page. We made the minor
@@ -61,7 +61,7 @@ widget needed in #12. The favorite-genre pill draws a star too and had the same 
 clipping bug; both now read from one variable.
 
 ### This origin serves the fonts, not Google
-Patricio asked for "a monospaced font or a font that is universal across all devices",
+I asked for "a monospaced font or a font that is universal across all devices",
 and then, asked to choose between the options, said to pick "whatever makes it easier
 for the user". Those two sentences point at different answers, so the reasoning is
 recorded here.
