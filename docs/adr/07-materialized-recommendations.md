@@ -1,17 +1,21 @@
 # 7. Materialize the Layer 1 ranking and serve reads from a table
 
-## Context
-Every show page runs `similar_by_people(show)` to build its "more shows like this" list. That
-function is a pure function of the catalog graph: it reads cast and crew, scores each candidate
-by episode share, and returns a ranked list. The same show yields the same list for everyone,
-and the list only changes when an ingest changes the underlying credits.
+**The shared-people ranking is the same for every visitor and only changes when an ingest
+changes the credits underneath it, so TVLens computes it once into a table and reads from
+there. Ingest owns the refresh, which means the store can never go stale.**
 
-Yet the work happens on every request. Each page load fetches the source show's people, chunks
-them under SQLite's variable ceiling ([ADR-06](06-sql-variable-ceiling.md)), pulls every
-candidate's credits, and scores them all in Python. The scores are correct; the cost is that a
-computation whose answer does not depend on the viewer, and does not change between ingests, is
-redone from scratch for each anonymous visitor. ADR-06 named this as the open follow-up (issue
-#1, problem 2): the pages run the recommenders on every request with no caching.
+## Context
+Open a show page and TVLens works out its "more shows like this" list from scratch. It reads
+every person in the cast and crew, pulls the credits of every show they touched, scores each
+candidate by episode share, and ranks them.
+
+Then the next visitor opens the same page, and it does all of it again.
+
+The list does not depend on who is looking. It only changes when an ingest changes the credits
+underneath it. So every page load after the first was paying full price for an answer TVLens
+already had -- and [ADR-06](06-sql-variable-ceiling.md) had already named it as the open
+follow-up, issue #1, problem 2: the pages run the recommenders on every request with no
+caching.
 
 ## Decision
 Precompute the whole Layer 1 ranking once and store it, then serve reads from the store.
@@ -65,10 +69,13 @@ catalog it writes 1041 edges across 96 sources that have at least one similar sh
 share no one). A full comparison of `stored_similar` against a pre-rebuild snapshot of
 `similar_by_people` matches row for row across all 100 sources, zero mismatches, and Breaking
 Bad's weighted preview is unchanged: Better Call Saul 14.79, The Blacklist 1.09, CSI 0.19 in
-eighth. Tests freeze the invariant: the store equals the live computation for representative
-sources, an edgeless source stores nothing and reads back empty, a non-weighted (estimated)
-mode round-trips, the detail view renders from the stored edges, and a rebuild wipes stale
-edges.
+eighth. Tests freeze the invariant:
+
+- the store equals the live computation for representative sources
+- an edgeless source stores nothing and reads back empty
+- a non-weighted (estimated) mode round-trips
+- the detail view renders from the stored edges
+- a rebuild wipes stale edges
 
 Still open, and out of scope for v1: the rebuild is wholesale. It recomputes every show even
 when an ingest touched a handful, which is fine at catalog scale (a full rebuild is cheap on

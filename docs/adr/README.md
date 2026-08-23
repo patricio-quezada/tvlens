@@ -7,8 +7,14 @@ future engineer reading the code can find the reasoning without leaving the repo
   (`01-...`, `02-...`), so the list reads as the project evolving over time.
 - Only **significant, contested, structural** decisions get an ADR (the ones with real
   alternatives and lasting impact). Not every change. Aim for a handful, not a log.
-- Each record has three parts: **Context**, **Decision**, and an **After Action Review**
-  (did it work, and what it does for the product).
+- Each record opens with a **bottom line up front**: one or two sentences giving the decision
+  and its reason before anything else, so a reader who followed a reference from the code can
+  stop there.
+- Then three parts: **Context**, **Decision**, and an **After Action Review** (did it work, and
+  what it does for the product).
+- Write them to be read. The BLUF serves the reader in a hurry, which frees the body to tell the
+  story properly: open on the moment the problem showed up, keep paragraphs short, and prefer a
+  concrete picture to a precise abstraction.
 - Line-level "why" stays in code comments. Change-level "why" stays in commit messages.
   ADRs are for the decisions those smaller notes assume.
 - Reference an ADR from the code it governs, e.g. `# see docs/adr/04-episode-weighted-people-recommender.md`.
