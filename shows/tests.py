@@ -1935,6 +1935,93 @@ class MyRatingsTests(TestCase):
         self.assertIn("My Ratings", signed_in)
 
 
+class MyRatingsCatalogTests(TestCase):
+    """My Ratings is a catalog, and it no longer shows the lift.
+
+    From the 2026-08-22 demo review: the page "needs to be a grid/catalog view",
+    and "I don't need the '+0.8'. That information is useless to the user."
+
+    The first pass was piping only and said so in a template comment: a bare
+    list, built to prove the data was right. It was, and it looked nothing like
+    the rest of TVLens. The genre page had already answered "how does a shelf of
+    shows look here" (#9), so this page reuses that grid rather than growing a
+    second one.
+
+    The lift is the number Top Picks RANKS by (#15), not one anybody asked to
+    read: the gap between a score the user gave and a baseline they never saw.
+    It stays in the context, because rated_shows() is shared with Top Picks and
+    the ordering there depends on it. It just stops being rendered.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user("viewer", password="pw-viewer-22")
+        cls.drama = Genre.objects.create(tmdb_id=1, name="Drama")
+        # Rated 5.0 against a crowd baseline of 3.0, so the lift is exactly
+        # +2.0 and the old markup would have printed it.
+        cls.loved = Show.objects.create(
+            tmdb_id=1, name="Loved Show", number_of_episodes=10,
+            vote_average=6.0, vote_count=500,
+        )
+        cls.loved.genres.set([cls.drama])
+
+    def _body(self):
+        self.client.force_login(self.user)
+        return self.client.get(reverse("shows:my_ratings")).content.decode()
+
+    def test_the_page_is_a_catalog_grid_not_a_list(self):
+        Rating.objects.create(user=self.user, show=self.loved, score=5.0)
+        body = self._body()
+        self.assertIn('class="grid"', body)
+        # The same partial the genre page includes, so a card is one object
+        # across TVLens (ADR-11) rather than two that drift.
+        self.assertIn('class="card card-link"', body)
+        self.assertNotIn('class="rating-list"', body)
+        # And not the horizontal scroller either: the home page rows are right
+        # for a handful of picks and wrong for "everything I have said" (#9).
+        self.assertNotIn('class="row-scroller"', body)
+
+    def test_the_lift_is_gone_from_the_page(self):
+        Rating.objects.create(user=self.user, show=self.loved, score=5.0)
+        body = self._body()
+        self.assertNotIn("+2.0", body)
+        self.assertNotIn("rating-lift", body)
+        # The crowd's number went with it. The card shows one score per poster
+        # and on this page that is the user's own (#19).
+        self.assertNotIn("crowd", body)
+
+    def test_the_lift_is_still_computed_because_top_picks_needs_it(self):
+        # Removed from the view, not from the model of the page. rated_shows()
+        # is shared, and Top Picks ranks by exactly this number.
+        Rating.objects.create(user=self.user, show=self.loved, score=5.0)
+        self.client.force_login(self.user)
+        show = self.client.get(reverse("shows:my_ratings")).context["shows"][0]
+        self.assertAlmostEqual(show.lift, 2.0)
+
+    def test_each_card_carries_the_users_own_score_in_amber(self):
+        # The one number the page exists to show back. `yours` is the amber
+        # class; without it the poster would be showing TMDb's opinion on the
+        # page about the user's (#19).
+        Rating.objects.create(user=self.user, show=self.loved, score=5.0)
+        body = self._body()
+        self.assertIn('class="poster-rating yours"', body)
+        self.assertIn("★ 5.0", body)
+
+    def test_the_summary_still_counts_and_averages(self):
+        # The header survived the redesign: it is a summary of the user's own
+        # scores, not a comparison against anyone.
+        Rating.objects.create(user=self.user, show=self.loved, score=5.0)
+        self.assertIn("1 show rated, averaging ★ 5.0", self._body())
+
+    def test_the_empty_state_is_still_its_own_copy_not_the_grids(self):
+        # _grid.html says "Nothing here yet." for a genre with no shows. A user
+        # with no ratings needs the route out, so the page keeps its own.
+        body = self._body()
+        self.assertIn("Nothing rated yet", body)
+        self.assertIn("Browse the catalog", body)
+        self.assertNotIn('class="grid"', body)
+
+
 class GenrePageTests(TestCase):
     """The genre page is a catalog, and nothing is ever "selected" (#9).
 
