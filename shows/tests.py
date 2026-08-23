@@ -512,7 +512,7 @@ class ShowDetailViewTests(TestCase):
         self.assertIn("Source Show", body)
         self.assertIn("A tagline.", body)
         self.assertIn("1,234 votes", body)
-        self.assertIn("Ranked by shared cast and crew.", body)
+        self.assertIn("ordered by the people they share with this show", body)
         self.assertIn("Candidate Show", body)
         self.assertIn("Jane Star", body)
         self.assertIn("The Detective", body)
@@ -631,7 +631,7 @@ class StoredSimilarTests(TestCase):
         body = resp.content.decode()
         self.assertIn("Bshow", body)
         self.assertIn("Lead Actor", body)
-        self.assertIn("Ranked by shared cast and crew.", body)
+        self.assertIn("ordered by the people they share with this show", body)
 
     def test_rebuild_is_wholesale_replacing_stale_edges(self):
         # A stale edge left by a prior build must not survive the next rebuild.
@@ -1107,8 +1107,11 @@ class Layer2DetailViewTests(TestCase):
         body = self.client.get(self.source.get_absolute_url()).content.decode()
         # The comedy preference lifts ComedyPick above the DramaPick that Layer 1
         # ranked first, and the page says so.
+        # The order is the evidence. The page used to say "reordered for you"
+        # above the list; that line was removed as noise, so nothing announces
+        # it any more.
         self.assertLess(body.index("ComedyPick"), body.index("DramaPick"))
-        self.assertIn("reordered for fan", body)
+        self.assertNotIn("reordered for", body)
 
 
 class TopPicksTests(TestCase):
@@ -1852,9 +1855,17 @@ class GenrePageTests(TestCase):
         still_none = self.client.get(reverse("shows:index")).context["favorite_genre_ids"]
         self.assertEqual(set(still_none), set())
 
+        # One highly rated show is not enough. A show carries several genres,
+        # so a single rating used to star all of them at once, which is what
+        # made the marker look like a filter left switched on.
         Rating.objects.create(user=self.user, show=self.drama0, score=4.5)
-        now = self.client.get(reverse("shows:index")).context["favorite_genre_ids"]
-        self.assertEqual(set(now), {self.drama.id})
+        one = self.client.get(reverse("shows:index")).context["favorite_genre_ids"]
+        self.assertEqual(set(one), set())
+
+        # A second one in the same genre is evidence, and stars it.
+        Rating.objects.create(user=self.user, show=self.drama1, score=4.5)
+        two = self.client.get(reverse("shows:index")).context["favorite_genre_ids"]
+        self.assertEqual(set(two), {self.drama.id})
 
     def test_the_home_page_says_what_the_star_means(self):
         self.client.force_login(self.user)
@@ -2043,7 +2054,10 @@ class RecommendationLadderTests(TestCase):
             self.assertEqual(
                 resp.context["next_recommendation_step"], expect_next, asked
             )
-            self.assertContains(resp, f"See {expect_next}")
+            # The label stopped naming the number, so check the link climbs
+            # to the right rung rather than checking the wording.
+            self.assertContains(resp, "See more")
+            self.assertContains(resp, f'href="?show={expect_next}"')
 
     def test_the_top_of_the_ladder_is_everything_stored(self):
         resp = self.client.get(self.source.get_absolute_url(), {"show": "12"})
@@ -2066,11 +2080,23 @@ class RecommendationLadderTests(TestCase):
         self.assertEqual(self._count(resp), 4)
         self.assertIsNone(resp.context["next_recommendation_step"])
 
+    @staticmethod
+    def _steps(resp):
+        """Only the rung links.
+
+        The ladder's script builds these same labels client-side, so it names
+        "See more", "Show fewer" and ?show= in the page source. Asserting
+        against the whole body matches the script instead of the markup.
+        """
+        body = resp.content.decode()
+        start = body.index("data-recs-steps")
+        return body[start:body.index("</span>", start)]
+
     def test_a_show_with_nothing_to_show_offers_no_rung(self):
         resp = self.client.get(self.lonely.get_absolute_url())
         self.assertEqual(self._count(resp), 0)
         self.assertIsNone(resp.context["next_recommendation_step"])
-        self.assertNotContains(resp, "See 5")
+        self.assertNotIn("?show=", self._steps(resp))
 
     def test_climbing_is_not_remembered(self):
         # ?show=N describes this request, not a setting kept about a person.
@@ -2081,9 +2107,10 @@ class RecommendationLadderTests(TestCase):
 
     def test_an_expanded_page_offers_the_way_back(self):
         resp = self.client.get(self.source.get_absolute_url(), {"show": "7"})
-        self.assertContains(resp, "Show fewer")
-        self.assertNotContains(
-            self.client.get(self.source.get_absolute_url()), "Show fewer"
+        self.assertIn("Show fewer", self._steps(resp))
+        self.assertNotIn(
+            "Show fewer",
+            self._steps(self.client.get(self.source.get_absolute_url())),
         )
 
 
@@ -2122,11 +2149,11 @@ class TrailerTests(TestCase):
     def test_detail_page_links_out_and_only_when_a_trailer_exists(self):
         bare = Show.objects.create(tmdb_id=99002, name="Bare Show")
         body = self.client.get(bare.get_absolute_url()).content.decode()
-        self.assertNotIn('class="trailer-button"', body)
+        self.assertNotIn('class="trailer-chip"', body)
 
         withtrailer = Show.objects.create(tmdb_id=99003, name="Trailer Show", trailer_key="xyz789")
         body = self.client.get(withtrailer.get_absolute_url()).content.decode()
-        self.assertIn('class="trailer-button"', body)
+        self.assertIn('class="trailer-chip"', body)
         self.assertIn("https://www.youtube.com/watch?v=xyz789", body)
         # No third-party frame until the reader asks for one. The embed URL
         # and the iframe tag both appear in the page, but only as strings

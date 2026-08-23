@@ -78,6 +78,30 @@ def star_steps(user_rating):
     return steps
 
 
+def favorite_genre_ids_for(user, minimum=2):
+    """Genres the user rates highly, with enough evidence to mean it.
+
+    A show carries several genres at once, so one 5-star rating used to star
+    three of them. Game of Thrones alone marked Action & Adventure, Drama and
+    Sci-Fi & Fantasy, which is how a single opinion ended up glowing across
+    every page and reading as a filter left switched on.
+
+    Requiring more than one highly rated show per genre is what makes the
+    marker mean "you like this" instead of "you rated something once".
+    """
+    if not user.is_authenticated:
+        return set()
+    return set(
+        Genre.objects.filter(
+            shows__ratings__user=user,
+            shows__ratings__score__gte=4.0,
+        )
+        .annotate(rated=Count("shows", distinct=True))
+        .filter(rated__gte=minimum)
+        .values_list("id", flat=True)
+    )
+
+
 def index(request):
     base_qs = Show.objects.prefetch_related("genres")
 
@@ -93,14 +117,7 @@ def index(request):
         # A favorite genre is one the user has rated >= 4 stars (the same "high"
         # line Layer 2 personalizes from, ADR-08). The template glows these genre
         # pills and cards so the page shows what it thinks the user likes.
-        favorite_genre_ids = set(
-            Genre.objects.filter(
-                shows__ratings__user=request.user,
-                shows__ratings__score__gte=4.0,
-            )
-            .values_list("id", flat=True)
-            .distinct()
-        )
+        favorite_genre_ids = favorite_genre_ids_for(request.user)
 
     # One show, one row. The exclusion chain runs Top Picks > Side Quests >
     # Recently Added, and that priority is by how PERSONAL a row is, not by
@@ -172,14 +189,7 @@ def genre(request, pk):
     )
     favorite_genre_ids: set = set()
     if request.user.is_authenticated:
-        favorite_genre_ids = set(
-            Genre.objects.filter(
-                shows__ratings__user=request.user,
-                shows__ratings__score__gte=4.0,
-            )
-            .values_list("id", flat=True)
-            .distinct()
-        )
+        favorite_genre_ids = favorite_genre_ids_for(request.user)
     return render(
         request,
         "shows/genre.html",
@@ -242,6 +252,22 @@ def detail(request, slug):
         named, others = name_connections(connections)
         callout = compose_callout(show, candidate, connections, named, others)
         recommendations.append({"show": candidate, "callout": callout})
+
+    # The ladder climbs in place. ?show=N still works on its own, so the link
+    # is a real URL and the page is reachable at any rung without script; the
+    # fetch branch only spares the reader a reload, exactly as the rating
+    # widget does (ADR-10).
+    if request.headers.get("X-Requested-With") == "fetch":
+        return JsonResponse({
+            "step": step,
+            "next_step": next_step,
+            "available": available,
+            "recs_html": render_to_string(
+                "shows/_recs_list.html",
+                {"recommendations": recommendations},
+                request=request,
+            ),
+        })
 
     return render(
         request,

@@ -1,0 +1,31 @@
+{% comment %}
+The recommendation list on its own, so the ladder can swap it in place instead
+of reloading the page. Rendered by detail() both ways: inside the full page,
+and alone into JSON for the fetch branch.
+
+Django's {# #} comment is single-line only. A multi-line one renders as text
+on the page, which is exactly what happened here.
+{% endcomment %}
+    {% for rec in recommendations %}
+    <a class="rec" href="{{ rec.show.get_absolute_url }}">
+        <div class="rec-poster">
+            {% if rec.show.poster_url %}
+            <img src="{{ rec.show.poster_url }}" alt="Poster for {{ rec.show.name }}" loading="lazy">
+            {% else %}
+            <div class="placeholder"></div>
+            {% endif %}
+        </div>
+        <div class="rec-body">
+            <div class="rec-head">
+                <span class="rec-title">{{ rec.show.name }}</span>
+                {% if rec.show.first_air_date %}<span class="rec-year">{{ rec.show.first_air_date.year }}</span>{% endif %}
+                <span class="rec-strength">{{ rec.show.shared_people }} shared {{ rec.show.shared_people|pluralize:"person,people" }}</span>
+            </div>
+            <div class="rec-callout">
+                <p class="callout-prose">{% for seg in rec.callout.segments %}{% if seg.t == 'name' %}<span class="conn-name">{{ seg.v }}</span>{% else %}{{ seg.v }}{% endif %}{% endfor %}</p>
+            </div>
+        </div>
+    </a>
+    {% empty %}
+    <p class="recs-empty">Nothing shares a person with this one yet.</p>
+    {% endfor %}
