@@ -105,12 +105,6 @@
         text-transform: uppercase; font-size: 0.85rem;
         color: var(--accent); white-space: nowrap;
     }
-    .recs-personalized {
-        font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.1em;
-        text-transform: uppercase; font-size: 0.78rem;
-        color: var(--accent); border: 1px solid var(--border);
-        border-radius: 999px; padding: 0.15rem 0.6rem;
-    }
 
     .rec {
         display: grid; grid-template-columns: 92px 1fr; gap: 1.5rem;
@@ -287,20 +281,20 @@
     }
 
     /* ── Trailer ──────────────────────────────────────────────────────────
-       Renders as a plain YouTube link and is upgraded to a modal by script,
-       so it still works with JavaScript off. The iframe is built on click,
-       never at page load, so YouTube sets nothing on readers who do not
-       press play. */
-    .trailer-button {
-        display: inline-flex; align-items: center; gap: 0.5rem;
-        margin: 0 0 1.75rem; padding: 0.5rem 1.05rem;
-        border: 1px solid var(--border); border-radius: 999px;
-        background: var(--surface); color: var(--text-primary);
-        font-size: 0.8rem; letter-spacing: 0.04em; text-decoration: none;
+       Sits in the genre row as one more pill, so it adds nothing to the
+       vertical rhythm. Renders as a plain YouTube link and is upgraded to a
+       modal by script, so it still works with JavaScript off. The iframe is
+       built on click, never at page load, so YouTube sets nothing on readers
+       who do not press play. */
+    .trailer-chip {
+        display: inline-flex; align-items: center; gap: 0.4rem;
+        font-size: 0.72rem; letter-spacing: 0.04em; padding: 0.28rem 0.7rem;
+        border: 1px solid var(--accent-dim); border-radius: 999px;
+        color: var(--accent); white-space: nowrap; text-decoration: none;
         cursor: pointer; transition: border-color 0.2s, color 0.2s;
     }
-    .trailer-button:hover { border-color: var(--accent); color: var(--accent-bright); }
-    .trailer-button .trailer-icon { font-size: 0.7rem; line-height: 1; }
+    .trailer-chip:hover { border-color: var(--accent); color: var(--accent-bright); }
+    .trailer-chip span { font-size: 0.6rem; line-height: 1; }
     .trailer-modal {
         width: min(90vw, 960px); padding: 0; border: 1px solid var(--border);
         border-radius: 12px; background: #000; overflow: hidden;
@@ -314,6 +308,39 @@
         font-size: 1.6rem; line-height: 1; cursor: pointer;
     }
     .trailer-close:hover { opacity: 1; }
+
+    /* ── Why this order ───────────────────────────────────────────────────
+       The ranking used to explain itself in a sentence that sat above every
+       list whether or not anyone wanted it. Now it is one icon, and the
+       explanation is a native popover: no script, Escape closes it, clicking
+       away dismisses it. */
+    .recs-why {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 1.15rem; height: 1.15rem; padding: 0;
+        border: 1px solid var(--border); border-radius: 999px;
+        background: none; color: var(--text-tertiary);
+        font-family: Georgia, serif; font-style: italic; font-size: 0.72rem;
+        line-height: 1; cursor: pointer; transition: border-color 0.2s, color 0.2s;
+    }
+    .recs-why:hover { border-color: var(--accent); color: var(--accent); }
+    .recs-why { anchor-name: --recs-why; margin-left: 0.55rem; vertical-align: middle; }
+    .recs-explainer {
+        max-width: 30rem; padding: 1.1rem 1.25rem;
+        border: 1px solid var(--border); border-radius: 10px;
+        background: var(--surface); color: var(--text-secondary);
+        font-size: 0.86rem; line-height: 1.55;
+        /* A popover lives in the top layer, so ordinary positioning cannot
+           reach it and it lands centred by default. Anchor positioning pins
+           it under the icon that opened it. Browsers without anchor support
+           keep the centred default, which is worse but never broken. */
+        position-anchor: --recs-why;
+        position-area: block-end span-inline-end;
+        margin: 0.45rem 0 0;
+        position-try-fallbacks: flip-block, flip-inline;
+    }
+    .recs-explainer p { margin: 0 0 0.7rem; }
+    .recs-explainer p:last-child { margin-bottom: 0; }
+    .recs-explainer::backdrop { background: rgba(0, 0, 0, 0.5); }
 </style>
 {% endblock %}
 
@@ -342,24 +369,20 @@
                 {% if show.status %}<span class="dot">·</span><span class="status">{% if show.status == 'Returning Series' or show.status == 'In Production' %}<span class="dot-live"></span>{% endif %}{{ show.get_status_display }}</span>{% endif %}
             </div>
 
-            {% if show.genres.all %}
+            {% if show.genres.all or show.trailer_key %}
             <div class="genre-row">
                 {% for g in show.genres.all %}<span class="genre-tag">{{ g.name }}</span>{% endfor %}
+                {% if show.trailer_key %}<a class="trailer-chip" href="{{ show.trailer_url }}" target="_blank" rel="noopener" data-trailer="{{ show.trailer_key }}" title="Watch the trailer" aria-label="Watch the trailer for {{ show.name }}"><span aria-hidden="true">&#9654;</span> Trailer</a>{% endif %}
             </div>
             {% endif %}
-
-            {% if show.overview %}<p class="hero-overview">{{ show.overview }}</p>{% endif %}
-
             {% if show.trailer_key %}
-            <a class="trailer-button" href="{{ show.trailer_url }}" target="_blank" rel="noopener"
-               data-trailer="{{ show.trailer_key }}">
-                <span class="trailer-icon" aria-hidden="true">&#9654;</span> Watch the trailer
-            </a>
             <dialog class="trailer-modal" data-trailer-modal aria-label="Trailer for {{ show.name }}">
                 <button class="trailer-close" type="button" data-trailer-close aria-label="Close trailer">&times;</button>
                 <div class="trailer-frame"></div>
             </dialog>
             {% endif %}
+
+            {% if show.overview %}<p class="hero-overview">{{ show.overview }}</p>{% endif %}
 
             <section class="rate-panel" id="rate">
                 <div class="rate-heading">Rate this show</div>
@@ -384,42 +407,30 @@
 
 <section class="recs">
     <div class="recs-head">
-        <h2 class="section-title">More shows like this</h2>
-        <p class="recs-caption">
-            {% if mode == 'estimated' %}Limited episode data, ranked by an estimate.
-            {% elif mode == 'rating' %}No shared-crew signal yet, ranked by rating.
-            {% else %}Ranked by shared cast and crew.{% endif %}
-            {% if personalized %}<span class="recs-personalized">reordered for {{ user.username }}</span>{% endif %}
-        </p>
-        <span class="recs-steps">
+        <h2 class="section-title">More shows like this<button class="recs-why" type="button"
+                popovertarget="recs-explainer" title="How this order is decided"
+                aria-label="How this order is decided">i</button></h2>
+        <div class="recs-explainer" id="recs-explainer" popover>
+            {% if mode == 'estimated' %}
+            <p>This show has limited episode data, so the order is an estimate rather than a measured overlap.</p>
+            <p>As the catalog fills in, it will switch to ranking by the people these shows actually share.</p>
+            {% elif mode == 'rating' %}
+            <p>No shared cast or crew turned up between this show and the rest of the catalog yet, so these are ordered by rating instead.</p>
+            <p>That is a weaker signal. It says these are good, not that they are related.</p>
+            {% else %}
+            <p>These are ordered by the people they share with this show, cast and crew who worked on both.</p>
+            <p>More overlap ranks higher. Someone who worked on almost everything counts for less than a rare connection, so a person who links only these two shows is worth more than a prolific one.</p>
+            {% endif %}
+        </div>
+        <span class="recs-steps" data-recs-steps>
             {% if recommendation_step > 3 %}<a class="recs-more" href="{{ show.get_absolute_url }}">Show fewer</a>{% endif %}
-            {% if next_recommendation_step %}<a class="recs-more" href="?show={{ next_recommendation_step }}">See {{ next_recommendation_step }} →</a>{% endif %}
+            {% if next_recommendation_step %}<a class="recs-more" href="?show={{ next_recommendation_step }}">See more →</a>{% endif %}
         </span>
     </div>
 
-    {% for rec in recommendations %}
-    <a class="rec" href="{{ rec.show.get_absolute_url }}">
-        <div class="rec-poster">
-            {% if rec.show.poster_url %}
-            <img src="{{ rec.show.poster_url }}" alt="Poster for {{ rec.show.name }}" loading="lazy">
-            {% else %}
-            <div class="placeholder"></div>
-            {% endif %}
-        </div>
-        <div class="rec-body">
-            <div class="rec-head">
-                <span class="rec-title">{{ rec.show.name }}</span>
-                {% if rec.show.first_air_date %}<span class="rec-year">{{ rec.show.first_air_date.year }}</span>{% endif %}
-                <span class="rec-strength">{{ rec.show.shared_people }} shared {{ rec.show.shared_people|pluralize:"person,people" }}</span>
-            </div>
-            <div class="rec-callout">
-                <p class="callout-prose">{% for seg in rec.callout.segments %}{% if seg.t == 'name' %}<span class="conn-name">{{ seg.v }}</span>{% else %}{{ seg.v }}{% endif %}{% endfor %}</p>
-            </div>
-        </div>
-    </a>
-    {% empty %}
-    <p class="recs-empty">Nothing shares a person with this one yet.</p>
-    {% endfor %}
+    <div data-recs-list>
+        {% include "shows/_recs_list.html" %}
+    </div>
 </section>
 
 {% if user.is_authenticated %}
@@ -496,10 +507,16 @@
 
     link.addEventListener('click', function (event) {
         event.preventDefault();
+        // Error 153 is YouTube refusing to play because the embed could not
+        // prove where it came from. An explicit origin plus a referrer policy
+        // that survives the cross-origin hop is what satisfies it.
         frame.innerHTML =
             '<iframe src="https://www.youtube-nocookie.com/embed/' +
             encodeURIComponent(link.dataset.trailer) +
-            '?autoplay=1&rel=0" title="Trailer" allow="autoplay; fullscreen" allowfullscreen></iframe>';
+            '?autoplay=1&rel=0&playsinline=1&origin=' +
+            encodeURIComponent(window.location.origin) +
+            '" title="Trailer" referrerpolicy="strict-origin-when-cross-origin"' +
+            ' allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe>';
         modal.showModal();
     });
 
@@ -511,4 +528,40 @@
 })();
 </script>
 {% endif %}
+
+<script>
+(function () {
+    // The ladder used to reload the whole page to show two more rows. The
+    // links stay real URLs, so this only removes the reload.
+    var steps = document.querySelector('[data-recs-steps]');
+    var list  = document.querySelector('[data-recs-list]');
+    if (!steps || !list || !window.fetch) { return; }
+
+    function render(data, url) {
+        list.innerHTML = data.recs_html;
+        var html = '';
+        if (data.step > 3) {
+            html += '<a class="recs-more" href="' + location.pathname + '">Show fewer</a>';
+        }
+        if (data.next_step) {
+            html += '<a class="recs-more" href="?show=' + data.next_step + '">See more \u2192</a>';
+        }
+        steps.innerHTML = html;
+        // Keep the address bar honest: the rung is in the URL, so a reload or
+        // a shared link lands on the same view.
+        history.replaceState(null, '', url);
+    }
+
+    steps.addEventListener('click', function (event) {
+        var link = event.target.closest('a.recs-more');
+        if (!link) { return; }
+        event.preventDefault();
+        var url = link.getAttribute('href');
+        fetch(url, { headers: { 'X-Requested-With': 'fetch' } })
+            .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
+            .then(function (data) { render(data, url); })
+            .catch(function () { window.location.href = url; });
+    });
+})();
+</script>
 {% endblock %}
