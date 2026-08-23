@@ -5,7 +5,7 @@ have seen, track what you are watching, and get recommendations for what to watc
 
 I am building it in public to learn engineering and coding, one day at a time, on
 Django and the TMDb API. The site is live at [tvlens.org](https://tvlens.org), and
-[I logged the build for the first 80 days of TVLens](https://patricioquezada.com/80p).
+[I logged the build for the first 80 days of TVLens](https://tvlens.org/80dp/), alongside [the decisions behind it](https://tvlens.org/decisions/).
 
 If you want to understand the why behind certain choices for TVLens, you can
 [browse the ADRs](docs/adr/).
