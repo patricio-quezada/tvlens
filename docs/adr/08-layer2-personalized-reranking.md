@@ -19,8 +19,8 @@ rated nothing, so it must work from zero and improve as ratings arrive.
 Layer 2 is a per-user preference profile that **re-ranks** Layer 1's output.
 
 **The signal is explicit ratings plus watched, and a rating implies watched.** A user rates a
-show 0.5 to 5.0. Submitting a rating also marks that show watched, because you cannot rate what
-you have not seen; this holds no matter the score, a 1-star rating is still a watched show.
+show 0.5 to 5.0. Submitting a rating also marks that show watched, because nobody rates what
+they have not seen; this holds no matter the score, a 1-star rating is still a watched show.
 Watched on its own, with no rating, is a weaker, unsigned positive. These are the only inputs.
 Layer 2 never infers taste from something the user did not deliberately do.
 
@@ -41,10 +41,10 @@ its genres and tags line up with the user's weights.
 
 **Layer 1 owns people; Layer 2 owns genres and tags.** Cast and crew already drive Layer 1's
 shared-people similarity. If Layer 2 also weighted individual people, the same signal would
-count twice and the two layers would fight each other. So the division is clean: shared
-people belong to Layer 1, and a user's genre and tag affinities belong to Layer 2. A
-deliberate "you favor this creator" boost may be added later, but only as an explicit
-decision, never as an accidental second count of the people Layer 1 already uses.
+count twice and the two layers would fight each other. So the division is clean: shared people
+belong to Layer 1, and a user's genre and tag affinities belong to Layer 2. A deliberate
+"favors this creator" boost may arrive later, but only as an explicit decision, never as an
+accidental second count of the people Layer 1 already uses.
 
 **Cold start is a base profile that encodes quality, never popularity.** A new user has no
 ratings, so their profile starts from a base derived from what features correlate with high
