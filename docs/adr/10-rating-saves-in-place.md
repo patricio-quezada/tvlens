@@ -15,7 +15,7 @@ Both were server-rendered and needed no script.
 
 What neither fixed is that the POST is a POST. Rating went out as a plain form submit and came
 back as a redirect, which is a fresh navigation, which always lands at the top of the document.
-Patricio, over three messages:
+What I said about it, over three messages:
 
 > After I click on the rating the entire page reloads. Can we just have the rating lock on the
 > page or is that unnecessary?
@@ -80,7 +80,7 @@ fast the server is.
 **B. Redirect to `#rate`.** Shipped, briefly. The fragment does put the widget on screen, but it
 puts it flush against the *top* of the viewport, and the rating panel is short: heading, stars,
 one line of meta. Everything below it fills the rest of the screen, and what is below it is
-"More shows like this". Patricio read the result as having been thrown into the
+"More shows like this". I read the result as having been thrown into the
 recommendations, which is exactly what it looks like. A fix that relocates a problem is not a
 fix.
 
