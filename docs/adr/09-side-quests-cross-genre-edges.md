@@ -3,13 +3,13 @@
 > **Amended 2026-08-21.** The original decision had two halves. The mechanism, a side
 > quest is a strong Layer 1 edge that crosses a genre line, survives. The cold-start half,
 > where a visitor with no ratings saw the catalog's strongest cross-genre edges, is
-> withdrawn. Section "Amendment" says what changed and why; the Decision below is the
+> withdrawn. The Context below says what changed and why; the Decision is the
 > current rule, not the original one. The file name stays so existing references still resolve.
 >
 > **Amended again 2026-08-22.** The mechanism survives a second time; the *ranking* does not.
 > The one-hop walk made the candidate pool identical to the seeds' own recommendation lists,
 > and multiplying raw edge scores by novelty let the strongest edge in that pool win on
-> strength alone. Section "Second amendment" says what changed and why. The Decision below is
+> strength alone. The Context below says what changed and why. The Decision is
 > the current rule.
 
 ## Context
@@ -40,7 +40,7 @@ materialized Layer 1 store ([ADR-07](07-materialized-recommendations.md)), all o
 on 66 of the 100 shows, ahead of Action & Adventure 37, Crime 35, Sci-Fi & Fantasy 29,
 Comedy 22, Mystery 19 and Animation 16.
 
-## Amendment: surprise needs an expectation to violate
+### How this decision changed: surprise needs an expectation to violate
 The first version of this row shipped with a cold-start path: a visitor with no ratings, or
 no account at all, saw the catalog's strongest cross-genre edges. That path is now removed,
 for two reasons that only became visible with the row on the page.
@@ -63,7 +63,7 @@ any shows". Deliberately, and Patricio's call. Patricio wrote #10 during a demo 
 have demonstrated you like", loading it for a user who has demonstrated nothing is not a
 feature, it is a contradiction. The row is now gated, and the page says so in as many words.
 
-## Second amendment: the row was the recommendation row wearing a different title
+### How it changed again: the row was the recommendation row wearing a different title
 The first amendment fixed *who* the row is for. It left the ordering untouched, and
 with the row on the page that turned out to be the larger problem. Patricio, looking at his
 own account:
@@ -89,7 +89,7 @@ set, Layer 1 scores ran 0.42 to 5.76, about 14x, while novelty is a share and sp
 novelty of 0.25 and sat first purely on a 5.76 edge: the top "surprise" was the top
 recommendation.
 
-### What changed
+#### What changed
 **Strength is log-compressed.** `log1p(score)` puts strength on novelty's order of magnitude,
 which is the only condition under which multiplying them means anything. This is the smallest
 of the three changes and it fixes the symptom that was actually visible.
@@ -104,7 +104,7 @@ SIDE_QUEST_CENTRALITY_EXPONENT`. This is the term that most directly answers "ed
 by our recommendations": a candidate every one of your favorites points at is at the *centre*
 of your taste, and centrality is measurable where peripherality was previously only implied.
 
-### What it did
+#### What it did
 Same user, same three seeds, before and after:
 
 | | Before | After |
@@ -115,7 +115,7 @@ Same user, same three seeds, before and after:
 Three of twelve picks are now shows a recommendation row would never have surfaced, and the
 strongest edge in the pool no longer leads simply because it is the strongest edge.
 
-### What this amendment deliberately does not settle
+#### What this change deliberately does not settle
 I fitted every constant here against a 100-show catalog in which two hops already reach 43
 percent of everything. `SIDE_QUEST_HOP_DECAY = 0.5` is a round number chosen where hop-2
 candidates were plentiful, and whether it is too harsh or too generous is not answerable from
@@ -126,7 +126,7 @@ Crime-tagged show score as fully novel, and a seed whose neighbourhood is one cl
 most of the row with that cluster. Genre affinity has more resolution than has-genre /
 has-not, and Layer 2 already keeps a signed number per genre.
 
-### Alternatives considered for this amendment
+#### Alternatives considered when the ranking changed
 **Normalize strength against the strongest edge in the user's own pool.** Scale-free and
 tempting, but it makes a pick's score depend on which *other* shows happened to be in the pool,
 so the same show scores differently for two users with the same edge to it. `log1p` is a fixed

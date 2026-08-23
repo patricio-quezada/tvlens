@@ -1,18 +1,17 @@
 # 4. Recommend by episode-weighted shared people
 
 ## Context
-We wanted to start building the recommendation algorithm, the part of TVLens that,
+I wanted to start building the recommendation algorithm, the part of TVLens that,
 given one show, suggests others like it. The simplest possible start was to treat each
 person two shows share, an actor or a crew member, as one "connection," and rank shows
 by how many connections they share.
 
-Then we pulled the full per-episode credits from TMDb (its `aggregate_credits` data),
-and that broke the simple version. 84% of the cast entries were for a single episode.
+Then the ingest pulled the full per-episode credits from TMDb (its `aggregate_credits` data), and that broke the simple version. 84% of the cast entries were for a single episode.
 Counting every shared person the same meant two shows looked similar just because they
 had cycled through many of the same one-episode guest actors, which tells you nothing
 about whether the shows are actually alike.
 
-After we ran that ingest, the results were not useful. Counting is not enough. How much
+After that ingest ran, the results were not useful. Counting is not enough. How much
 of a show a person actually made has to matter.
 
 ## Decision
@@ -25,7 +24,7 @@ show; a guest in 1 of 62 scores about 0.02. Using this share instead of a raw ep
 count means the lead of a 6-episode mini-series and the lead of a 62-episode drama both
 score 1.0, so a short show is not penalized just for being short.
 
-A shared person has a share on each of the two shows, so for that person we take the
+A shared person has a share on each of the two shows, so for that person the score takes the
 smaller of the two. If someone starred in one show but only turned up in three episodes
 of another, the link between those shows should count for the weaker side, not the
 stronger one.
@@ -40,10 +39,10 @@ The smaller rules:
   more than all of a show.
 - **The ingest skips casting directors.** A studio hires a casting director, who then
   works on many unrelated shows at once, so two shows sharing one tells you nothing about
-  whether they are alike. We remove those roles before scoring.
+  whether they are alike. The ingest removes those roles before scoring.
 - **A person credited more than once on a show counts once,** at their highest episode
   count.
-- **We sort by the score but show the plain count of shared people** on the page, so it
+- **The ranking sorts by score and shows the plain count of shared people** on the page, so it
   stays readable while the math does the ranking.
 
 In code, for a source show A and a candidate show B:
@@ -51,7 +50,7 @@ In code, for a source show A and a candidate show B:
     score = sum, over each shared person, of min(share_on_A, share_on_B)
     share = episode_count / number_of_episodes
 
-We considered and passed on a few other approaches:
+I considered and passed on a few other approaches:
 
 - A hard cutoff (only count people above some episode count) creates a cliff, throws away
   thin shows, and hurts short-form content.
@@ -61,7 +60,7 @@ We considered and passed on a few other approaches:
 
 ## After Action Review
 
-**What we wanted:** rankings that reflect how alike two shows really are, not how many
+**What I wanted:** rankings that reflect how alike two shows really are, not how many
 faces they happen to share.
 
 **What happened:** it worked. Weighting moved the results in the right direction. For a
@@ -70,7 +69,7 @@ looked similar because the two share a long list of mostly-minor people drops fa
 96 of 100 shows come back with at least one match, and tests lock the rules in so a later
 change cannot quietly undo them.
 
-**What we would improve:** the code works the score out after pulling the rows from the
+**What I would improve:** the code works the score out after pulling the rows from the
 database, because the per-show share does not fit neatly into a single database
 query. That is fine at 100 shows; at real scale the better answer is a table of
 connections computed ahead of time, which the review below carries as an open item. The weighting also
