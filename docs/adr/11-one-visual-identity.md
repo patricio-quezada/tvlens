@@ -8,16 +8,14 @@ TVLens had two looks.
 | `base.html` `:root` | `#1a1814` brown, `#d4a574` tan | `system-ui` | no | 11 |
 | `detail.html` `body.detail` | `#08080a` near-black, `#e89b2d` amber | Bebas Neue + DM Sans | yes | 1 |
 
-The show detail page was not the odd one out. It was the only page carrying the
-look of `tvlens.org`; every other page still wore the older warm-brown palette built
-around Pantone's Cloud Dancer. I found it while verifying
-[#12](https://github.com/patricio-quezada/tvlens/issues/12):
+The show detail page was not the odd one out. It was the only page carrying the look of
+`tvlens.org`; every other page still wore the older warm-brown palette built around Pantone's
+Cloud Dancer. It surfaced while verifying
+[#12](https://github.com/patricio-quezada/tvlens/issues/12): the show page had been brought in
+line with the landing page and the homepage had not.
 
-> the homepage for TVLens does not look like the landing page. We made the minor
-> adjustments to the tv show page but not the homepage.
-
-The nav is where it showed. `base.html` defines it once, so it changed colour as you walked
-from the homepage into a show — the clearest possible signal that this was two products stapled
+The nav is where it showed. `base.html` defines it once, so it changed colour on the walk from
+the homepage into a show — the clearest possible signal that this was two products stapled
 together.
 
 The mechanism to fix it already existed, and `detail.html` said so in a comment:
@@ -65,10 +63,9 @@ widget needed in #12. The favorite-genre pill draws a star too and had the same 
 clipping bug; both now read from one variable.
 
 ### This origin serves the fonts, not Google
-I asked for "a monospaced font or a font that is universal across all devices",
-and then, asked to choose between the options, said to pick "whatever makes it easier
-for the user". Those two sentences point at different answers, so the reasoning is
-recorded here.
+The ask was for a monospaced font, or one universal across all devices, and then for whichever
+option was easier for the reader. Those two sentences point at different answers, so the
+reasoning is recorded here.
 
 **"Universal" and "identical" are opposites unless the font ships with the site.** A
 system stack is always available and never the same: the same page is SF Mono on a Mac,

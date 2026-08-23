@@ -9,8 +9,8 @@ by how many connections they share.
 Then the ingest pulled the full per-episode credits from TMDb (its `aggregate_credits` data),
 and that broke the simple version. 84% of the cast entries were for a single episode. Counting
 every shared person the same meant two shows looked similar just because they had cycled
-through many of the same one-episode guest actors, which tells you nothing about whether the
-shows are actually alike.
+through many of the same one-episode guest actors, which says nothing about whether the shows
+are actually alike.
 
 After that ingest ran, the results were not useful. Counting is not enough. How much
 of a show a person actually made has to matter.
@@ -39,8 +39,8 @@ The smaller rules:
   episodes than a show actually aired (say 595 on a 594-episode run), and no one is in
   more than all of a show.
 - **The ingest skips casting directors.** A studio hires a casting director, who then
-  works on many unrelated shows at once, so two shows sharing one tells you nothing about
-  whether they are alike. The ingest removes those roles before scoring.
+  works on many unrelated shows at once, so two shows sharing one says nothing about whether
+  they are alike. The ingest removes those roles before scoring.
 - **A person credited more than once on a show counts once,** at their highest episode
   count.
 - **The ranking sorts by score and shows the plain count of shared people** on the page, so it

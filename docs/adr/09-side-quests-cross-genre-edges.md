@@ -1,20 +1,18 @@
-# 9. Side Quests: strong edges into genres you have not shown you like
+# 9. Side Quests: strong edges into genres a user has not rated highly
 
 ## Context
-The home page has three rows. Top Picks is the signed-in user's own rated shows ranked by
-lift over a global baseline ([#15](https://github.com/patricio-quezada/tvlens/issues/15)).
-Recently added is the catalog. Side Quests was a stub: it rendered only for signed-in users,
-it was always empty, and its copy promised it would "unlock once you've rated a handful of
-shows". My demo note
-([#10](https://github.com/patricio-quezada/tvlens/issues/10)) was blunt about that: the row
-should load even for a user who has rated nothing.
+The home page has three rows. Top Picks is the signed-in user's own rated shows ranked by lift
+over a global baseline ([#15](https://github.com/patricio-quezada/tvlens/issues/15)). Recently
+added is the catalog. Side Quests was a stub: it rendered only for signed-in users, it was
+always empty, and its copy promised it would "unlock once you've rated a handful of shows".
+[#10](https://github.com/patricio-quezada/tvlens/issues/10) asked for it to load even for a
+user who had rated nothing.
 
-What the row is *for* is the harder half. As I put it at the time, Side Quests is "shows on the
-fringes of the recommender system, if you want to be spontaneous but stay within a taste
-profile. The best analogy is ordering something at a restaurant that you are unsure of but want
-to try anyways." So a pick has to be plausibly likeable and clearly not something you would
-have reached for yourself. Not random, and not popular. On review I sharpened it further: a
-side quest is a **surprise**, "maybe a genre a user didn't think they'd like."
+What the row is *for* is the harder half. I decided that a side quest is a **surprise**: a show
+the user would plausibly like, would not have reached for alone, and lands in a genre they did
+not expect to like. The closest analogy is ordering an unfamiliar dish at a restaurant on the
+chance it is good. Not random, because random is noise, and not popular, because everyone
+already knows what is popular.
 
 Two existing constraints bound the answer. Nothing in TVLens is ever a popularity chart
 ([ADR-05](05-no-signal-fallback-ladder.md)), which rules out the easy fillers. And
@@ -48,9 +46,9 @@ cross a line, not the quiet ones.
 
 This also overturns the literal ask in #10, "they should load even if the user has not rated
 any shows". Deliberately, and my own call. I wrote #10 during a demo when the row was an empty
-stub with no definition; once the definition is "surprising relative to what you have
-demonstrated you like", loading it for a user who has demonstrated nothing is not a feature, it
-is a contradiction. The row is now gated, and the page says so in as many words.
+stub with no definition; once the definition is surprise measured against demonstrated taste,
+loading the row for a user who has demonstrated nothing is not a feature, it is a
+contradiction. The row is now gated, and the page says so in as many words.
 
 The mechanism survived this. A side quest is still a strong Layer 1 edge reaching somewhere the
 user has not been, and it survived the second revision below too; what changed both times was
@@ -59,16 +57,10 @@ to this record from the code and from the other records still resolves.
 
 ### How it changed again: the row was the recommendation row wearing a different title
 The first amendment fixed *who* the row is for. It left the ordering untouched, and
-with the row on the page that turned out to be the larger problem. Looking at my
-own account:
-
-> side quests seem to be showing the top recommendations of the three shows I have rated. Is
-> that what we want? I thought we wanted side quests to be more like "edge cases" but bound by
-> our recommendations. Think of it as a second-degree connection to the fourth-degree of Kevin
-> Bacon.
-
-That was right, and the cause was structural rather than a tuning miss. There were two faults
-in it.
+with the row on the page that turned out to be the larger problem: the row was returning the
+top recommendations of the shows I had rated, when what it should return is edge cases still
+bound by those recommendations, a second-degree connection rather than a first. The cause was
+structural rather than a tuning miss, and there were two faults in it.
 
 **The candidate pool was the recommendation pool.** Walking ranks 0 through 5 out of the
 seeds *is* what a "more like this" row shows. Surprise was then applied only as a re-sort over
@@ -92,13 +84,14 @@ of the three changes and it fixes the symptom that was actually visible.
 **The walk goes a second hop, at a discount.** A two-hop path scores at its weakest link,
 multiplied by `SIDE_QUEST_HOP_DECAY`, so distance is earned rather than assumed. Shows the user
 has already watched stay in the walk as *bridges* even though they can never be picks: a show
-you have seen is a real shared-people connection, and treating it as a dead end throws away the
-graph's most reliable edges.
+the user has seen is a real shared-people connection, and treating it as a dead end throws away
+the graph's most reliable edges.
 
 **A show that many seeds reach sinks.** Divided by `(seeds that reached it) **
 SIDE_QUEST_CENTRALITY_EXPONENT`. This is the term that most directly answers "edge cases bound
-by our recommendations": a candidate every one of your favorites points at is at the *centre*
-of your taste, and centrality is measurable where peripherality was previously only implied.
+by our recommendations": a candidate every one of a user's favorites points at sits at the
+*centre* of that taste, and centrality is measurable where peripherality was previously only
+implied.
 
 #### What it did
 Same user, same three seeds, before and after:
@@ -127,9 +120,9 @@ has-not, and Layer 2 already keeps a signed number per genre.
 in genres this user has never rated highly and that few of their favorites point at.** Four
 parts, in the order the code applies them.
 
-**Seeds.** The shows the user rated at or above 4.0. That is the same "high" line the home
-page already uses to glow a favorite genre and that ADR-08 personalizes from, so every
-feature on the page agrees about what "you like this" means.
+**Seeds.** The shows the user rated at or above 4.0. That is the same "high" line the home page
+already uses to glow a favorite genre and that ADR-08 personalizes from, so every feature on
+the page agrees about what liking a show means.
 
 **The gate: three seeds, or the row stays locked.** Below three the row does not render at
 all, and a signed-in user sees one line of copy telling them how to unlock it. One seed says

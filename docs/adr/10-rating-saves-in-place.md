@@ -16,15 +16,8 @@ Both were server-rendered and needed no script.
 
 What neither fixed is that the POST is a POST. Rating went out as a plain form submit and came
 back as a redirect, which is a fresh navigation, which always lands at the top of the document.
-What I said about it, over three messages:
-
-> After I click on the rating the entire page reloads. Can we just have the rating lock on the
-> page or is that unnecessary?
-
-> the page relaods and then the page reloads back to the "More Shows Like This" section.
-
-> it should either start back to the original position or just not reload at all and still keep
-> the rating.
+Rating a show meant watching the page reload and land somewhere else, and the ask was either
+to return to the position the click happened at or not to reload at all.
 
 I made two server-side attempts, and both appear below as alternatives, because the second one
 shipped briefly and the reason it failed is the reason this ADR exists.
