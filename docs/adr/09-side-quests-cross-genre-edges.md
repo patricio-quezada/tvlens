@@ -1,17 +1,5 @@
 # 9. Side Quests: strong edges into genres you have not shown you like
 
-> **Amended 2026-08-21.** The original decision had two halves. The mechanism, a side
-> quest is a strong Layer 1 edge that crosses a genre line, survives. The cold-start half,
-> where a visitor with no ratings saw the catalog's strongest cross-genre edges, is
-> withdrawn. The Context below says what changed and why; the Decision is the
-> current rule, not the original one. The file name stays so existing references still resolve.
->
-> **Amended again 2026-08-22.** The mechanism survives a second time; the *ranking* does not.
-> The one-hop walk made the candidate pool identical to the seeds' own recommendation lists,
-> and multiplying raw edge scores by novelty let the strongest edge in that pool win on
-> strength alone. The Context below says what changed and why. The Decision is
-> the current rule.
-
 ## Context
 The home page has three rows. Top Picks is the signed-in user's own rated shows ranked by
 lift over a global baseline ([#15](https://github.com/patricio-quezada/tvlens/issues/15)).
@@ -63,6 +51,11 @@ any shows". Deliberately, and my own call. I wrote #10 during a demo when the ro
 stub with no definition; once the definition is "surprising relative to what you have
 demonstrated you like", loading it for a user who has demonstrated nothing is not a feature, it
 is a contradiction. The row is now gated, and the page says so in as many words.
+
+The mechanism survived this. A side quest is still a strong Layer 1 edge reaching somewhere the
+user has not been, and it survived the second revision below too; what changed both times was
+who the row is for and how it is ordered. The file name stays across both, so every reference
+to this record from the code and from the other records still resolves.
 
 ### How it changed again: the row was the recommendation row wearing a different title
 The first amendment fixed *who* the row is for. It left the ordering untouched, and
