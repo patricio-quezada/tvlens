@@ -1,33 +1,37 @@
 # 10. Rating saves in place, and TVLens takes its first script
 
+**A browser never tells the server where a page was scrolled to, so restoring a rater's
+position and not reloading at all cost exactly the same thing: a script. Rating now POSTs over
+fetch and the page never navigates, with the plain form submit intact underneath as the
+fallback.**
+
 ## Context
-Rating a show is the single interaction the whole product depends on. It is what feeds
-Top Picks ([#15](https://github.com/patricio-quezada/tvlens/issues/15)), what unlocks
-Side Quests ([ADR-09](09-side-quests-cross-genre-edges.md)), and the cold-start data Layer 2
-reads ([ADR-08](08-layer2-personalized-reranking.md)). A user who is rating is usually rating
-several shows in a sitting.
+Rating a show is the one interaction the whole product rests on. It feeds Top Picks
+([#15](https://github.com/patricio-quezada/tvlens/issues/15)), unlocks Side Quests
+([ADR-09](09-side-quests-cross-genre-edges.md)), and is the cold-start data Layer 2 reads
+([ADR-08](08-layer2-personalized-reranking.md)). Somebody rating is usually rating several
+shows in a sitting.
 
-Two changes reached it in one day. [#12](https://github.com/patricio-quezada/tvlens/issues/12)
-fixed how the widget draws: a font fallback clipped the star glyph, and a `:hover` rule that
-sticks on touchscreens wiped the saved rating to a 35%-alpha preview.
-[#18](https://github.com/patricio-quezada/tvlens/issues/18) replaced the ten radios and the
-separate Save button with ten submit buttons, so a click on a star POSTs that score directly.
-Both were server-rendered and needed no script.
+Two fixes reached the widget in one day.
+[#12](https://github.com/patricio-quezada/tvlens/issues/12) fixed how it draws: a font fallback
+clipped the star glyph, and a `:hover` rule that sticks on touchscreens wiped the saved rating
+to a 35%-alpha preview. [#18](https://github.com/patricio-quezada/tvlens/issues/18) replaced
+ten radios and a Save button with ten submit buttons, so clicking a star POSTs that score
+directly. Both were server-rendered and needed no script.
 
-What neither fixed is that the POST is a POST. Rating went out as a plain form submit and came
-back as a redirect, which is a fresh navigation, which always lands at the top of the document.
-Rating a show meant watching the page reload and land somewhere else, and the ask was either
-to return to the position the click happened at or not to reload at all.
+Neither fixed the shape of it. The POST is still a POST: a plain form submit, a redirect back,
+a fresh navigation, and a landing at the top of the document. Rate a show and the page reloads
+and lands somewhere else.
 
-I made two server-side attempts, and both appear below as alternatives, because the second one
-shipped briefly and the reason it failed is the reason this ADR exists.
+I tried twice to fix that on the server. Both attempts are below as alternatives, because the
+second one shipped briefly and the reason it failed is the reason this record exists.
 
-**The deciding fact: a browser never tells the server where the page was scrolled to.** There
-is no header, no form field, nothing. Restoring the position a user was at therefore requires
-recording it on the client first, which is a script. So "put me back where I was" and "do not
-reload at all" cost exactly the same thing, and only one of them also removes the flash. Once
-that was clear, the choice was not between a script and no script. It was between a script that
-reloads and a script that does not.
+**A browser never tells the server where the page was scrolled to.** No header, no field,
+nothing. Restoring a position means recording it on the client first, which is a script.
+
+So "put me back where I was" and "do not reload at all" cost the identical thing, and only one
+of them also removes the flash. The choice was never between a script and no script. It was
+between a script that reloads and a script that does not.
 
 ## Decision
 **Rating POSTs over `fetch` and the page does not navigate. The script is progressive
@@ -100,8 +104,7 @@ user-facing copy in two languages in two files, where they drift silently. Retur
 HTML costs one small partial and keeps one source of truth.
 
 ## After Action Review
-This is still open, and I will fill it in after living with it for a while. Four things are
-worth watching:
+Still open. Four things are worth watching once this has been lived with for a while:
 
 - **The home page rows do not update.** Rating from a detail page changes Top Picks and Side
   Quests, but the user is on the detail page and will not see it until they navigate back. That

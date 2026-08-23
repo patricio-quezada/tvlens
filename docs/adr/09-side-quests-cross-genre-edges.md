@@ -1,30 +1,27 @@
 # 9. Side Quests: strong edges into genres a user has not rated highly
 
+**A side quest is a show a user would plausibly like but would not have reached for, and
+surprise only means anything measured against what someone has demonstrated. The row is built
+from that user's own highly-rated shows, walks two hops out at a discount, and ranks by
+strength times novelty times how few of their favourites reach it.**
+
 ## Context
-The home page has three rows. Top Picks is the signed-in user's own rated shows ranked by lift
-over a global baseline ([#15](https://github.com/patricio-quezada/tvlens/issues/15)). Recently
-added is the catalog. Side Quests was a stub: it rendered only for signed-in users, it was
-always empty, and its copy promised it would "unlock once you've rated a handful of shows".
+Side Quests shipped as a stub. It rendered for signed-in users only, it was always empty, and
+its copy promised it would "unlock once you've rated a handful of shows".
 [#10](https://github.com/patricio-quezada/tvlens/issues/10) asked for it to load even for a
 user who had rated nothing.
 
-What the row is *for* is the harder half. I decided that a side quest is a **surprise**: a show
-the user would plausibly like, would not have reached for alone, and lands in a genre they did
-not expect to like. The closest analogy is ordering an unfamiliar dish at a restaurant on the
-chance it is good. Not random, because random is noise, and not popular, because everyone
-already knows what is popular.
+That was the easy half. What the row is *for* was harder.
 
-Two existing constraints bound the answer. Nothing in TVLens is ever a popularity chart
+I decided that a side quest is a **surprise**: a show the user would plausibly like, would not
+have reached for alone, and that lands in a genre they did not expect to like. The closest
+analogy is ordering an unfamiliar dish at a restaurant on the chance it is good. Not random,
+because random is noise. Not popular, because everyone already knows what is popular.
+
+Two existing rules bound the answer. Nothing in TVLens is ever a popularity chart
 ([ADR-05](05-no-signal-fallback-ladder.md)), which rules out the easy fillers. And
-[ADR-08](08-layer2-personalized-reranking.md) fixed the shape of personalization here: Layer
-2 re-ranks Layer 1's stored list per user, it never scores shows a second time.
-
-The measurements below are against the live catalog: 100 shows, and 1041 edges in the
-materialized Layer 1 store ([ADR-07](07-materialized-recommendations.md)), all of them on the
-"weighted" rung of the ladder. Edge scores run 0.00124 to 14.79, with quartiles at 0.176,
-0.439 and 1.013. Genres are thin and lopsided: 2.45 per show on average, and Drama alone is
-on 66 of the 100 shows, ahead of Action & Adventure 37, Crime 35, Sci-Fi & Fantasy 29,
-Comedy 22, Mystery 19 and Animation 16.
+[ADR-08](08-layer2-personalized-reranking.md) fixed the shape of personalization: Layer 2
+re-ranks Layer 1's stored list per user and never scores shows a second time.
 
 ### How this decision changed: surprise needs an expectation to violate
 The first version of this row shipped with a cold-start path: a visitor with no ratings, or
@@ -221,15 +218,21 @@ Quests path is explicitly ordered and says so in a comment. Whether that default
 change repo-wide is a separate decision with a wider blast radius and is not settled here.
 
 ## After Action Review
-Tested in `shows/tests.py::SideQuestsTests`, which freezes the definition: the row locks below
-three high ratings, anonymous visitors get neither row nor copy, every pick lands in a genre
-the user has never rated highly, the walk refuses the graph's strongest edge when it is more of
-the same, distance can beat a stronger edge and cannot win on its own, the walk covers only the
-strong half of a seed's list and only the user's own favorites, and an unlocked user with
-nothing new gets no section rather than the locked copy.
+`shows/tests.py::SideQuestsTests` freezes the definition:
 
-`SideQuestsRankingTests` freezes the second amendment: a blockbuster edge no longer outranks a
-novel one while strength still separates two equally novel shows, a show two hops out can be a
-pick and loses to an identical show one hop in, a watched show is never a pick and still
-carries the walk, a show every seed reaches ranks below one that only a single seed found, and
-the surprise arithmetic appears once, written out against a known pick.
+- the row locks below three high ratings
+- anonymous visitors get neither the row nor the copy
+- every pick lands in a genre the user has never rated highly
+- the walk refuses the graph's strongest edge when it is more of the same
+- distance can beat a stronger edge and cannot win on its own
+- the walk covers only the strong half of a seed's list, and only the user's own favourites
+- an unlocked user with nothing new gets no section rather than the locked copy
+
+`SideQuestsRankingTests` freezes the second revision:
+
+- a blockbuster edge no longer outranks a novel one, while strength still separates two equally
+  novel shows
+- a show two hops out can be a pick, and loses to an identical show one hop in
+- a watched show is never a pick and still carries the walk
+- a show every seed reaches ranks below one that only a single seed found
+- the surprise arithmetic appears once, written out against a known pick
