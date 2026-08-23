@@ -1,8 +1,7 @@
 # 1. Exclude casting roles from crew matching
 
 ## Context
-When we looked at the data model, we found the recommendation engine counting casting
-directors, the people a studio hires to pick actors, as a reason two shows are similar. They
+Looking at the data model, I found the recommendation engine counting casting directors, the people a studio hires to pick actors, as a reason two shows are similar. They
 should not be. A casting office works across many of a studio's shows, so two shows can share
 the same casting director without being anything alike.
 
@@ -16,12 +15,10 @@ only executive producers.
 Remove casting roles from both shows before comparing their crew, so a shared casting
 director never counts toward two shows being similar.
 
-We keep an explicit list of the casting job titles to exclude rather than matching on the
-word "casting," so the list is easy to check by hand. TMDb occasionally adds a new title
-that slips the list (a later review caught eight, such as "Extras Casting" and "Location
-Casting," and we added them).
+The ingest keeps an explicit list of casting job titles to exclude rather than matching on the word "casting," so the list is easy to check by hand. TMDb occasionally adds a new title
+that slips the list (a later review caught eight, such as "Extras Casting" and "Location Casting," which the list now carries).
 
-We considered lowering casting's weight instead of removing it, but a casting director
+I considered lowering casting's weight instead of removing it, but a casting director
 credited on 60 episodes still says nothing about the show, so the episode weighting in
 [ADR-04](04-episode-weighted-people-recommender.md) does not fix this. It is a
 separate problem.
