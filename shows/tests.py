@@ -840,6 +840,152 @@ class RatingTests(TestCase):
         self.assertNotIn('class="star-rating"', body)
 
 
+class RatingDeselectionTests(TestCase):
+    """Taking a rating back, not only changing it.
+
+    From the 2026-08-22 demo review: "I cannot deselect my rating so maybe we
+    add the option as well. Maybe dragging it all the way to the beginning of
+    the first star allows for deselection." The widget had ten ways to say a
+    different thing and no way to say nothing, so a mis-click was permanent in
+    the only sense that matters -- it kept feeding Top Picks and Layer 2.
+
+    These freeze what clearing IS: deleting the row, not storing a zero. Zero is
+    not on the MovieLens scale, and rate() still rejects it as a score, so the
+    clear arrives as its own field. And they freeze that it degrades the whole
+    way down: the control is a plain submit button, so it works with JavaScript
+    off, and answers in place with the header when the script is there (ADR-10).
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.show = Show.objects.create(
+            tmdb_id=1, name="Rated Show", number_of_episodes=10
+        )
+        cls.alice = User.objects.create_user("alice", password="pw-alice-123")
+        cls.bob = User.objects.create_user("bob", password="pw-bob-123")
+
+    def _url(self):
+        return reverse("shows:rate", args=[self.show.slug])
+
+    def _clear(self, **kwargs):
+        return self.client.post(self._url(), {"clear": "1"}, **kwargs)
+
+    def _clear_in_place(self):
+        return self._clear(headers={"x-requested-with": "fetch"})
+
+    def test_clearing_deletes_the_row_it_does_not_store_a_zero(self):
+        # An absent rating and a rating of nothing are the same fact, and there
+        # is one way to store it. A 0.0 row would be a score off the scale
+        # sitting in the data Layer 2 reads (ADR-08).
+        Rating.objects.create(user=self.alice, show=self.show, score=4.0)
+        self.client.force_login(self.alice)
+        resp = self._clear()
+        self.assertEqual(resp.status_code, 302)
+        self.assertTrue(resp["Location"].endswith("#rate"))
+        self.assertFalse(Rating.objects.filter(user=self.alice).exists())
+
+    def test_zero_is_still_not_a_score(self):
+        # The clear is its own field precisely so this guard does not have to
+        # move: the endpoint is public and VALID_SCORES is the contract.
+        self.client.force_login(self.alice)
+        self.assertEqual(self.client.post(self._url(), {"score": "0"}).status_code, 400)
+        self.assertFalse(Rating.objects.filter(show=self.show).exists())
+
+    def test_clearing_leaves_everyone_elses_rating_alone(self):
+        # The delete is keyed on (user, show), like every other write here.
+        Rating.objects.create(user=self.alice, show=self.show, score=4.0)
+        Rating.objects.create(user=self.bob, show=self.show, score=2.0)
+        self.client.force_login(self.alice)
+        self._clear()
+        self.assertEqual(
+            Rating.objects.get(show=self.show).user_id, self.bob.id
+        )
+
+    def test_clearing_something_never_rated_is_harmless(self):
+        # Nothing to delete is not an error. The widget can be in this state
+        # whenever a second tab got there first.
+        self.client.force_login(self.alice)
+        self.assertEqual(self._clear().status_code, 302)
+        self.assertFalse(Rating.objects.exists())
+
+    def test_clearing_in_place_answers_with_a_null_score(self):
+        # ADR-10's shape, on the clear path: nothing navigates, and the null is
+        # how the script knows to empty the widget rather than light a star.
+        Rating.objects.create(user=self.alice, show=self.show, score=4.0)
+        self.client.force_login(self.alice)
+        resp = self._clear_in_place()
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.json()
+        self.assertIsNone(payload["score"])
+        # Removing the last rating changes the average sentence entirely, so it
+        # is re-rendered from its own template on this path too.
+        self.assertIn("Not yet rated on TVLens", payload["meta_html"])
+        self.assertFalse(Rating.objects.exists())
+
+    def test_clearing_in_place_queues_no_flash_message(self):
+        Rating.objects.create(user=self.alice, show=self.show, score=4.0)
+        self.client.force_login(self.alice)
+        self._clear_in_place()
+        body = self.client.get(self.show.get_absolute_url()).content.decode()
+        self.assertNotIn("Cleared your rating", body)
+
+    def test_clearing_requires_login(self):
+        Rating.objects.create(user=self.alice, show=self.show, score=4.0)
+        resp = self._clear()
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn("/accounts/login/", resp["Location"])
+        self.assertTrue(Rating.objects.exists())
+
+    def test_the_control_is_a_plain_submit_so_it_works_without_script(self):
+        # The whole widget degrades: ten stars are ten submit buttons (#18) and
+        # the clear is an eleventh. Asserting on the tag, not the word: the
+        # inline script names the same field in a selector string.
+        Rating.objects.create(user=self.alice, show=self.show, score=4.0)
+        self.client.force_login(self.alice)
+        body = self.client.get(self.show.get_absolute_url()).content.decode()
+        self.assertIn('<button type="submit" name="clear" value="1"', body)
+
+    def test_the_control_hides_itself_when_there_is_nothing_to_clear(self):
+        # Present but hidden rather than absent, so the widget keeps its width
+        # and the stars do not shift sideways the moment a rating is saved.
+        self.client.force_login(self.alice)
+        unrated = self.client.get(self.show.get_absolute_url()).content.decode()
+        self.assertIn('class="star-clear is-empty"', unrated)
+
+        Rating.objects.create(user=self.alice, show=self.show, score=4.0)
+        rated = self.client.get(self.show.get_absolute_url()).content.decode()
+        self.assertIn('class="star-clear"', rated)
+        self.assertNotIn('class="star-clear is-empty"', rated)
+
+    def test_the_widget_reads_as_unrated_again_after_a_clear(self):
+        # The round trip a user actually performs. Nothing is lit, and the
+        # readout says so in the same words it used before they ever rated.
+        Rating.objects.create(user=self.alice, show=self.show, score=3.5)
+        self.client.force_login(self.alice)
+        self._clear()
+        resp = self.client.get(self.show.get_absolute_url())
+        self.assertIsNone(resp.context["user_rating"])
+        # On the context, not the body: `chosen` is also a CSS selector and a
+        # string literal in the inline script, so a bare substring check would
+        # match the page's own machinery rather than a lit star.
+        self.assertFalse(any(s["chosen"] for s in resp.context["star_steps"]))
+        self.assertIn(
+            '<span class="score-label">Your rating</span>Not rated yet',
+            resp.content.decode(),
+        )
+
+    def test_a_cleared_show_leaves_my_ratings(self):
+        # The user's record is the mirror of what they have said (#11), so
+        # unsaying something has to remove it from there too.
+        Rating.objects.create(user=self.alice, show=self.show, score=3.5)
+        self.client.force_login(self.alice)
+        listed = self.client.get(reverse("shows:my_ratings"))
+        self.assertIn(self.show, listed.context["shows"])
+        self._clear()
+        after = self.client.get(reverse("shows:my_ratings"))
+        self.assertEqual(list(after.context["shows"]), [])
+
+
 class WatchedSignalTests(TestCase):
     """ADR-08's "a rating implies watched", made queryable for Layer 2 (#6).
 

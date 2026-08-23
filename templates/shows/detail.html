@@ -239,14 +239,42 @@
        That is #12's "shows only faintly ... worse on mobile". The preview is now
        a solid colour, and a touch device never enters that state at all. */
     .star-rating .chosen,
-    .star-rating .chosen ~ button { color: var(--accent); }
+    .star-rating .chosen ~ button[name="score"] { color: var(--accent); }
     @media (hover: hover) and (pointer: fine) {
         .star-rating:hover .chosen,
-        .star-rating:hover .chosen ~ button { color: var(--text-tertiary); }
-        .star-rating:hover > button:hover,
-        .star-rating:hover > button:hover ~ button { color: var(--star-preview); }
+        .star-rating:hover .chosen ~ button[name="score"] { color: var(--text-tertiary); }
+        .star-rating:hover > button[name="score"]:hover,
+        .star-rating:hover > button[name="score"]:hover ~ button[name="score"] { color: var(--star-preview); }
+        .star-rating .star-clear:hover::before { color: var(--star-preview); }
     }
     .star-rating button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    /* Deselect. Patricio asked for it as a gesture -- "dragging it all the way
+       to the beginning of the first star" -- so it lives at the left edge of
+       the widget, past the half-star, and is reached by continuing the same
+       movement that picks a score. It is the last child in DOM order, which
+       row-reverse puts furthest left, and which also keeps it out of every
+       `~` fill selector above: those are pinned to [name="score"] so a clear
+       control appended after the chosen star is never painted as part of the
+       fill.
+
+       Hovering it needs no rule of its own to preview the result. The widget's
+       existing :hover rule greys the saved fill for any hover inside it, and
+       nothing here re-lights the stars, so the preview of clearing is the
+       stars going out, which is exactly what clicking does.
+
+       Hidden with nothing to clear, rather than absent: `visibility` keeps the
+       widget the same width whether or not a rating exists, so the stars do
+       not shift sideways the moment one is saved, and a hidden button leaves
+       the tab order. The script toggles the same class, so the JS and no-JS
+       paths converge on one rendering. */
+    .star-rating .star-clear { width: 0.68em; color: var(--text-tertiary); }
+    .star-rating .star-clear::before {
+        content: '×';
+        font-family: inherit; font-size: 0.72em;
+        left: auto; right: 0.1em; top: 0.12em;
+    }
+    .star-rating .star-clear.is-empty { visibility: hidden; pointer-events: none; }
 
     /* MovieLens-style: the saved score reads at full size next to the stars,
        replacing the per-star title tooltip (#12's "hover box"), which no
@@ -393,6 +421,10 @@
                         {% for step in star_steps %}
                         <button type="submit" name="score" value="{{ step.value }}" class="{{ step.css_class }}{% if step.chosen %} chosen{% endif %}"><span class="sr-only">Rate {{ step.value|floatformat:1 }} stars</span></button>
                         {% endfor %}
+                        {% comment %}Last in DOM, so row-reverse draws it left of the half-star.
+                        It is a plain submit like every star, so clearing works with JavaScript
+                        off; the script below only spares the reload (ADR-10).{% endcomment %}
+                        <button type="submit" name="clear" value="1" class="star-clear{% if not user_rating %} is-empty{% endif %}" data-rate-clear title="Clear your rating"><span class="sr-only">Clear your rating</span></button>
                     </div>
                     {% if user_rating %}<span class="your-score" data-your-score><span class="score-label">Your rating</span>★ {{ user_rating|floatformat:1 }}</span>{% else %}<span class="your-score unrated" data-your-score><span class="score-label">Your rating</span>Not rated yet</span>{% endif %}
                 </form>
@@ -447,26 +479,29 @@
 
     var stars = form.querySelector('.star-rating');
     var score = form.querySelector('[data-your-score]');
+    var clear = form.querySelector('[data-rate-clear]');
     var meta = document.querySelector('[data-rate-meta]');
 
     function fallback(button) {
         /* form.submit() does not carry a submit button's own name and value,
-           so the score has to be put back by hand before giving up. */
+           so whichever field the button stood for -- score, or clear -- has to
+           be put back by hand before giving up. */
         var hidden = document.createElement('input');
         hidden.type = 'hidden';
-        hidden.name = 'score';
+        hidden.name = button.name;
         hidden.value = button.value;
         form.appendChild(hidden);
         form.submit();
     }
 
     form.addEventListener('click', function (event) {
-        var button = event.target.closest && event.target.closest('button[name="score"]');
+        var button = event.target.closest &&
+            event.target.closest('button[name="score"], button[name="clear"]');
         if (!button) { return; }
         event.preventDefault();
 
         var data = new FormData(form);
-        data.set('score', button.value);
+        data.set(button.name, button.value);
 
         fetch(form.action, {
             method: 'POST',
@@ -481,12 +516,24 @@
                 stars.querySelectorAll('button'),
                 function (other) { other.classList.remove('chosen'); }
             );
-            button.classList.add('chosen');
-            if (score) {
-                score.classList.remove('unrated');
-                score.innerHTML =
-                    '<span class="score-label">Your rating</span>\u2605 ' +
-                    state.score.toFixed(1);
+            /* A null score is a cleared rating. Repaint it as the unrated state
+               the server would have rendered, so a reload changes nothing. */
+            if (state.score === null) {
+                if (clear) { clear.classList.add('is-empty'); }
+                if (score) {
+                    score.classList.add('unrated');
+                    score.innerHTML =
+                        '<span class="score-label">Your rating</span>Not rated yet';
+                }
+            } else {
+                button.classList.add('chosen');
+                if (clear) { clear.classList.remove('is-empty'); }
+                if (score) {
+                    score.classList.remove('unrated');
+                    score.innerHTML =
+                        '<span class="score-label">Your rating</span>\u2605 ' +
+                        state.score.toFixed(1);
+                }
             }
             if (meta) { meta.innerHTML = state.meta_html; }
         }).catch(function () {

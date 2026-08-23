@@ -332,25 +332,46 @@ def rate(request, slug):
     would reject anyway. The widget only ever POSTs a valid half-step, but this
     is a public endpoint, so the 0.5-to-5.0 bounds and the half-step are
     enforced here too rather than trusted from the client.
+
+    The same endpoint also clears a rating, which is what the widget could not
+    do: a POST carrying `clear` deletes the row. Both paths answer the same two
+    ways, in place over fetch and by redirect without it (ADR-10).
     """
     show = get_object_or_404(Show, slug=slug)
-    try:
-        score = float(request.POST.get("score", ""))
-    except (TypeError, ValueError):
-        return HttpResponseBadRequest("Rating must be a number.")
-    if score not in VALID_SCORES:
-        return HttpResponseBadRequest(
-            "Rating must be a half-star step between 0.5 and 5.0."
+
+    # Deselection. The widget could change an opinion but never take one back:
+    # once a show was rated, every route out of that state stored a different
+    # score. Clearing is its own field rather than score=0, because 0 is not on
+    # the MovieLens scale and this endpoint has to keep rejecting it --
+    # VALID_SCORES is the contract Layer 2 reads (ADR-08) and it is enforced
+    # here because the endpoint is public, not because the widget is trusted.
+    # Deleting the row is the clear: an absent rating and a rating of nothing
+    # are the same fact, and there is only one way to store it.
+    if "clear" in request.POST:
+        Rating.objects.filter(user=request.user, show=show).delete()
+        score = None
+    else:
+        try:
+            score = float(request.POST.get("score", ""))
+        except (TypeError, ValueError):
+            return HttpResponseBadRequest("Rating must be a number.")
+        if score not in VALID_SCORES:
+            return HttpResponseBadRequest(
+                "Rating must be a half-star step between 0.5 and 5.0."
+            )
+        Rating.objects.update_or_create(
+            user=request.user, show=show, defaults={"score": score}
         )
-    Rating.objects.update_or_create(
-        user=request.user, show=show, defaults={"score": score}
-    )
 
     # The widget asked to stay where it is (ADR-10). Answer with the score it
     # should light and the re-rendered average line, so the wording of that
     # sentence lives in one template instead of being rebuilt in JavaScript.
     # No success message on this path: nothing navigates, so the message would
     # sit in the queue and surface later on an unrelated page.
+    # `score` is null on the clear path, which is how the script knows to empty
+    # the widget rather than light a star. The average line is re-rendered
+    # either way: removing a rating moves the average exactly as adding one
+    # does, and on the last rating it changes the sentence entirely.
     if request.headers.get("X-Requested-With") == "fetch":
         return JsonResponse({
             "score": score,
@@ -364,7 +385,10 @@ def rate(request, slug):
             ),
         })
 
-    messages.success(request, f"You rated {show.name} {score:g} stars.")
+    if score is None:
+        messages.success(request, f"Cleared your rating for {show.name}.")
+    else:
+        messages.success(request, f"You rated {show.name} {score:g} stars.")
     # Back to the stars, not to the top of the page. Rating is a plain POST and
     # redirect (#18), so the response is a fresh navigation and the browser
     # would otherwise land at the top with the widget scrolled out of sight --
