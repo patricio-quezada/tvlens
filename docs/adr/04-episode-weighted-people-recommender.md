@@ -32,15 +32,15 @@ stronger one.
 
 The smaller rules:
 
-- **Cast and crew go in one ranked list.** Because everyone is measured as a share of a
-  show, an actor and a director are already in the same unit, so the two can be ranked
-  together with no separate scoring.
-- **Each person's share is capped at 1.0.** Some credit data lists a few more episodes
-  than a show actually aired (say 595 on a 594-episode run), and no one is in more than
-  all of a show.
-- **Casting directors are skipped.** A casting director is hired by a studio and works on
-  many unrelated shows at once, so two shows sharing one tells you nothing about whether
-  they are alike. We remove those roles before scoring.
+- **Cast and crew go in one ranked list.** Because the weighting measures everyone as a
+  share of a show, an actor and a director already share a unit, and one list ranks both
+  with no separate scoring.
+- **The weighting caps each person's share at 1.0.** Some credit data lists a few more
+  episodes than a show actually aired (say 595 on a 594-episode run), and no one is in
+  more than all of a show.
+- **The ingest skips casting directors.** A studio hires a casting director, who then
+  works on many unrelated shows at once, so two shows sharing one tells you nothing about
+  whether they are alike. We remove those roles before scoring.
 - **A person credited more than once on a show counts once,** at their highest episode
   count.
 - **We sort by the score but show the plain count of shared people** on the page, so it
@@ -67,12 +67,12 @@ faces they happen to share.
 **What happened:** it worked. Weighting moved the results in the right direction. For a
 show like Breaking Bad, the top match becomes Better Call Saul, while a show that only
 looked similar because the two share a long list of mostly-minor people drops far down.
-96 of 100 shows come back with at least one match, and the rules are locked in by tests
-so a later change cannot quietly undo them.
+96 of 100 shows come back with at least one match, and tests lock the rules in so a later
+change cannot quietly undo them.
 
-**What we would improve:** the score is worked out in code after pulling the rows from
-the database, because the per-show share does not fit neatly into a single database
+**What we would improve:** the code works the score out after pulling the rows from the
+database, because the per-show share does not fit neatly into a single database
 query. That is fine at 100 shows; at real scale the better answer is a table of
-connections computed ahead of time, which is logged as an open item. The weighting also
+connections computed ahead of time, which the review below carries as an open item. The weighting also
 does nothing for a show that has no episodes recorded yet; a separate decision ([ADR-05](05-no-signal-fallback-ladder.md))
 covers that.

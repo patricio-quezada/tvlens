@@ -8,9 +8,7 @@ reads ([ADR-08](08-layer2-personalized-reranking.md)). A user who is rating is u
 several shows in a sitting.
 
 Two changes reached it in one day.
-[#12](https://github.com/patricio-quezada/tvlens/issues/12) fixed how the widget draws: the
-star glyph was clipped by a font fallback, and the saved rating was wiped to a 35%-alpha
-preview by a `:hover` rule that sticks on touchscreens.
+[#12](https://github.com/patricio-quezada/tvlens/issues/12) fixed how the widget draws: a font fallback clipped the star glyph, and a `:hover` rule that sticks on touchscreens wiped the saved rating to a 35%-alpha preview.
 [#18](https://github.com/patricio-quezada/tvlens/issues/18) replaced the ten radios and the
 separate Save button with ten submit buttons, so a click on a star POSTs that score directly.
 Both were server-rendered and needed no script.
@@ -27,8 +25,7 @@ Patricio, over three messages:
 > it should either start back to the original position or just not reload at all and still keep
 > the rating.
 
-Two server-side attempts were made and both are recorded below as alternatives, because the
-second one shipped briefly and the reason it failed is the reason this ADR exists.
+I made two server-side attempts, and both appear below as alternatives, because the second one shipped briefly and the reason it failed is the reason this ADR exists.
 
 **The deciding fact: a browser never tells the server where the page was scrolled to.** There is
 no header, no form field, nothing. Restoring the position a user was at therefore requires
@@ -48,7 +45,7 @@ Four parts.
 check and `login_required` are untouched and apply on both paths: this is a public endpoint and
 the guards were never client-side.
 
-**The average sentence is rendered server-side and returned as HTML.** Rating a show changes
+**Django renders the average sentence and returns it as HTML.** Rating a show changes
 "★ 4.2 average from 12 ratings on TVLens" directly under the stars, so an in-place update that
 only moved the stars would leave a visibly wrong number on screen. That sentence now lives in
 `templates/shows/_rate_meta.html`, included by the detail page and re-rendered into the JSON
@@ -61,13 +58,12 @@ at the top of a page the user is not looking at.
 
 **Every failure falls back to the plain submit.** No `fetch`, no `FormData`, a non-2xx response,
 a network error: the script rebuilds the score as a hidden input and submits the form normally.
-`form.submit()` does not carry a submit button's own name and value, which is the one sharp edge
-here, and it is handled explicitly. The worst case is the behaviour this ADR replaces.
+`form.submit()` does not carry a submit button's own name and value, which is the one sharp edge here, and the script handles it explicitly. The worst case is the behaviour this ADR replaces.
 
 ### What this reverses
 The README says "server-rendered with no JS framework", and that is still true. But the codebase
 had **zero** JavaScript, and comments in `detail.html` asserted "No JS anywhere in TVLens" as a
-property. That claim is now false and those comments are corrected.
+property. That claim is now false, and this change corrects those comments.
 
 Worth being precise about what was and was not given up. This is a script, not a framework:
 about 45 lines, inline, no dependency, no build step, no bundler, no vendored file. Every page
@@ -101,7 +97,7 @@ worse outcome.
 **E. Turbo, htmx, or similar.** These solve this properly and generally. They are also a
 dependency, a vendored asset or a CDN, and a build decision, taken on behalf of one interaction.
 If TVLens later wants this behaviour in several places, this is the alternative to revisit, and
-it should be revisited deliberately rather than arrived at by accretion.
+revisit it deliberately rather than arriving at it by accretion.
 
 **F. Rebuild the average sentence in JavaScript.** Avoids the extra template. It also puts
 user-facing copy in two languages in two files, where they drift silently. Returning rendered
@@ -115,12 +111,11 @@ Pending. Fill this in after using it. Four things worth watching:
   is correct and it is also the first thing that will look like a bug if the row is stale in a
   demo. If it grates, the answer is not to widen the script but to decide whether those rows
   should be reachable from here at all.
-- **Whether the fallback is ever exercised.** It is written and tested at the endpoint, but the
+- **Whether anything ever exercises the fallback.** It is written and tested at the endpoint, but the
   client-side path is not covered by the Django test suite. If TVLens ever grows a browser test,
   this is the first thing it should cover.
 - **Whether this stays one script.** The line was "no JS"; the line is now "one script, no
-  framework, everything works without it". That is a much softer boundary and it will be tested
-  by the next feature that would be easier with a little more.
+  framework, everything works without it". That is a much softer boundary, and the next feature that would be easier with a little more will test it.
 - **The `X-Requested-With` convention.** Chosen because it is one header and needs no content
   negotiation. If a second endpoint ever needs this, decide then whether to keep the header or
   move to `Accept: application/json`, rather than having both.

@@ -26,13 +26,12 @@ the new one and never a half-built mix. The read path, `stored_similar(show)`, r
 source's rows in rank order and returns the same `RankedShows` shape the live function
 returned, so the views and templates downstream do not change.
 
-**The `mode` is denormalized onto every edge.** `mode` is the source's rung on the
-fallback ladder ([ADR-05](05-no-signal-fallback-ladder.md)): weighted, estimated, or
-rating. It belongs to the source, not the edge, so every one of a source's edges carries
-the same value. Storing it per edge repeats one small string, but it keeps the whole graph
-in one table with no second lookup, which is the simplest thing that round-trips the
-`RankedShows` return value. A separate per-source table would normalize away the repeat and
-buy nothing at catalog scale.
+**Every edge carries the source's `mode`.** `mode` is the source's rung on the fallback ladder
+([ADR-05](05-no-signal-fallback-ladder.md)): weighted, estimated, or rating. It belongs to the
+source, not the edge, so every one of a source's edges carries the same value. Storing it per
+edge repeats one small string, but it keeps the whole graph in one table with no second lookup,
+which is the simplest thing that round-trips the `RankedShows` return value. A separate per-
+source table would normalize away the repeat and buy nothing at catalog scale.
 
 **The invalidation is the rebuild.** There is no per-row cache expiry and no read-through
 fallback. A stale store is impossible because ingest owns the refresh: both `ingest_shows`
@@ -41,13 +40,13 @@ after the batch is written. Backfilling episode counts changes every weighted sc
 rebuild has to follow it; a new show changes the graph, so it follows that too. Between
 ingests the catalog does not move, so the store cannot drift.
 
-**Only the global graph is materialized; the per-show callout prose is not.** The detail
+**The store holds the global graph only; the per-show callout prose stays live.** The detail
 page still composes each recommendation's sentence live (`role_index`, `shared_connections`,
 `compose_callout`). That is deliberate. The ranking is global and stable, so it stores well.
 The callout is on its way to becoming personalized (issue #7): the same edge will read
 differently for different viewers, so its text is not a global fact and does not belong in a
-global table. The rule is the split itself: store the part of the answer that is the same
-for everyone, keep the part that depends on the viewer live.
+global table. The rule is the split itself: store the part of the answer that is the same for
+everyone, keep the part that depends on the viewer live.
 
 **`similar_by_cast` and `similar_by_crew` stay live.** They are single annotated subqueries
 ([ADR-06](06-sql-variable-ceiling.md)), cheap and not the scale risk, so materializing them

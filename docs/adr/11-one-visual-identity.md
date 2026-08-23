@@ -16,8 +16,7 @@ around Pantone's Cloud Dancer. Patricio, finding it while verifying
 > the homepage for TVLens does not look like the landing page. We made the minor
 > adjustments to the tv show page but not the homepage.
 
-The nav is where it showed. It is defined once in `base.html`, so it changed colour as
-you walked from the homepage into a show — the clearest possible signal that this was
+The nav is where it showed. `base.html` defines it once, so it changed colour as you walked from the homepage into a show — the clearest possible signal that this was
 two products stapled together.
 
 The mechanism to fix it already existed, and `detail.html` said so in a comment:
@@ -36,26 +35,23 @@ been promoted to the whole product:
 
 - the top glow is `rgba(232, 155, 45, 0.07)` on the landing page and had become `0.06`
 - `--amber-dim: #c27d1a` and `--amber-glow: #f5a623` exist on the landing page and had
-  never been carried over. A dim amber was needed for the rating widget's hover preview
-  in #12 and was invented from scratch as `#9a6822`, because the real one was not
-  visible from inside the repo. It is now `--accent-dim`, the landing page's own value.
+  never been carried over. #12 needed a dim amber for the rating widget's hover preview and invented `#9a6822` from scratch, because the real one was not visible from inside the repo. It is now `--accent-dim`, the landing page's own value.
 - `.streak`, a faint horizontal light line, exists on the landing page. `detail.html`'s
   comment says "a warm glow up top, a faint light streak" and only ever defined the
-  glow. The streak was described and never built.
+  glow. The comment describes a streak nobody built.
 
-Each `:root` variable is annotated with the landing page's own variable name, so the
-two can be diffed by eye the next time the landing page changes.
+Each `:root` variable carries the landing page's own variable name, so a glance compares the two the next time the landing page changes.
 
 **What moved up into `base.html`:** the palette, the Google Fonts link, the film grain,
 the top glow, and the TV + LENS nav logo. The grain and the glow are `body::before` and
 `body::after` rather than elements, so every page gets them without markup of its own,
-and `main` and `nav` are given `z-index: 1` to sit above the glow.
+and `main` and `nav` take `z-index: 1` to sit above the glow.
 
 **What stayed on the detail page:** a narrower column, the hero, the recommendation
 list and the rating widget. That is all genuinely detail-only, and `body.detail` now
 carries exactly one rule.
 
-**Bebas Neue is applied deliberately, not inherited.** It is a display face, so it goes
+**Bebas Neue goes on four things by hand, never by inheritance.** It is a display face, so it goes
 on the nav logo, `.page-header h1`, `.row-title` and `.form-card h1`, and nowhere else.
 Body copy stays DM Sans. A display font applied by inheritance would have reached form
 labels and card metadata, which is how a cinematic look turns into an unreadable one.
@@ -64,7 +60,7 @@ labels and card metadata, which is how a cinematic look turns into an unreadable
 widget needed in #12. The favorite-genre pill draws a star too and had the same latent
 clipping bug; both now read from one variable.
 
-### The fonts are served from this origin, not from Google
+### This origin serves the fonts, not Google
 Patricio asked for "a monospaced font or a font that is universal across all devices",
 and then, asked to choose between the options, said to pick "whatever makes it easier
 for the user". Those two sentences point at different answers, so the reasoning is
@@ -75,7 +71,7 @@ system stack is always available and never the same: the same page is SF Mono on
 Consolas on Windows and Liberation Mono on Linux. The only way to get identical type on
 every device is to serve the font.
 
-**Monospace was rejected on the user's behalf.** TVLens exists to explain a
+**I rejected monospace on the reader's behalf.** TVLens exists to explain a
 recommendation in a sentence -- "nine people worked on both this and Better Call Saul"
 -- and it renders show overviews, row captions and callout prose. Monospace is
 measurably harder to read at length. It would have been a stylistic win paid for by the
@@ -85,8 +81,7 @@ the sentence.
 **So: Bebas Neue and DM Sans, self-hosted.** This delivers what "universal" was reaching
 for and more. It renders identically everywhere. It works behind a privacy blocker, on a
 network that cannot reach Google's font host, and offline. It stops handing every
-visitor's IP address to a third party in exchange for a typeface. Both faces are SIL
-Open Font Licensed, so redistribution is permitted.
+visitor's IP address to a third party in exchange for a typeface. Both faces carry the SIL Open Font License, which permits redistribution.
 
 **DM Sans upright is the variable file.** One 61 KB download covers every weight from
 100 to 1000. Shipping the three static weights the CSS asks for would have cost 108 KB
@@ -105,8 +100,7 @@ would sit on top of content rather than behind a composition. The identity is th
 palette, the type and the grain; the streak is staging for a single-screen page.
 
 ### Alternatives, and why they lost
-**A. Leave it.** Two looks, and the nav changing colour mid-journey. This is the state
-being fixed and it needs no further argument.
+**A. Leave it.** Two looks, and the nav changing colour mid-journey. This is the state this record fixes, and it needs no further argument.
 
 **B. Promote `detail.html`'s tokens instead of reading the landing page.** Faster, and
 it would have shipped a copy of a copy, silently locking in all three drifts above,
@@ -136,11 +130,8 @@ app.
 Pending. Three things worth watching:
 
 - **`--error: #e89180` is a salmon inherited from the old palette.** It never sat beside
-  amber before, because form errors only appear on pages that were brown. It has not
-  been redesigned here and may clash.
+  amber before, because form errors only appear on pages that were brown. This change does not redesign it, and it may clash.
 - **The homepage `h1` now says TVLens directly under a nav logo that says TVLens.** The
-  duplication predates this change and was easy to miss when the two were set in
-  different faces at different sizes. In one identity it is obvious.
-- **Contrast on the quieter text.** `--text-secondary: #7a756c` on `#08080a` was chosen
-  for a landing page with very little text. It now carries card metadata, form labels
-  and the row captions, which is much more reading than it was designed for.
+  duplication predates this change and was easy to miss while the two sat in different faces at different sizes. In one identity it is obvious.
+- **Contrast on the quieter text.** `--text-secondary: #7a756c` on `#08080a` suited a landing page with very little text. It now carries card metadata, form labels
+  and the row captions, far more reading than that colour was ever meant to carry.
