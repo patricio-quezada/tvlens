@@ -285,6 +285,35 @@
         .rec-poster img { width: 68px; }
         .rec-strength { margin-left: 0; width: 100%; }
     }
+
+    /* ── Trailer ──────────────────────────────────────────────────────────
+       Renders as a plain YouTube link and is upgraded to a modal by script,
+       so it still works with JavaScript off. The iframe is built on click,
+       never at page load, so YouTube sets nothing on readers who do not
+       press play. */
+    .trailer-button {
+        display: inline-flex; align-items: center; gap: 0.5rem;
+        margin: 0 0 1.75rem; padding: 0.5rem 1.05rem;
+        border: 1px solid var(--border); border-radius: 999px;
+        background: var(--surface); color: var(--text-primary);
+        font-size: 0.8rem; letter-spacing: 0.04em; text-decoration: none;
+        cursor: pointer; transition: border-color 0.2s, color 0.2s;
+    }
+    .trailer-button:hover { border-color: var(--accent); color: var(--accent-bright); }
+    .trailer-button .trailer-icon { font-size: 0.7rem; line-height: 1; }
+    .trailer-modal {
+        width: min(90vw, 960px); padding: 0; border: 1px solid var(--border);
+        border-radius: 12px; background: #000; overflow: hidden;
+    }
+    .trailer-modal::backdrop { background: rgba(0, 0, 0, 0.82); }
+    .trailer-frame { aspect-ratio: 16 / 9; }
+    .trailer-frame iframe { width: 100%; height: 100%; border: 0; display: block; }
+    .trailer-close {
+        position: absolute; top: 0.5rem; right: 0.75rem; z-index: 2;
+        background: none; border: 0; color: #fff; opacity: 0.7;
+        font-size: 1.6rem; line-height: 1; cursor: pointer;
+    }
+    .trailer-close:hover { opacity: 1; }
 </style>
 {% endblock %}
 
@@ -320,6 +349,17 @@
             {% endif %}
 
             {% if show.overview %}<p class="hero-overview">{{ show.overview }}</p>{% endif %}
+
+            {% if show.trailer_key %}
+            <a class="trailer-button" href="{{ show.trailer_url }}" target="_blank" rel="noopener"
+               data-trailer="{{ show.trailer_key }}">
+                <span class="trailer-icon" aria-hidden="true">&#9654;</span> Watch the trailer
+            </a>
+            <dialog class="trailer-modal" data-trailer-modal aria-label="Trailer for {{ show.name }}">
+                <button class="trailer-close" type="button" data-trailer-close aria-label="Close trailer">&times;</button>
+                <div class="trailer-frame"></div>
+            </dialog>
+            {% endif %}
 
             <section class="rate-panel" id="rate">
                 <div class="rate-heading">Rate this show</div>
@@ -442,6 +482,32 @@
             fallback(button);
         });
     });
+})();
+</script>
+{% endif %}
+
+{% if show.trailer_key %}
+<script>
+(function () {
+    var link  = document.querySelector('[data-trailer]');
+    var modal = document.querySelector('[data-trailer-modal]');
+    if (!link || !modal || typeof modal.showModal !== 'function') { return; }
+    var frame = modal.querySelector('.trailer-frame');
+
+    link.addEventListener('click', function (event) {
+        event.preventDefault();
+        frame.innerHTML =
+            '<iframe src="https://www.youtube-nocookie.com/embed/' +
+            encodeURIComponent(link.dataset.trailer) +
+            '?autoplay=1&rel=0" title="Trailer" allow="autoplay; fullscreen" allowfullscreen></iframe>';
+        modal.showModal();
+    });
+
+    modal.querySelector('[data-trailer-close]').addEventListener('click', function () { modal.close(); });
+    modal.addEventListener('click', function (event) { if (event.target === modal) { modal.close(); } });
+    // Emptying the frame is what stops playback. Closing the dialog alone
+    // leaves the audio running underneath.
+    modal.addEventListener('close', function () { frame.innerHTML = ''; });
 })();
 </script>
 {% endif %}

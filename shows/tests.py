@@ -12,6 +12,8 @@ from django.contrib.auth.models import AnonymousUser, User
 from django.core.management import call_command
 from django.db.models import Max
 from django.test import TestCase
+
+from .ingestion import Ingestor
 from django.urls import reverse
 
 from .models import (
@@ -2083,3 +2085,52 @@ class RecommendationLadderTests(TestCase):
         self.assertNotContains(
             self.client.get(self.source.get_absolute_url()), "Show fewer"
         )
+
+
+class TrailerTests(TestCase):
+    """#14. TMDb returns clips and bloopers beside trailers, so the pick is
+    a ranking, not a first-match. The page links out and script upgrades it."""
+
+    def test_prefers_official_trailer_over_teaser_and_fan_upload(self):
+        videos = {"results": [
+            {"site": "YouTube", "type": "Teaser",     "official": True,  "key": "teaser", "published_at": "2020-01-01"},
+            {"site": "YouTube", "type": "Trailer",    "official": False, "key": "fan",    "published_at": "2021-01-01"},
+            {"site": "YouTube", "type": "Trailer",    "official": True,  "key": "wanted", "published_at": "2019-01-01"},
+            {"site": "Vimeo",   "type": "Trailer",    "official": True,  "key": "vimeo",  "published_at": "2022-01-01"},
+            {"site": "YouTube", "type": "Featurette", "official": True,  "key": "extra",  "published_at": "2023-01-01"},
+        ]}
+        self.assertEqual(Ingestor._pick_trailer(videos), "wanted")
+
+    def test_newest_wins_when_rank_ties(self):
+        videos = {"results": [
+            {"site": "YouTube", "type": "Trailer", "official": True, "key": "old", "published_at": "2019-01-01"},
+            {"site": "YouTube", "type": "Trailer", "official": True, "key": "new", "published_at": "2024-06-01"},
+        ]}
+        self.assertEqual(Ingestor._pick_trailer(videos), "new")
+
+    def test_no_usable_video_returns_empty(self):
+        self.assertEqual(Ingestor._pick_trailer({}), "")
+        self.assertEqual(Ingestor._pick_trailer(
+            {"results": [{"site": "Vimeo", "type": "Trailer", "key": "v"}]}), "")
+
+    def test_trailer_url_is_empty_without_a_key(self):
+        show = Show.objects.create(tmdb_id=99001, name="No Trailer Here")
+        self.assertEqual(show.trailer_url, "")
+        show.trailer_key = "abc123"
+        self.assertEqual(show.trailer_url, "https://www.youtube.com/watch?v=abc123")
+
+    def test_detail_page_links_out_and_only_when_a_trailer_exists(self):
+        bare = Show.objects.create(tmdb_id=99002, name="Bare Show")
+        body = self.client.get(bare.get_absolute_url()).content.decode()
+        self.assertNotIn('class="trailer-button"', body)
+
+        withtrailer = Show.objects.create(tmdb_id=99003, name="Trailer Show", trailer_key="xyz789")
+        body = self.client.get(withtrailer.get_absolute_url()).content.decode()
+        self.assertIn('class="trailer-button"', body)
+        self.assertIn("https://www.youtube.com/watch?v=xyz789", body)
+        # No third-party frame until the reader asks for one. The embed URL
+        # and the iframe tag both appear in the page, but only as strings
+        # inside the script that builds the frame on click. What matters is
+        # that the container ships empty.
+        self.assertIn('<div class="trailer-frame"></div>', body)
+        self.assertIn("<dialog", body)

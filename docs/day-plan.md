@@ -25,7 +25,7 @@ shipped work as `queued` is worse than no queue — it gets believed.
 | 3  | #4  | queued | Callout voice / "why recommended" |
 | 4  | #3  | queued | Per-pair "See all N" shared-people view |
 | 5  | #13 | queued | Actor pages *(design not recorded: propose first)* |
-| 6  | #14 | queued | Trailers / YouTube link |
+| 6  | #14 | in-review | Trailers / YouTube link |
 | 7  | #20 | blocked | Side Quests constants — needs a catalog past 100 shows |
 
 ## How the queue works
