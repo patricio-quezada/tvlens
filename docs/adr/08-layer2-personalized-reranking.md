@@ -18,23 +18,26 @@ rated nothing, so it must work from zero and improve as ratings arrive.
 ## Decision
 Layer 2 is a per-user preference profile that **re-ranks** Layer 1's output.
 
-**The signal is explicit ratings plus watched, and a rating implies watched.** A user rates
-a show 0.5 to 5.0. Submitting a rating also marks that show watched, because you cannot rate
-what you have not seen; this holds no matter the score, a 1-star rating is still a watched
-show. Watched on its own, with no rating, is a weaker, unsigned positive. These are the only inputs. Layer 2 never infers taste from something the user did not deliberately do.
+**The signal is explicit ratings plus watched, and a rating implies watched.** A user rates a
+show 0.5 to 5.0. Submitting a rating also marks that show watched, because you cannot rate what
+you have not seen; this holds no matter the score, a 1-star rating is still a watched show.
+Watched on its own, with no rating, is a weaker, unsigned positive. These are the only inputs.
+Layer 2 never infers taste from something the user did not deliberately do.
 
 **Personalization re-ranks the existing list, it does not run a second engine.** Layer 1 stays
 exactly as it is: the global, materialized list of candidate shows. Layer 2 takes that list and
 re-orders everything in it to fit the user, rather than sending the request through a separate
-engine that scores every show from scratch. Layer 2 nudges the order of a list that is already computed and stored, and never recomputes the graph per user. This mirrors the split from ADR-07:
-the store holds what is the same for everyone once, and the request computes what depends on
-the viewer live over a handful of rows.
+engine that scores every show from scratch. Layer 2 nudges the order of a list that is already
+computed and stored, and never recomputes the graph per user. This mirrors the split from
+ADR-07: the store holds what is the same for everyone once, and the request computes what
+depends on the viewer live over a handful of rows.
 
-**The profile is signed weights over genres and tags.** For each user the profile keeps an affinity number per genre and per tag. When a user rates a show, that show's genres and tags move the
-user's weights by a *signed* amount: a high rating pushes them up, a low rating pushes them
-down. A 1-star rating is information, not noise, it says "less of this", so it lowers those
-weights rather than throwing them away. A candidate show's Layer-2 score is then how well its
-genres and tags line up with the user's weights.
+**The profile is signed weights over genres and tags.** For each user the profile keeps an
+affinity number per genre and per tag. When a user rates a show, that show's genres and tags
+move the user's weights by a *signed* amount: a high rating pushes them up, a low rating pushes
+them down. A 1-star rating is information, not noise, it says "less of this", so it lowers
+those weights rather than throwing them away. A candidate show's Layer-2 score is then how well
+its genres and tags line up with the user's weights.
 
 **Layer 1 owns people; Layer 2 owns genres and tags.** Cast and crew already drive Layer 1's
 shared-people similarity. If Layer 2 also weighted individual people, the same signal would

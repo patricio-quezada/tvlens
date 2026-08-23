@@ -1,12 +1,11 @@
 # 2. Ingest aggregate_credits, and record episode counts
 
 ## Context
-The recommender read `/tv/{id}?append_to_response=credits`, which returns only
-**series-level** billing, a short curated list. It cannot see per-episode credits.
-The clearest symptom: TMDb credits television directors per episode, so the whole
-100-show catalog held only 13 director rows, and not one of them connected two shows. Breaking Bad
-returned 8 cast from this endpoint; TMDb's `aggregate_credits` returns 348, plus 25
-directors.
+The recommender read `/tv/{id}?append_to_response=credits`, which returns only **series-level**
+billing, a short curated list. It cannot see per-episode credits. The clearest symptom: TMDb
+credits television directors per episode, so the whole 100-show catalog held only 13 director
+rows, and not one of them connected two shows. Breaking Bad returned 8 cast from this endpoint;
+TMDb's `aggregate_credits` returns 348, plus 25 directors.
 
 ## Decision
 - Add **`episode_count`** (nullable) to `CastMember` and `CrewMember`. Null means a
