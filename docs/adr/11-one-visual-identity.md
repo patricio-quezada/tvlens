@@ -1,7 +1,16 @@
 # 11. One visual identity, defined once, taken from the landing page itself
 
+**Ten of eleven pages wore an older brown palette while only the show page carried the
+tvlens.org look, so the nav changed colour mid-journey. The identity now lives once in
+`base.html`, and it was read off the live landing page rather than copied from the one page
+that already had it -- which caught three drifts, including a colour invented from scratch
+because the real one was invisible from inside the repo.**
+
 ## Context
-TVLens had two looks.
+The nav changed colour on the walk from the homepage into a show.
+
+It is defined once, in `base.html`, so that is not a bug in the nav. It is the nav honestly
+reporting that the page under it had a different palette. TVLens had two looks:
 
 | | Palette | Type | Grain | Pages |
 |---|---|---|---|---|
@@ -9,19 +18,15 @@ TVLens had two looks.
 | `detail.html` `body.detail` | `#08080a` near-black, `#e89b2d` amber | Bebas Neue + DM Sans | yes | 1 |
 
 The show detail page was not the odd one out. It was the only page carrying the look of
-`tvlens.org`; every other page still wore the older warm-brown palette built around Pantone's
-Cloud Dancer. It surfaced while verifying
-[#12](https://github.com/patricio-quezada/tvlens/issues/12): the show page had been brought in
-line with the landing page and the homepage had not.
+`tvlens.org`. Every other page still wore an older warm-brown palette built around Pantone's
+Cloud Dancer, and it surfaced while verifying
+[#12](https://github.com/patricio-quezada/tvlens/issues/12): the show page had been brought
+into line with the landing page and the homepage had not.
 
-The nav is where it showed. `base.html` defines it once, so it changed colour on the walk from
-the homepage into a show — the clearest possible signal that this was two products stapled
-together.
-
-The mechanism to fix it already existed, and `detail.html` said so in a comment:
-redefining the shared palette variables on `body.detail` lets the inherited nav and
-shell adopt the cinematic look without a second stylesheet. Everything needed was the
-same move, one level up.
+The mechanism to fix it already existed, and `detail.html` said so in its own comment --
+redefining the shared palette variables on `body.detail` lets the inherited nav and shell adopt
+the cinematic look without a second stylesheet. Everything needed was that same move, one level
+up.
 
 ## Decision
 **`base.html` carries the identity. Nothing overrides it.**
@@ -130,7 +135,7 @@ voice is as much Bebas Neue over DM Sans as it is amber on near-black, and
 app.
 
 ## After Action Review
-This is still open. Three things are worth watching:
+Still open. Three things are worth watching:
 
 - **`--error: #e89180` is a salmon inherited from the old palette.** It never sat beside amber
   before, because form errors only appear on pages that were brown. This change does not
