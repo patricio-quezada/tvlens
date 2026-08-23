@@ -23,10 +23,10 @@ should load even for a user who has rated nothing.
 
 What the row is *for* is the harder half. As I put it at the time, Side Quests is "shows on the
 fringes of the recommender system, if you want to be spontaneous but stay within a taste
-profile. The best analogy is ordering something at a restaurant that you are unsure of but
-want to try anyways." So a pick has to be plausibly likeable and clearly not something you
-would have reached for yourself. Not random, and not popular. On review he sharpened it
-further: a side quest is a **surprise**, "maybe a genre a user didn't think they'd like."
+profile. The best analogy is ordering something at a restaurant that you are unsure of but want
+to try anyways." So a pick has to be plausibly likeable and clearly not something you would
+have reached for yourself. Not random, and not popular. On review I sharpened it further: a
+side quest is a **surprise**, "maybe a genre a user didn't think they'd like."
 
 Two existing constraints bound the answer. Nothing in TVLens is ever a popularity chart
 ([ADR-05](05-no-signal-fallback-ladder.md)), which rules out the easy fillers. And
@@ -53,14 +53,16 @@ That is the thing this project keeps refusing (ADR-05, ADR-07, ADR-08): not beca
 by popularity, it did not, but because a single list served to everyone is a chart whatever
 it is sorted by.
 
-**"The catalog's strongest cross-genre edges" is not the fringe.** The strongest of them scores inside the top 10 percent of the whole graph. Unexpected in
-category, but the opposite of peripheral. Sorting the cross-genre subset by strength finds
-the loudest edges that happen to cross a line, not the quiet ones.
+**"The catalog's strongest cross-genre edges" is not the fringe.** The strongest of them scores
+inside the top 10 percent of the whole graph. Unexpected in category, but the opposite of
+peripheral. Sorting the cross-genre subset by strength finds the loudest edges that happen to
+cross a line, not the quiet ones.
 
 This also overturns the literal ask in #10, "they should load even if the user has not rated
-any shows". Deliberately, and my own call. I wrote #10 during a demo when the row was an empty stub with no definition; once the definition is "surprising relative to what you
-have demonstrated you like", loading it for a user who has demonstrated nothing is not a
-feature, it is a contradiction. The row is now gated, and the page says so in as many words.
+any shows". Deliberately, and my own call. I wrote #10 during a demo when the row was an empty
+stub with no definition; once the definition is "surprising relative to what you have
+demonstrated you like", loading it for a user who has demonstrated nothing is not a feature, it
+is a contradiction. The row is now gated, and the page says so in as many words.
 
 ### How it changed again: the row was the recommendation row wearing a different title
 The first amendment fixed *who* the row is for. It left the ordering untouched, and
@@ -72,7 +74,8 @@ own account:
 > our recommendations. Think of it as a second-degree connection to the fourth-degree of Kevin
 > Bacon.
 
-He was right, and it was structural rather than a tuning miss. Two faults.
+That was right, and the cause was structural rather than a tuning miss. There were two faults
+in it.
 
 **The candidate pool was the recommendation pool.** Walking ranks 0 through 5 out of the
 seeds *is* what a "more like this" row shows. Surprise was then applied only as a re-sort over
@@ -93,10 +96,11 @@ recommendation.
 which is the only condition under which multiplying them means anything. This is the smallest
 of the three changes and it fixes the symptom that was actually visible.
 
-**The walk goes a second hop, at a discount.** A two-hop path scores at its weakest link, multiplied by `SIDE_QUEST_HOP_DECAY`, so distance is earned rather than assumed. Shows the
-user has already watched stay in the walk as *bridges* even though they can never be picks: a
-show you have seen is a real shared-people connection, and treating it as a dead end throws
-away the graph's most reliable edges.
+**The walk goes a second hop, at a discount.** A two-hop path scores at its weakest link,
+multiplied by `SIDE_QUEST_HOP_DECAY`, so distance is earned rather than assumed. Shows the user
+has already watched stay in the walk as *bridges* even though they can never be picks: a show
+you have seen is a real shared-people connection, and treating it as a dead end throws away the
+graph's most reliable edges.
 
 **A show that many seeds reach sinks.** Divided by `(seeds that reached it) **
 SIDE_QUEST_CENTRALITY_EXPONENT`. This is the term that most directly answers "edge cases bound
@@ -126,8 +130,9 @@ most of the row with that cluster. Genre affinity has more resolution than has-g
 has-not, and Layer 2 already keeps a signed number per genre.
 
 ## Decision
-**A side quest is a strong Layer 1 connection, out of a show this user rated highly, that
-lands in genres this user has never rated highly and that few of their favorites point at.** Four parts, in the order the code applies them.
+**A side quest is a strong Layer 1 connection, out of a show this user rated highly, that lands
+in genres this user has never rated highly and that few of their favorites point at.** Four
+parts, in the order the code applies them.
 
 **Seeds.** The shows the user rated at or above 4.0. That is the same "high" line the home
 page already uses to glow a favorite genre and that ADR-08 personalizes from, so every
@@ -141,14 +146,14 @@ to recur, and therefore the smallest history in which its *absence* means someth
 Anonymous visitors get no row and no copy: they cannot rate anything without an account, so
 the unlock instruction would be a dead end.
 
-**The walk: the strong half of each seed's stored list, and then the strong half of the
-lists belonging to what that reached.** Ranks 0 through 5 of the 12 Layer 1 keeps per show
-(ADR-07), followed one hop further out. The rank cap holds at every hop, because a side quest
-has to be a *confident* connection and the weak tail of a list is mostly coincidence, so a strange genre found down there is noise wearing a surprise costume. But
-one hop is exactly the seed's own recommendation list, so a one-hop row can re-order that pool
-and never leave it. The second hop is what gives distance somewhere to vary. A show the user
-has already watched is never a pick and always a bridge: it is a real connection, not a dead
-end.
+**The walk: the strong half of each seed's stored list, and then the strong half of the lists
+belonging to what that reached.** Ranks 0 through 5 of the 12 Layer 1 keeps per show (ADR-07),
+followed one hop further out. The rank cap holds at every hop, because a side quest has to be a
+*confident* connection and the weak tail of a list is mostly coincidence, so a strange genre
+found down there is noise wearing a surprise costume. But one hop is exactly the seed's own
+recommendation list, so a one-hop row can re-order that pool and never leave it. The second hop
+is what gives distance somewhere to vary. A show the user has already watched is never a pick
+and always a bridge: it is a real connection, not a dead end.
 
 **Surprise: the share of a candidate's genres the user has no positive history with.**
 Collect the genres of the seeds; call that the demonstrated taste. For each candidate,
@@ -165,8 +170,9 @@ magnitude while novelty is a share bounded at 1, so a plain product let the stro
 the pool win on strength alone, which is precisely how the row came to read as a
 recommendation list.
 
-The only new number is a multiplier on Layer 1's own score. Nothing scores a show twice and no second engine runs over the catalog, which keeps this inside ADR-08's rule that Layer
-2 re-ranks rather than re-scores.
+The only new number is a multiplier on Layer 1's own score. Nothing scores a show twice and no
+second engine runs over the catalog, which keeps this inside ADR-08's rule that Layer 2
+re-ranks rather than re-scores.
 
 Shows the user has already watched never appear, watched covering rated (ADR-08), and neither
 does anything the home page has already used in Top Picks.
@@ -189,9 +195,10 @@ personal rather than global, it is not a chart, and it is honestly short at 100 
 sizes and specific orderings will have moved. Re-running the samplers against the current rule
 belongs with [#20](https://github.com/patricio-quezada/tvlens/issues/20).
 
-There is one rating in the development database, so I measured the row against 4000 synthetic three-seed users per sampler: **uniform**, three shows drawn at random, and
-**coherent**, three shows drawn from a single genre, which is the harder and more realistic
-case because a real taste is not random.
+There is one rating in the development database, so I measured the row against 4000 synthetic
+three-seed users per sampler: **uniform**, three shows drawn at random, and **coherent**, three
+shows drawn from a single genre, which is the harder and more realistic case because a real
+taste is not random.
 
 Row size, coherent seeds: median 6 picks, mean 5.7, empty for 3 percent of users, at least 3
 picks for 76 percent, at least 5 for 60 percent. Uniform seeds run a little fuller: median 7,
@@ -213,11 +220,13 @@ It is not a chart. Mean Spearman correlation between a row's order and its membe
 popularity rank is 0.156, and against vote_average rank 0.028. Both are noise.
 
 ### Tags are not available, and would sharpen this
-I described the surprise as running on "connections and tags". The connections are Layer 1, and the row uses them. The tags are not: `Tag` and `ShowTag` are both empty, 0 rows, so genre
-is the only categorical signal the catalog has today. Genre is coarse for this job, as the
-Drama-on-66-shows number shows. Once the ingest lands tags, the same shape works with a finer vocabulary: the novelty share would run over tags as well as genres, which would let
-the row tell "a workplace comedy you have not tried" apart from "a comedy", and would push
-the fully-novel band above 8 percent of picks. That is a later decision, not this one.
+I described the surprise as running on "connections and tags". The connections are Layer 1, and
+the row uses them. The tags are not: `Tag` and `ShowTag` are both empty, 0 rows, so genre is
+the only categorical signal the catalog has today. Genre is coarse for this job, as the
+Drama-on-66-shows number shows. Once the ingest lands tags, the same shape works with a finer
+vocabulary: the novelty share would run over tags as well as genres, which would let the row
+tell "a workplace comedy you have not tried" apart from "a comedy", and would push the
+fully-novel band above 8 percent of picks. That is a later decision, not this one.
 
 ### One hazard this touched
 `Show.Meta.ordering = ["-popularity"]` means any queryset that forgets an explicit
@@ -226,24 +235,15 @@ Quests path is explicitly ordered and says so in a comment. Whether that default
 change repo-wide is a separate decision with a wider blast radius and is not settled here.
 
 ## After Action Review
-Pending. Only using it will say whether the row does what I asked for, which is that a pick
-feels like something you were unsure of but wanted to try. Fill this in after using it against
-the local demo. Four things worth watching:
-
-- The row is usually 5 to 7 cards, not 12. Whether a short row reads as honest or as broken
-  is a taste question the numbers cannot answer.
-- A pick's novelty is invisible on the card today. The objects carry `quest_new_genres`, the
-  genres this user has never rated highly, so the row can say "for the Western in it" when
-  the callout work (#4, #7) lands.
-- Anonymous visitors currently see no Side Quests section and no copy at all, mirroring Top
-  Picks. If the signed-out home page feels empty, the alternative is a sign-up-shaped prompt,
-  which needs my words rather than an engineer's.
-- The gate is 3 seeds. If the row often feels thin at exactly 3, the fix is more seeds rather
-  than a looser surprise rule.
-
-Tested in `shows/tests.py::SideQuestsTests`, which freezes the definition: the row locks below three high ratings, anonymous visitors get neither row nor copy, every pick lands in a genre the user has never rated highly, the walk refuses the graph's strongest edge when it is more of the same, distance can beat a stronger edge and cannot win on its own, the walk covers only the strong half of a seed's list and only the user's own favorites, and an unlocked user with nothing new gets no section rather than the locked copy.
+Tested in `shows/tests.py::SideQuestsTests`, which freezes the definition: the row locks below
+three high ratings, anonymous visitors get neither row nor copy, every pick lands in a genre
+the user has never rated highly, the walk refuses the graph's strongest edge when it is more of
+the same, distance can beat a stronger edge and cannot win on its own, the walk covers only the
+strong half of a seed's list and only the user's own favorites, and an unlocked user with
+nothing new gets no section rather than the locked copy.
 
 `SideQuestsRankingTests` freezes the second amendment: a blockbuster edge no longer outranks a
 novel one while strength still separates two equally novel shows, a show two hops out can be a
 pick and loses to an identical show one hop in, a watched show is never a pick and still
-carries the walk, a show every seed reaches ranks below one that only a single seed found, and the surprise arithmetic appears once, written out against a known pick.
+carries the walk, a show every seed reaches ranks below one that only a single seed found, and
+the surprise arithmetic appears once, written out against a known pick.

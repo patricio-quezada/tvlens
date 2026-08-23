@@ -6,10 +6,11 @@ given one show, suggests others like it. The simplest possible start was to trea
 person two shows share, an actor or a crew member, as one "connection," and rank shows
 by how many connections they share.
 
-Then the ingest pulled the full per-episode credits from TMDb (its `aggregate_credits` data), and that broke the simple version. 84% of the cast entries were for a single episode.
-Counting every shared person the same meant two shows looked similar just because they
-had cycled through many of the same one-episode guest actors, which tells you nothing
-about whether the shows are actually alike.
+Then the ingest pulled the full per-episode credits from TMDb (its `aggregate_credits` data),
+and that broke the simple version. 84% of the cast entries were for a single episode. Counting
+every shared person the same meant two shows looked similar just because they had cycled
+through many of the same one-episode guest actors, which tells you nothing about whether the
+shows are actually alike.
 
 After that ingest ran, the results were not useful. Counting is not enough. How much
 of a show a person actually made has to matter.
@@ -70,8 +71,8 @@ looked similar because the two share a long list of mostly-minor people drops fa
 change cannot quietly undo them.
 
 **What I would improve:** the code works the score out after pulling the rows from the
-database, because the per-show share does not fit neatly into a single database
-query. That is fine at 100 shows; at real scale the better answer is a table of
-connections computed ahead of time, which the review below carries as an open item. The weighting also
-does nothing for a show that has no episodes recorded yet; a separate decision ([ADR-05](05-no-signal-fallback-ladder.md))
-covers that.
+database, because the per-show share does not fit neatly into a single database query. That is
+fine at 100 shows; at real scale the better answer is a table of connections computed ahead of
+time, which the review below carries as an open item. The weighting also does nothing for a
+show that has no episodes recorded yet; a separate decision
+([ADR-05](05-no-signal-fallback-ladder.md)) covers that.
