@@ -2568,3 +2568,126 @@ class SearchViewTests(TestCase):
     def test_using_an_advanced_filter_opens_the_disclosure(self):
         resp = self.client.get(reverse("shows:search"), {"q": "west", "status": "Ended"})
         self.assertTrue(resp.context["advanced_open"])
+
+
+class SearchFuzzyTests(TestCase):
+    """A misspelling should land close, and only after the exact search fails.
+
+    Fuzzy is secondary on purpose: a spelling that works must never pay for the
+    rescue path.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.show = Show.objects.create(
+            tmdb_id=9101, name="Breaking Bad", slug="breaking-bad",
+            overview="Chemistry.", first_air_date="2008-01-20",
+            last_air_date="2013-09-29", vote_average=8.9, vote_count=12000,
+            original_language="en", status="Ended",
+        )
+        person = Person.objects.create(tmdb_id=8101, name="Bryan Cranston")
+        CastMember.objects.create(show=cls.show, person=person,
+                                  character="Walter White", order=0, episode_count=62)
+
+    def test_a_misspelled_title_still_finds_the_show(self):
+        shows, parsed = run_search("breking bad")
+        self.assertIn(self.show.name, {s.name for s in shows})
+        self.assertEqual(parsed.suggestion, "Breaking Bad")
+
+    def test_a_misspelled_surname_still_finds_the_show(self):
+        shows, parsed = run_search("cranson")
+        self.assertIn(self.show.name, {s.name for s in shows})
+        self.assertEqual(parsed.suggestion, "Cranston")
+
+    def test_a_correct_spelling_does_not_trigger_a_suggestion(self):
+        self.assertIsNone(run_search("cranston")[1].suggestion)
+
+    def test_the_rescue_can_be_declined(self):
+        """The reader must be able to insist on what they typed."""
+        shows, parsed = run_search("cranson", fuzzy=False)
+        self.assertEqual(shows, [])
+        self.assertIsNone(parsed.suggestion)
+
+    def test_nonsense_gets_no_suggestion(self):
+        self.assertIsNone(run_search("qqqqzzzz")[1].suggestion)
+
+
+class SearchTooShortTests(TestCase):
+    """A single character is not a search.
+
+    It matched the whole catalog before this existed, which reads as a working
+    search returning everything rather than a refusal.
+    """
+
+    def test_a_single_character_is_refused(self):
+        shows, parsed = run_search("a")
+        self.assertEqual(shows, [])
+        self.assertTrue(parsed.too_short)
+
+    def test_a_refusal_is_distinct_from_an_empty_box(self):
+        self.assertFalse(ParsedQuery("").too_short)
+
+    def test_a_short_word_beside_a_real_filter_is_not_refused(self):
+        """"a" is useless alone, but "a year:2005" has something to act on."""
+        self.assertFalse(ParsedQuery("a year:2005").too_short)
+
+
+class SearchOperatorTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.drama = Genre.objects.create(tmdb_id=18, name="Drama")
+        cls.comedy = Genre.objects.create(tmdb_id=35, name="Comedy")
+        cls.hbo = Network.objects.create(tmdb_id=49, name="HBO")
+        cls.show = Show.objects.create(
+            tmdb_id=9201, name="Corner Office", slug="corner-office",
+            overview="Work.", first_air_date="2004-01-01", last_air_date="2009-01-01",
+            vote_average=8.5, vote_count=4000, original_language="en", status="Ended",
+        )
+        cls.show.genres.add(cls.drama, cls.comedy)
+        cls.show.networks.add(cls.hbo)
+        person = Person.objects.create(tmdb_id=8201, name="Dana Reeve")
+        CastMember.objects.create(show=cls.show, person=person,
+                                  character="Dana", order=0, episode_count=40)
+
+    def test_an_operator_scopes_to_one_branch(self):
+        """title: must not match a show that only matches in its overview."""
+        self.assertEqual(run_search("title:corner")[0][0].name, self.show.name)
+        self.assertEqual(run_search("title:work")[0], [])
+
+    def test_operators_intersect_rather_than_widen(self):
+        self.assertEqual(len(run_search("genre:drama genre:comedy")[0]), 1)
+        self.assertEqual(run_search("genre:drama network:netflix")[0], [])
+
+    def test_a_quoted_value_keeps_its_spaces(self):
+        self.assertEqual(len(run_search('character:"dana"')[0]), 1)
+
+    def test_a_year_range_is_honoured(self):
+        self.assertEqual(len(run_search("year:2000-2010 genre:drama")[0]), 1)
+        self.assertEqual(run_search("year:2015-2020 genre:drama")[0], [])
+
+    def test_a_comparison_operator_is_honoured(self):
+        self.assertEqual(len(run_search("genre:drama score:>8")[0]), 1)
+        self.assertEqual(run_search("genre:drama score:<6")[0], [])
+
+    def test_an_unparseable_operator_value_is_reported_not_ignored(self):
+        parsed = ParsedQuery("year:notayear")
+        self.assertIn("year:notayear", parsed.unknown)
+        self.assertIsNone(parsed.year)
+
+    def test_an_unknown_key_stays_as_plain_text(self):
+        self.assertIn("bogus:xyz", ParsedQuery("bogus:xyz corner").text)
+
+
+class SearchPageChromeTests(TestCase):
+    def test_the_nav_box_is_hidden_on_the_search_page(self):
+        """Two search boxes on one screen compete. The page's own box wins."""
+        resp = self.client.get(reverse("shows:search"))
+        self.assertTrue(resp.context["hide_nav_search"])
+
+    def test_the_nav_box_is_present_elsewhere(self):
+        resp = self.client.get(reverse("shows:index"))
+        self.assertFalse(resp.context.get("hide_nav_search", False))
+
+    def test_exact_disables_the_fuzzy_rescue(self):
+        resp = self.client.get(reverse("shows:search"), {"q": "cranson", "exact": "1"})
+        self.assertIsNone(resp.context["parsed"].suggestion)

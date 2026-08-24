@@ -1,15 +1,17 @@
 {% extends "base.html" %}
-{% block title %}{% if q %}{{ q }} · Search{% else %}Search{% endif %} · TVLens{% endblock %}
+{% block title %}{% if q %}{{ q }} · Search{% else %}Search TV shows{% endif %} · TVLens{% endblock %}
 {% block content %}
 
 <div class="page-header search-header">
-    <h1>Search</h1>
+    <h1>Search TV shows</h1>
 
     <form class="search-form" method="get" action="{% url 'shows:search' %}" role="search">
-        <input type="search" name="q" value="{{ q }}" autofocus
-               placeholder="Title, actor, character, genre, network, a year…"
-               aria-label="Search the catalog">
-        <button type="submit">Search</button>
+        <div class="search-row">
+            <input type="search" name="q" value="{{ q }}" autofocus
+                   placeholder="Title, actor, character, genre, network, a year…"
+                   aria-label="Search the catalog">
+            <button type="submit">Search</button>
+        </div>
 
         {% comment %}Closed unless the reader already used one. Opening it for
            everyone would make a simple box look like a query builder.{% endcomment %}
@@ -71,12 +73,25 @@
 </div>
 
 {% if q %}
+{% comment %}A correction the reader cannot see is a lie about what they asked
+   for. Name the term actually searched, and offer the original back.{% endcomment %}
+{% if parsed.suggestion %}
+<p class="did-you-mean">
+    Showing results for <strong>{{ parsed.suggestion }}</strong>.
+    <a href="{% url 'shows:search' %}?q={{ q|urlencode }}&amp;exact=1">Search instead for “{{ q }}”</a>
+</p>
+{% endif %}
 <p class="search-count">
     {{ shows|length }} result{{ shows|length|pluralize }}
     <span class="timing">{{ elapsed_ms|floatformat:0 }} ms</span>
 </p>
 {% if shows %}
 {% include "shows/_grid.html" %}
+{% elif parsed.too_short %}
+<p class="empty">
+    “{{ q }}” is too short to search. Two characters or more, or use a filter
+    like <code>year:2005</code>.
+</p>
 {% else %}
 <p class="empty">
     Nothing matched “{{ q }}”. Search covers titles, cast, crew, characters,
@@ -104,8 +119,11 @@
 
 <style>
     .search-form { margin: 1.5rem 0 0; }
+    /* One column, so the Advanced disclosure lines up with the left edge of
+       the box rather than floating against the page. */
+    .search-row { display: flex; gap: 0.5rem; max-width: 640px; }
     .search-form input[type="search"] {
-        width: 100%; max-width: 640px; padding: 0.7rem 0.9rem;
+        flex: 1 1 auto; min-width: 0; padding: 0.7rem 0.9rem;
         font-size: 1rem; font-family: inherit;
         background: var(--surface); color: var(--text-primary);
         border: 1px solid var(--border); border-radius: 6px;
@@ -114,7 +132,7 @@
         outline: none; border-color: var(--accent);
     }
     .search-form button {
-        margin-left: 0.5rem; padding: 0.7rem 1.4rem; font-size: 0.95rem;
+        flex: 0 0 auto; padding: 0.7rem 1.4rem; font-size: 0.95rem;
         font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.08em;
         background: var(--accent); color: #000;
         border: 0; border-radius: 6px; cursor: pointer;
@@ -159,5 +177,11 @@
     }
     .search-hint .hint-quote { margin-top: 1.2rem; font-size: 0.9rem; }
     .chip-bad { border-color: var(--error); color: var(--error); }
+    .did-you-mean {
+        margin: 1.5rem 0 0; padding: 0.7rem 0.9rem;
+        background: var(--surface); border-left: 2px solid var(--accent);
+        font-size: 0.92rem;
+    }
+    .did-you-mean a { margin-left: 0.6rem; font-size: 0.85rem; }
 </style>
 {% endblock %}

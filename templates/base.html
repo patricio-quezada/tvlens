@@ -294,10 +294,12 @@
         <a href="{% url 'shows:index' %}" class="brand">TVLens</a>
         {% comment %}Search belongs in the bar, not behind a link: it is the
            fastest way into a catalog and every page should offer it.{% endcomment %}
+        {% if not hide_nav_search %}
         <form class="nav-search" method="get" action="{% url 'shows:search' %}" role="search">
             <input type="search" name="q" value="{{ q|default:'' }}"
                    placeholder="Search" aria-label="Search the catalog">
         </form>
+        {% endif %}
         {% if user.is_authenticated %}
             <a href="{% url 'shows:my_ratings' %}">My Ratings</a>
             <span class="user">{{ user.username }}</span>
