@@ -101,6 +101,7 @@ class Show(models.Model):
     number_of_seasons = models.IntegerField(default=0)
     number_of_episodes = models.IntegerField(default=0)
     homepage = models.URLField(max_length=500, blank=True)
+    trailer_key = models.CharField(max_length=40, blank=True)
 
     genres = models.ManyToManyField(Genre, related_name="shows", blank=True)
     networks = models.ManyToManyField(Network, related_name="shows", blank=True)
@@ -163,6 +164,11 @@ class Show(models.Model):
         if self.backdrop_path:
             return f"{settings.TMDB_IMAGE_BASE_URL}/w1280{self.backdrop_path}"
         return ""
+
+    @property
+    def trailer_url(self):
+        """YouTube watch URL, or empty when TMDb had no usable video."""
+        return f"https://www.youtube.com/watch?v={self.trailer_key}" if self.trailer_key else ""
 
     @property
     def tmdb_score_5(self):

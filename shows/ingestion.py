@@ -57,6 +57,26 @@ class Ingestor:
         for tmdb_id in show_ids:
             self.ingest_show(tmdb_id)
 
+    @staticmethod
+    def _pick_trailer(videos):
+        """Best YouTube trailer key from a TMDb videos block, or "".
+
+        TMDb returns clips, featurettes and bloopers alongside trailers, often
+        several per show and not always official. Rank rather than take the
+        first: trailers over teasers, official over fan uploads, newest last
+        so it wins.
+        """
+        results = (videos or {}).get("results") or []
+        ranked = []
+        for v in results:
+            if v.get("site") != "YouTube" or not v.get("key"):
+                continue
+            kind = {"Trailer": 2, "Teaser": 1}.get(v.get("type"))
+            if kind is None:
+                continue
+            ranked.append((kind, bool(v.get("official")), v.get("published_at") or "", v["key"]))
+        return max(ranked)[3] if ranked else ""
+
     # ── single show ───────────────────────────────────────────────────────
 
     @transaction.atomic
@@ -86,6 +106,7 @@ class Ingestor:
                 "number_of_seasons": data.get("number_of_seasons", 0),
                 "number_of_episodes": data.get("number_of_episodes", 0),
                 "homepage": data.get("homepage", "") or "",
+                "trailer_key": self._pick_trailer(data.get("videos", {})),
             },
         )
 

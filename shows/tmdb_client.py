@@ -62,7 +62,7 @@ class TMDBClient:
         """Search TV shows by name."""
         return self._get("/search/tv", params={"query": query, "page": page})
 
-    def get_tv_details(self, tv_id, append_to_response="credits"):
+    def get_tv_details(self, tv_id, append_to_response="credits,videos"):
         """Full details for a single show including credits."""
         return self._get(
             f"/tv/{tv_id}",
