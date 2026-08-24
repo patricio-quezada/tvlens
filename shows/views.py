@@ -275,6 +275,8 @@ def detail(request, slug):
             ),
         })
 
+    others_tagged, tag_suggestions = tag_suggestions_for(request.user, show)
+
     return render(
         request,
         "shows/detail.html",
@@ -297,7 +299,8 @@ def detail(request, slug):
             ),
             # Offer the vocabulary that already exists so a second reader does
             # not invent "slowburn" beside someone else's "slow burn".
-            "tag_suggestions": Tag.objects.order_by("name")[:200],
+            "others_tagged": others_tagged,
+            "tag_suggestions": tag_suggestions,
         },
     )
 
@@ -375,6 +378,76 @@ def search(request):
 TAG_MAX_LENGTH = 40
 
 
+
+# How many suggestions to offer. Long enough to cover a real vocabulary, short
+# enough that the list stays scannable rather than becoming a dictionary.
+TAG_SUGGESTION_LIMIT = 60
+
+
+def tag_suggestions_for(user, show):
+    """Tags worth offering while tagging this show, best first.
+
+    Three tiers, and the order is the whole point. What other people called
+    *this show* is the strongest suggestion available: it is the closest thing
+    to a second opinion the catalog can offer. The vocabulary in general use
+    comes next, ranked by how many people reached for it, because a word ten
+    readers chose is more likely to be understood than one somebody coined
+    once. Everything else is alphabetical filler.
+
+    Only tag names cross the boundary, never who applied them. A ShowTag row
+    belongs to one person; the aggregate is what MovieLens calls a genome and
+    is the point of a shared vocabulary.
+
+    Tags the reader has already put on this show are excluded, because
+    suggesting them offers a no-op.
+    """
+    mine = set(
+        ShowTag.objects.filter(user=user, show=show).values_list("tag_id", flat=True)
+    ) if user.is_authenticated else set()
+
+    on_this_show = list(
+        Tag.objects.filter(show_tags__show=show)
+        .exclude(id__in=mine)
+        .annotate(readers=Count("show_tags__user", distinct=True))
+        .order_by("-readers", "name")[:TAG_SUGGESTION_LIMIT]
+    )
+
+    seen = {t.id for t in on_this_show} | mine
+    in_general_use = list(
+        Tag.objects.exclude(id__in=seen)
+        .annotate(uses=Count("show_tags"))
+        .filter(uses__gt=0)
+        .order_by("-uses", "name")[:TAG_SUGGESTION_LIMIT - len(on_this_show)]
+    )
+
+    return on_this_show, on_this_show + in_general_use
+
+
+
+def _tag_panel(request, show):
+    """Re-render the tag panel for a fetch reply.
+
+    The rating widget set this pattern (ADR-10): the plain form POST still
+    works with script off, and the fetch branch only spares the reader a
+    reload. It spares them more than that here, because the redirect landed on
+    an anchor and threw the page a third of the way down.
+    """
+    others_tagged, _ = tag_suggestions_for(request.user, show)
+    return JsonResponse({
+        "html": render_to_string(
+            "shows/_tags.html",
+            {
+                "show": show,
+                "user_tags": ShowTag.objects.filter(user=request.user, show=show)
+                .select_related("tag").order_by("tag__name"),
+                "others_tagged": others_tagged,
+                "user": request.user,
+            },
+            request=request,
+        )
+    })
+
+
 @login_required
 @require_POST
 def add_tag(request, slug):
@@ -390,12 +463,14 @@ def add_tag(request, slug):
     name = " ".join(raw.split())
 
     if not name:
-        return redirect("shows:detail", slug=slug)
+        return _tag_panel(request, show) if request.headers.get(
+            "X-Requested-With") == "fetch" else redirect("shows:detail", slug=slug)
 
     key = slugify(name)
     if not key:
         # Nothing survived slugification, so there is no stable handle to store.
-        return redirect("shows:detail", slug=slug)
+        return _tag_panel(request, show) if request.headers.get(
+            "X-Requested-With") == "fetch" else redirect("shows:detail", slug=slug)
 
     # Match on the slug, not the name: "Slow Burn" and "slow burn" are the same
     # tag, and letting both exist splits the signal personalization reads.
@@ -404,6 +479,8 @@ def add_tag(request, slug):
         tag = Tag.objects.create(name=name, slug=key)
 
     ShowTag.objects.get_or_create(user=request.user, show=show, tag=tag)
+    if request.headers.get("X-Requested-With") == "fetch":
+        return _tag_panel(request, show)
     return redirect(f"{reverse('shows:detail', args=[slug])}#tags")
 
 
@@ -414,6 +491,8 @@ def remove_tag(request, slug):
     ShowTag.objects.filter(
         user=request.user, show=show, tag__slug=request.POST.get("tag", "")
     ).delete()
+    if request.headers.get("X-Requested-With") == "fetch":
+        return _tag_panel(request, show)
     return redirect(f"{reverse('shows:detail', args=[slug])}#tags")
 
 
@@ -458,6 +537,18 @@ def my_ratings(request):
     """
     shows = rated_shows(request.user)
     shows.sort(key=lambda s: (-s.rated_at.timestamp(), s.name))
+
+    # This page is the user's record of everything they have told TVLens, and a
+    # tag is as much a statement as a score. Ordered by how much they leaned on
+    # each word, because that is the shape of a vocabulary: the tag applied to
+    # nine shows says more about the reader than the one applied to a single
+    # show. Ties break alphabetically so the list is stable between visits.
+    tags = list(
+        Tag.objects.filter(show_tags__user=request.user)
+        .annotate(uses=Count("show_tags", distinct=True))
+        .order_by("-uses", "name")
+    )
+
     return render(
         request,
         "shows/my_ratings.html",
@@ -467,6 +558,8 @@ def my_ratings(request):
             "average_score": (
                 sum(s.user_score for s in shows) / len(shows) if shows else None
             ),
+            "tags": tags,
+            "tagged_count": sum(t.uses for t in tags),
         },
     )
 

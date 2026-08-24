@@ -2808,3 +2808,167 @@ class RecommendationModelRemovedTests(TestCase):
         from . import models
 
         self.assertFalse(hasattr(models, "Recommendation"))
+
+
+class TagSuggestionTests(TestCase):
+    """What other people called this show is the strongest suggestion available.
+
+    It is the closest thing to a second opinion the catalog can offer, so it
+    ranks above the vocabulary in general use, which in turn ranks above
+    alphabetical filler.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.show = Show.objects.create(
+            tmdb_id=9401, name="Cold Open", slug="cold-open",
+            overview="Sketch.", first_air_date="2011-01-01",
+            vote_average=7.0, vote_count=100, original_language="en",
+        )
+        cls.elsewhere = Show.objects.create(
+            tmdb_id=9402, name="Late Night", slug="late-night",
+            overview="Talk.", first_air_date="2012-01-01",
+            vote_average=6.5, vote_count=90, original_language="en",
+        )
+        cls.me = User.objects.create_user("me", password="pw")
+        cls.a = User.objects.create_user("a", password="pw")
+        cls.b = User.objects.create_user("b", password="pw")
+
+        cls.popular = Tag.objects.create(name="on this show", slug="on-this-show")
+        cls.rare = Tag.objects.create(name="also here", slug="also-here")
+        cls.elsewhere_tag = Tag.objects.create(name="somewhere else", slug="somewhere-else")
+
+        # Two readers agree on one tag for this show, one reader adds another.
+        ShowTag.objects.create(user=cls.a, show=cls.show, tag=cls.popular)
+        ShowTag.objects.create(user=cls.b, show=cls.show, tag=cls.popular)
+        ShowTag.objects.create(user=cls.a, show=cls.show, tag=cls.rare)
+        # And a tag that exists in the catalog but not on this show.
+        ShowTag.objects.create(user=cls.a, show=cls.elsewhere, tag=cls.elsewhere_tag)
+
+    def suggestions(self):
+        from .views import tag_suggestions_for
+
+        return tag_suggestions_for(self.me, self.show)
+
+    def test_tags_others_put_on_this_show_are_offered(self):
+        others, _ = self.suggestions()
+        self.assertEqual([t.name for t in others], ["on this show", "also here"])
+
+    def test_the_tag_more_readers_chose_ranks_first(self):
+        others, _ = self.suggestions()
+        self.assertEqual(others[0].name, "on this show")
+
+    def test_a_tag_from_elsewhere_is_offered_but_ranks_below(self):
+        others, everything = self.suggestions()
+        names = [t.name for t in everything]
+        self.assertIn("somewhere else", names)
+        self.assertGreater(names.index("somewhere else"), names.index("also here"))
+        self.assertNotIn("somewhere else", [t.name for t in others])
+
+    def test_a_tag_you_already_applied_is_not_suggested_back(self):
+        ShowTag.objects.create(user=self.me, show=self.show, tag=self.popular)
+        others, everything = self.suggestions()
+        self.assertNotIn("on this show", [t.name for t in others])
+        self.assertNotIn("on this show", [t.name for t in everything])
+
+    def test_an_anonymous_reader_gets_suggestions_without_an_error(self):
+        from .views import tag_suggestions_for
+
+        others, _ = tag_suggestions_for(AnonymousUser(), self.show)
+        self.assertEqual(others[0].name, "on this show")
+
+
+class TagSavesInPlaceTests(TestCase):
+    """Tagging follows the rating widget (ADR-10): the plain form still works
+    with script off, and the fetch branch spares the reload. Here it also
+    spares the jump, because the redirect landed on #tags and threw the reader
+    a third of the way down the page."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.show = Show.objects.create(
+            tmdb_id=9501, name="Open Water", slug="open-water",
+            overview="Sea.", first_air_date="2018-01-01",
+            vote_average=7.0, vote_count=50, original_language="en",
+        )
+        User.objects.create_user("swimmer", password="pw")
+
+    def setUp(self):
+        self.client.login(username="swimmer", password="pw")
+
+    def fetch_post(self, name, payload):
+        return self.client.post(
+            reverse(name, args=["open-water"]), payload,
+            headers={"x-requested-with": "fetch"},
+        )
+
+    def test_a_fetch_add_returns_the_panel_rather_than_a_redirect(self):
+        resp = self.fetch_post("shows:add_tag", {"tag": "briny"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("briny", resp.json()["html"])
+
+    def test_a_fetch_remove_returns_the_panel_without_the_tag(self):
+        self.fetch_post("shows:add_tag", {"tag": "briny"})
+        resp = self.fetch_post("shows:remove_tag", {"tag": "briny"})
+        self.assertNotIn(">briny</a>", resp.json()["html"])
+
+    def test_a_plain_post_still_redirects_so_it_works_without_script(self):
+        resp = self.client.post(reverse("shows:add_tag", args=["open-water"]),
+                                {"tag": "briny"})
+        self.assertEqual(resp.status_code, 302)
+
+    def test_an_empty_fetch_add_still_returns_the_panel(self):
+        """A no-op must not break the widget or bounce the page."""
+        resp = self.fetch_post("shows:add_tag", {"tag": "  "})
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("html", resp.json())
+
+
+class MyRatingsTagsTests(TestCase):
+    """My Ratings is the record of everything a reader has told TVLens, and a
+    tag is as much a statement as a score."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user("keeper", password="pw")
+        cls.a = Show.objects.create(
+            tmdb_id=9601, name="First", slug="first", overview="x",
+            first_air_date="2010-01-01", vote_average=7.0, vote_count=10,
+        )
+        cls.b = Show.objects.create(
+            tmdb_id=9602, name="Second", slug="second", overview="y",
+            first_air_date="2011-01-01", vote_average=7.0, vote_count=10,
+        )
+        common = Tag.objects.create(name="used twice", slug="used-twice")
+        once = Tag.objects.create(name="used once", slug="used-once")
+        ShowTag.objects.create(user=cls.user, show=cls.a, tag=common)
+        ShowTag.objects.create(user=cls.user, show=cls.b, tag=common)
+        ShowTag.objects.create(user=cls.user, show=cls.a, tag=once)
+        stranger = User.objects.create_user("stranger2", password="pw")
+        ShowTag.objects.create(user=stranger, show=cls.a,
+                               tag=Tag.objects.create(name="theirs", slug="theirs"))
+
+    def setUp(self):
+        self.client.login(username="keeper", password="pw")
+
+    def context(self):
+        return self.client.get(reverse("shows:my_ratings")).context
+
+    def test_the_readers_tags_are_listed(self):
+        self.assertEqual({t.name for t in self.context()["tags"]},
+                         {"used twice", "used once"})
+
+    def test_the_most_used_tag_ranks_first(self):
+        """A word applied to nine shows says more than one applied to one."""
+        self.assertEqual(self.context()["tags"][0].name, "used twice")
+
+    def test_another_readers_tags_do_not_appear(self):
+        self.assertNotIn("theirs", {t.name for t in self.context()["tags"]})
+
+    def test_the_count_spans_shows_not_tags(self):
+        self.assertEqual(self.context()["tagged_count"], 3)
+
+    def test_the_page_works_for_someone_with_no_tags(self):
+        self.client.login(username="stranger2", password="pw")
+        resp = self.client.get(reverse("shows:my_ratings"))
+        self.assertEqual(resp.status_code, 200)

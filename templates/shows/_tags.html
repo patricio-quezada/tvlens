@@ -1,0 +1,36 @@
+{% comment %}Rendered both by the page and by the fetch response, so the two can
+   never drift. Same reason _recs_list.html exists.{% endcomment %}
+<div class="tag-row" data-tag-row>
+    {% for link in user_tags %}
+    <span class="user-tag">
+        <a href="{% url 'shows:tag' link.tag.slug %}">{{ link.tag.name }}</a>
+        <form method="post" action="{% url 'shows:remove_tag' show.slug %}" data-tag-remove>
+            {% csrf_token %}
+            <input type="hidden" name="tag" value="{{ link.tag.slug }}">
+            <button type="submit" aria-label="Remove the tag {{ link.tag.name }}">&times;</button>
+        </form>
+    </span>
+    {% empty %}
+    {% if user.is_authenticated %}
+    <span class="tag-empty">Nothing yet. Slow burn? Comfort watch? Ended too soon?</span>
+    {% else %}
+    <span class="tag-empty">Sign in to tag this show.</span>
+    {% endif %}
+    {% endfor %}
+</div>
+
+{% comment %}What other people called this show is the closest thing to a second
+   opinion the catalog can offer, so it is offered as one click rather than
+   hidden inside an autocomplete nobody opens. Names only, never who.{% endcomment %}
+{% if user.is_authenticated and others_tagged %}
+<div class="tag-others">
+    <span class="tag-others-label">Others tagged this</span>
+    {% for t in others_tagged %}
+    <form method="post" action="{% url 'shows:add_tag' show.slug %}" data-tag-add>
+        {% csrf_token %}
+        <input type="hidden" name="tag" value="{{ t.name }}">
+        <button type="submit" class="tag-suggest">{{ t.name }}<span aria-hidden="true">+</span></button>
+    </form>
+    {% endfor %}
+</div>
+{% endif %}
