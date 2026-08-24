@@ -317,6 +317,7 @@ def search(request):
     started = time.perf_counter()
     shows, parsed = run_search(
         raw,
+        fuzzy=request.GET.get("exact") != "1",
         status=status,
         min_score=num("min_score", float),
         min_votes=num("min_votes", int),
@@ -340,6 +341,9 @@ def search(request):
         {
             "q": raw,
             "parsed": parsed,
+            # The page already carries a search box front and centre. A second
+            # one in the bar is a duplicate control competing with it.
+            "hide_nav_search": True,
             "shows": shows,
             "elapsed_ms": elapsed_ms,
             "statuses": Show.objects.exclude(status="").values_list("status", flat=True).distinct().order_by("status"),

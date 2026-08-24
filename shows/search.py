@@ -24,6 +24,7 @@ size, not show count.
 """
 
 import re
+from difflib import SequenceMatcher, get_close_matches
 
 from django.db.models import Q
 
@@ -183,6 +184,20 @@ class ParsedQuery:
             self.min_score = number
 
     @property
+    def too_short(self):
+        """Typed something, but nothing the catalog can act on.
+
+        A single character is not a search: it matches most of the catalog and
+        costs the most to find out. Refusing has to be distinguishable from an
+        empty box, because the reader typed and deserves to be told why.
+        """
+        return bool(self.text) and not self.searchable_text and not (
+            self.fields or self.year or self.season or self.language
+            or self.status or self.min_score is not None
+            or self.max_score is not None or self.min_votes is not None
+        )
+
+    @property
     def is_empty(self):
         return not (self.text or self.fields or self.year or self.season
                     or self.language or self.status
@@ -301,8 +316,65 @@ BRANCH_WEIGHTS = [
 ]
 
 
+FUZZY_FLOOR = 0.72
+FUZZY_MIN_LEN = 4
+
+
+def suggest(term):
+    """Closest real name in the catalog to a term that matched nothing.
+
+    Secondary by design: this only runs after the exact search comes back
+    empty, so a spelling that works never pays for it.
+
+    The candidate set is narrowed in SQL first. Scoring "cranson" against all
+    154,699 people costs more than the search it is rescuing, so only names
+    with a *word* starting with the same letter are considered. That is the
+    trade: a typo in the first letter goes uncaught. Typos land mid-word far
+    more often than at the start of one.
+
+    difflib.get_close_matches does the scoring because it screens with two
+    cheap upper bounds before computing a real ratio, which is the difference
+    between 200 ms and 40 ms over eight thousand names.
+    """
+    if len(term) < FUZZY_MIN_LEN:
+        return None
+
+    first = term[0]
+    names = list(
+        Show.objects.filter(_word("name", first)).values_list("name", flat=True)[:2000]
+    ) + list(
+        Person.objects.filter(_word("name", first)).values_list("name", flat=True)[:8000]
+    )
+
+    span = len(term)
+    words = {
+        piece
+        for name in names
+        for piece in [name, *name.split()]
+        if abs(len(piece) - span) <= 4
+    }
+
+    close = get_close_matches(term, list(words), n=6, cutoff=FUZZY_FLOOR)
+    if not close:
+        return None
+
+    def shared_prefix(candidate):
+        count = 0
+        for a, b in zip(term.lower(), candidate.lower()):
+            if a != b:
+                break
+            count += 1
+        return count
+
+    # get_close_matches ranks by ratio alone, which lets a rare short name beat
+    # the obvious one: "gilligen" scores Gillien above Gilligan. A longer shared
+    # prefix breaks that tie, because a typist gets the start of a word right.
+    return max(close, key=lambda c: (shared_prefix(c), SequenceMatcher(None, term.lower(), c.lower()).ratio()))
+
+
+
 def search(raw_query, *, status="", min_score=None, min_votes=None,
-           language="", main_cast_only=False, limit=120):
+           language="", main_cast_only=False, limit=120, fuzzy=True):
     """Run a catalog search and return (shows, parsed).
 
     Free text ORs across every branch and is ranked. Field operators AND
@@ -311,8 +383,9 @@ def search(raw_query, *, status="", min_score=None, min_votes=None,
     the box, on the principle that what you typed beats what a form remembered.
     """
     parsed = ParsedQuery(raw_query)
+    parsed.suggestion = None
 
-    if parsed.is_empty:
+    if parsed.is_empty or parsed.too_short:
         return [], parsed
 
     ranks = {}
@@ -326,6 +399,22 @@ def search(raw_query, *, status="", min_score=None, min_votes=None,
                     ranks[show_id] = weight
         matched = set(ranks)
         if not matched:
+            # Nothing matched exactly. Try once more against the closest real
+            # name in the catalog, and say so rather than silently swapping
+            # the reader's words for our own.
+            if fuzzy:
+                near = suggest(term)
+                if near and near.lower() != term.lower():
+                    corrected = raw_query.replace(term, near)
+                    shows, reparsed = search(
+                        corrected, status=status, min_score=min_score,
+                        min_votes=min_votes, language=language,
+                        main_cast_only=main_cast_only, limit=limit, fuzzy=False,
+                    )
+                    if shows:
+                        reparsed.suggestion = near
+                        reparsed.raw = raw_query
+                        return shows, reparsed
             return [], parsed
 
     # Operators intersect: actor:cranston genre:drama means both, not either.
