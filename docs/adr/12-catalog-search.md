@@ -1,3 +1,14 @@
+---
+adr: 12
+title: "Catalog search: one query per branch, matched on word boundaries"
+status: accepted
+date: 2026-08-24
+tags:
+  - adr
+relates:
+  - "[[05-no-signal-fallback-ladder]]"
+  - "[[06-sql-variable-ceiling]]"
+---
 # 12. Catalog search: one query per branch, matched on word boundaries
 
 **Search never ORs two fan-out relations into a single `filter()`, because that query does not

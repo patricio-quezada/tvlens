@@ -1,3 +1,14 @@
+---
+adr: 7
+title: Materialize the Layer 1 ranking and serve reads from a table
+status: accepted
+date: 2026-08-17
+tags:
+  - adr
+relates:
+  - "[[05-no-signal-fallback-ladder]]"
+  - "[[06-sql-variable-ceiling]]"
+---
 # 7. Materialize the Layer 1 ranking and serve reads from a table
 
 **The shared-people ranking is the same for every visitor and only changes when an ingest

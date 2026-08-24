@@ -1,3 +1,11 @@
+---
+title: Short title of the decision
+status: template
+date: 2026-08-11
+tags:
+  - adr
+relates: []
+---
 # NN. Short title of the decision
 
 **One or two sentences saying what was decided and why, before anything else.** Someone who hit

@@ -1,3 +1,12 @@
+---
+adr: 3
+title: "Three identities: surrogate pk, tmdb_id, slug"
+status: accepted
+date: 2026-08-11
+tags:
+  - adr
+relates: []
+---
 # 3. Three identities: surrogate pk, tmdb_id, slug
 
 **A show is identified three times, for three different jobs: an integer pk for foreign keys, a

@@ -1,3 +1,14 @@
+---
+adr: 10
+title: "Rating saves in place, and TVLens takes its first script"
+status: accepted
+date: 2026-08-22
+tags:
+  - adr
+relates:
+  - "[[08-layer2-personalized-reranking]]"
+  - "[[09-side-quests-cross-genre-edges]]"
+---
 # 10. Rating saves in place, and TVLens takes its first script
 
 **A browser never tells the server where a page was scrolled to, so restoring a rater's
