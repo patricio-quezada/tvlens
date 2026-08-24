@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+{% block title %}{% if q %}{{ q }} · Search{% else %}Search{% endif %} · TVLens{% endblock %}
+{% block content %}
+
+<div class="page-header search-header">
+    <h1>Search</h1>
+
+    <form class="search-form" method="get" action="{% url 'shows:search' %}" role="search">
+        <input type="search" name="q" value="{{ q }}" autofocus
+               placeholder="Title, actor, character, genre, network, a year…"
+               aria-label="Search the catalog">
+        <button type="submit">Search</button>
+
+        {% comment %}Closed unless the reader already used one. Opening it for
+           everyone would make a simple box look like a query builder.{% endcomment %}
+        <details class="advanced" {% if advanced_open %}open{% endif %}>
+            <summary>Advanced</summary>
+            <div class="advanced-grid">
+                <label>Status
+                    <select name="status">
+                        <option value="">Any</option>
+                        {% for s in statuses %}
+                        <option value="{{ s }}" {% if s == f_status %}selected{% endif %}>{{ s }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <label>Language
+                    <select name="language">
+                        <option value="">Any</option>
+                        {% for l in languages %}
+                        <option value="{{ l }}" {% if l == f_language %}selected{% endif %}>{{ l }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <label>Min score
+                    <input type="number" name="min_score" min="0" max="10" step="0.1"
+                           value="{{ f_min_score }}" placeholder="0–10">
+                </label>
+                <label>Min votes
+                    <input type="number" name="min_votes" min="0" step="100"
+                           value="{{ f_min_votes }}" placeholder="e.g. 500">
+                </label>
+                <label class="check">
+                    <input type="checkbox" name="main_cast" {% if f_main_cast %}checked{% endif %}>
+                    Main cast only
+                </label>
+            </div>
+        </details>
+    </form>
+
+    {% comment %}A year or a season typed into the box silently changes the
+       result set. Echoing it back as a chip keeps the filter visible, so the
+       reader can tell a filtered result from an empty catalog.{% endcomment %}
+    {% if parsed.year or parsed.season or parsed.fields or parsed.language or parsed.status or parsed.min_score or parsed.min_votes or parsed.unknown %}
+    <p class="chips">
+        Filtering on
+        {% for branch, value in parsed.fields %}<span class="chip">{{ branch }}: {{ value }}</span>{% endfor %}
+        {% if parsed.year %}<span class="chip">year {{ parsed.year }}{% if parsed.year_to %}–{{ parsed.year_to }}{% endif %}</span>{% endif %}
+        {% if parsed.season %}<span class="chip">season {{ parsed.season }}</span>{% endif %}
+        {% if parsed.language %}<span class="chip">language {{ parsed.language }}</span>{% endif %}
+        {% if parsed.status %}<span class="chip">status {{ parsed.status }}</span>{% endif %}
+        {% if parsed.min_score %}<span class="chip">score ≥ {{ parsed.min_score }}</span>{% endif %}
+        {% if parsed.min_votes %}<span class="chip">votes ≥ {{ parsed.min_votes }}</span>{% endif %}
+        {% if parsed.text %}<span class="chip-note">searching “{{ parsed.text }}”</span>{% endif %}
+        {% comment %}An operator that was typed but not understood has to be
+           said out loud. Silently treating it as text is how a reader ends up
+           trusting a filter that never ran.{% endcomment %}
+        {% for bad in parsed.unknown %}<span class="chip chip-bad">not understood: {{ bad }}</span>{% endfor %}
+    </p>
+    {% endif %}
+</div>
+
+{% if q %}
+<p class="search-count">
+    {{ shows|length }} result{{ shows|length|pluralize }}
+    <span class="timing">{{ elapsed_ms|floatformat:0 }} ms</span>
+</p>
+{% if shows %}
+{% include "shows/_grid.html" %}
+{% else %}
+<p class="empty">
+    Nothing matched “{{ q }}”. Search covers titles, cast, crew, characters,
+    genres, networks, season names and episode synopses.
+</p>
+{% endif %}
+{% else %}
+<div class="search-hint">
+    <p>
+        Type a title, a person, a character, a genre or a network and it
+        searches all of them at once. A year filters to shows airing then, and
+        a season number filters to shows that ran that long. Neither needs a
+        button.
+    </p>
+    <p class="hint-ops">Or scope it. Operators stack, and each one narrows:</p>
+    <ul class="ops">
+        <li><code>title:</code> <code>actor:</code> <code>crew:</code> <code>character:</code></li>
+        <li><code>genre:</code> <code>network:</code> <code>description:</code> <code>episode:</code></li>
+        <li><code>year:2005</code> <code>year:2000-2010</code> <code>season:3</code></li>
+        <li><code>lang:ja</code> <code>status:ended</code> <code>score:&gt;8</code> <code>votes:&gt;500</code></li>
+    </ul>
+    <p class="hint-quote">Use quotes for anything with a space: <code>character:"walter white"</code></p>
+</div>
+{% endif %}
+
+<style>
+    .search-form { margin: 1.5rem 0 0; }
+    .search-form input[type="search"] {
+        width: 100%; max-width: 640px; padding: 0.7rem 0.9rem;
+        font-size: 1rem; font-family: inherit;
+        background: var(--surface); color: var(--text-primary);
+        border: 1px solid var(--border); border-radius: 6px;
+    }
+    .search-form input[type="search"]:focus {
+        outline: none; border-color: var(--accent);
+    }
+    .search-form button {
+        margin-left: 0.5rem; padding: 0.7rem 1.4rem; font-size: 0.95rem;
+        font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.08em;
+        background: var(--accent); color: #000;
+        border: 0; border-radius: 6px; cursor: pointer;
+    }
+    .advanced { margin-top: 0.9rem; max-width: 640px; }
+    .advanced summary {
+        cursor: pointer; font-size: 0.85rem; color: var(--text-secondary);
+        letter-spacing: 0.04em;
+    }
+    .advanced-grid {
+        display: flex; flex-wrap: wrap; gap: 0.9rem 1.4rem;
+        margin-top: 0.8rem; padding: 0.9rem;
+        background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+    }
+    .advanced-grid label {
+        display: flex; flex-direction: column; gap: 0.25rem;
+        font-size: 0.78rem; color: var(--text-secondary);
+    }
+    .advanced-grid label.check { flex-direction: row; align-items: center; gap: 0.4rem; }
+    .advanced-grid select, .advanced-grid input[type="number"] {
+        padding: 0.35rem 0.5rem; font-family: inherit; font-size: 0.9rem;
+        background: var(--bg); color: var(--text-primary);
+        border: 1px solid var(--border); border-radius: 4px;
+    }
+    .chips { margin-top: 0.9rem; font-size: 0.85rem; color: var(--text-secondary); }
+    .chip {
+        display: inline-block; padding: 0.15rem 0.55rem; margin-right: 0.35rem;
+        background: var(--surface); border: 1px solid var(--accent);
+        border-radius: 999px; color: var(--accent); font-size: 0.78rem;
+    }
+    .chip-note { font-style: italic; }
+    .search-count { margin: 1.5rem 0 1rem; color: var(--text-secondary); font-size: 0.9rem; }
+    .search-count .timing { margin-left: 0.6rem; opacity: 0.6; font-size: 0.8rem; }
+    .search-hint { margin-top: 2rem; color: var(--text-secondary); max-width: 62ch; }
+    .search-hint .hint-ops { margin-top: 1.4rem; }
+    .search-hint ul.ops { list-style: none; margin: 0.5rem 0 0; padding: 0; }
+    .search-hint ul.ops li { margin-bottom: 0.4rem; }
+    .search-hint code {
+        background: var(--surface); border: 1px solid var(--border);
+        padding: 0.1rem 0.4rem; border-radius: 4px;
+        font-size: 0.85rem; color: var(--accent); margin-right: 0.3rem;
+    }
+    .search-hint .hint-quote { margin-top: 1.2rem; font-size: 0.9rem; }
+    .chip-bad { border-color: var(--error); color: var(--error); }
+</style>
+{% endblock %}

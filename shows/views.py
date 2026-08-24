@@ -1,5 +1,7 @@
 """Shows app views."""
 
+import time
+
 from django.contrib import messages
 from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
@@ -11,6 +13,7 @@ from django.views.decorators.http import require_POST
 
 from .forms import RegistrationForm
 from .models import Genre, Rating, Show
+from .search import search as run_search
 from .personalization import (
     build_profile,
     genre_quality,
@@ -284,6 +287,69 @@ def detail(request, slug):
             "star_steps": star_steps(user_rating),
             "average_rating": show.average_rating,
             "rating_count": show.ratings.count(),
+        },
+    )
+
+
+
+def search(request):
+    """Catalog search.
+
+    The filters a reader types inside the box (a year, a season number) are
+    parsed out by ParsedQuery and echoed back as chips, so nothing about the
+    result set is invisible. The advanced fields are a disclosure, closed by
+    default: they exist for the person who wants them and cost nothing to the
+    person who does not.
+    """
+    raw = request.GET.get("q", "")
+
+    def num(name, cast):
+        value = request.GET.get(name, "").strip()
+        try:
+            return cast(value) if value else None
+        except ValueError:
+            return None
+
+    status = request.GET.get("status", "")
+    language = request.GET.get("language", "")
+    main_cast_only = request.GET.get("main_cast") == "on"
+
+    started = time.perf_counter()
+    shows, parsed = run_search(
+        raw,
+        status=status,
+        min_score=num("min_score", float),
+        min_votes=num("min_votes", int),
+        language=language,
+        main_cast_only=main_cast_only,
+    )
+    elapsed_ms = (time.perf_counter() - started) * 1000
+
+    # Only offer filter values the catalog can actually satisfy. A dropdown
+    # listing five statuses when three exist invites empty result sets.
+    languages = (
+        Show.objects.exclude(original_language="")
+        .values_list("original_language", flat=True)
+        .distinct()
+        .order_by("original_language")
+    )
+
+    return render(
+        request,
+        "shows/search.html",
+        {
+            "q": raw,
+            "parsed": parsed,
+            "shows": shows,
+            "elapsed_ms": elapsed_ms,
+            "statuses": Show.objects.exclude(status="").values_list("status", flat=True).distinct().order_by("status"),
+            "languages": languages,
+            "f_status": status,
+            "f_language": language,
+            "f_min_score": request.GET.get("min_score", ""),
+            "f_min_votes": request.GET.get("min_votes", ""),
+            "f_main_cast": main_cast_only,
+            "advanced_open": any([status, language, request.GET.get("min_score"), request.GET.get("min_votes"), main_cast_only]),
         },
     )
 

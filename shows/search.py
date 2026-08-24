@@ -1,0 +1,383 @@
+"""Catalog search.
+
+Two rules shape this module, and both come from measurement rather than taste.
+
+**Never OR two fan-out relations into one filter().** Cast and crew are reverse
+foreign keys with 128,577 and 24,482 rows behind 100 shows. Django compiles a
+single filter() with both into one SELECT, and SQLite materializes the cross
+product before DISTINCT collapses it: 61 million rows for cast crossed with
+crew, 368 million once genres and networks join in. Measured, that query does
+not return a slow answer, it does not return at all. Two runs were killed at
+eight seconds and one was still executing after two minutes, on a query with
+sixteen real hits.
+
+The same search, split into one query per branch with the ids unioned in
+Python, runs in 32 ms and 74 ms worst case. So every branch below is its own
+query and nothing is ever ORed across a join.
+
+**No text index, deliberately.** icontains compiles to LIKE '%x%', which is
+unanchored, so SQLite full-scans whatever index sits on the column. The slowest
+single scan in the catalog is Person.name at 5.1 ms across 82,763 rows. There
+is no latency here to recover, so FTS5 would be complexity without payoff.
+Revisit if the catalog grows an order of magnitude: cost here scales with cast
+size, not show count.
+"""
+
+import re
+
+from django.db.models import Q
+
+from .recommenders import SQLITE_MAX_VARS_SAFE
+
+from .models import Episode, Person, Show
+
+# Rank buckets. A show's score is the best bucket that matched it, so a title
+# hit outranks a show whose fourth-billed actor shares a name with the query.
+# The numbers only have to order correctly relative to each other.
+W_TITLE = 100
+W_PERSON = 60
+W_CHARACTER = 50
+W_TAXONOMY = 40  # genre, network
+W_BLURB = 30  # overview, tagline
+W_SEASON = 20
+W_EPISODE = 10
+
+YEAR_RE = re.compile(r"\b(19\d{2}|20\d{2})\b")
+SEASON_RE = re.compile(r"\bs(?:eason)?\s*(\d{1,2})\b", re.IGNORECASE)
+OPERATOR_RE = re.compile(r'([a-zA-Z]+):("[^"]*"|\S+)')
+RANGE_RE = re.compile(r"^(\d{4})\s*(?:-|\.\.)\s*(\d{4})$")
+COMPARE_RE = re.compile(r"^([<>]=?)\s*([\d.]+)$")
+
+MIN_TERM = 2
+
+# Which branch each text operator scopes to. Aliases exist because people do
+# not agree on one word for a thing: actor and cast are the same request.
+TEXT_FIELDS = {
+    "title": "title",
+    "name": "title",
+    "actor": "cast",
+    "cast": "cast",
+    "crew": "crew",
+    "director": "crew",
+    "writer": "crew",
+    "character": "character",
+    "role": "character",
+    "genre": "genre",
+    "network": "network",
+    "channel": "network",
+    "description": "blurb",
+    "desc": "blurb",
+    "overview": "blurb",
+    "episode": "episode",
+}
+VALUE_FIELDS = {"year", "season", "lang", "language", "status", "score", "votes"}
+
+
+def _unquote(value):
+    return value[1:-1] if len(value) > 1 and value[0] == value[-1] == '"' else value
+
+
+class ParsedQuery:
+    """A raw search string split into free text, field operators, and filters.
+
+    Three things can appear in the box and only one of them is text.
+
+    Operators (`actor:cranston`, `genre:drama`) scope a search to one branch,
+    the way Obsidian scopes with `file:` or `tag:`. Several of them AND
+    together, because someone typing two is narrowing, not widening.
+
+    Bare filters are Patricio's rule: a year or a season number typed on its
+    own filters with no operator and no button. Both are lifted out of the
+    string, because leaving them in would run them twice, once as a filter and
+    once as text, and "Season 3" as text matches nearly every show in the
+    catalog.
+
+    Free text is whatever is left. It ORs across every branch and is ranked.
+    """
+
+    def __init__(self, raw):
+        self.raw = (raw or "").strip()
+        self.fields = []      # [(branch, term)] - ANDed
+        self.year = None
+        self.year_to = None
+        self.season = None
+        self.language = ""
+        self.status = ""
+        self.min_score = None
+        self.max_score = None
+        self.min_votes = None
+        self.unknown = []     # operators nobody recognised, echoed back
+
+        rest = self._take_operators(self.raw)
+
+        # Bare year and bare season, only if an operator did not already set them.
+        if self.year is None:
+            match = YEAR_RE.search(rest)
+            if match:
+                self.year = int(match.group(1))
+                rest = rest[: match.start()] + rest[match.end() :]
+        if self.season is None:
+            match = SEASON_RE.search(rest)
+            if match:
+                self.season = int(match.group(1))
+                rest = rest[: match.start()] + rest[match.end() :]
+
+        self.text = " ".join(rest.split())
+
+    def _take_operators(self, raw):
+        kept = []
+        cursor = 0
+        for match in OPERATOR_RE.finditer(raw):
+            key = match.group(1).lower()
+            value = _unquote(match.group(2))
+            if key not in TEXT_FIELDS and key not in VALUE_FIELDS:
+                continue  # not an operator, leave it in the text
+            kept.append(raw[cursor : match.start()])
+            cursor = match.end()
+            self._apply(key, value)
+        kept.append(raw[cursor:])
+        return " ".join("".join(kept).split())
+
+    def _apply(self, key, value):
+        if not value:
+            return
+        if key in TEXT_FIELDS:
+            self.fields.append((TEXT_FIELDS[key], value))
+            return
+
+        if key == "year":
+            span = RANGE_RE.match(value)
+            if span:
+                self.year, self.year_to = int(span.group(1)), int(span.group(2))
+            elif value.isdigit() and len(value) == 4:
+                self.year = int(value)
+            else:
+                self.unknown.append(f"year:{value}")
+        elif key == "season":
+            if value.isdigit():
+                self.season = int(value)
+            else:
+                self.fields.append(("season_name", value))
+        elif key in ("lang", "language"):
+            self.language = value.lower()
+        elif key == "status":
+            self.status = value
+        elif key in ("score", "votes"):
+            self._apply_number(key, value)
+
+    def _apply_number(self, key, value):
+        compare = COMPARE_RE.match(value)
+        try:
+            if compare:
+                sign, number = compare.group(1), float(compare.group(2))
+            else:
+                sign, number = ">=", float(value)
+        except ValueError:
+            self.unknown.append(f"{key}:{value}")
+            return
+        if key == "votes":
+            self.min_votes = int(number)
+        elif sign.startswith("<"):
+            self.max_score = number
+        else:
+            self.min_score = number
+
+    @property
+    def is_empty(self):
+        return not (self.text or self.fields or self.year or self.season
+                    or self.language or self.status
+                    or self.min_score is not None or self.max_score is not None
+                    or self.min_votes is not None)
+
+    @property
+    def searchable_text(self):
+        """Text worth running against the catalog.
+
+        A single character matches most of the catalog and costs the most, so
+        it buys nothing. A bare year is a valid search with no text at all.
+        """
+        return self.text if len(self.text) >= MIN_TERM else ""
+
+
+def _word(field, term):
+    """Match `term` at a word boundary in `field`, cheaply.
+
+    Plain icontains is a substring match, and substrings lie. "hbo" matched 46
+    shows through cast characters, every one of them the word "neighbour".
+    "war" matched 883 through "toward" and "warm". A search that answers a
+    three letter query with garbage is worse than one that answers nothing.
+
+    Anchoring with \b alone fixes the results and costs 12x: Django implements
+    REGEXP on SQLite as a Python callback, so it pays a function call per row,
+    92 ms against 7 ms.
+
+    So AND the two. SQLite evaluates the cheap LIKE first and only runs the
+    regex on rows that survive it, which is a handful. Measured at 7 to 13 ms,
+    the same as the substring match, with the regex's answers. The term still
+    matches word *prefixes*, so "break" finds Breaking Bad while "hbo" no
+    longer finds a neighbour.
+    """
+    pattern = r"\b" + re.escape(term)
+    return Q(**{f"{field}__icontains": term, f"{field}__iregex": pattern})
+
+
+def _ids(queryset):
+    """Ids only. Never .distinct() on a fan-out join: pull ids and let the set
+    deduplicate, which avoids SELECT DISTINCT over a multiplied result."""
+    return set(queryset.values_list("id", flat=True))
+
+
+def _shows_via_people(term, relation, extra=None):
+    """Find shows whose cast or crew includes a person matching `term`.
+
+    Two steps, not one join. Joining Show to cast to person makes SQLite
+    re-evaluate the name predicate once per credit row, and there are 278,632
+    cast rows against 154,699 people. Scanning people once and then looking
+    shows up by an indexed foreign key measured 59 ms against 9 ms for the same
+    26 results, and 64 ms against 25 ms on a name matching 2,646 people.
+
+    The id list is batched under the SQLite variable ceiling for the reason
+    ADR-06 records: the bundled build allows 32,766 bindings and an older
+    system build allows 999, so a common surname must not decide whether the
+    page returns or 500s.
+    """
+    person_ids = list(Person.objects.filter(_word("name", term)).values_list("id", flat=True))
+    if not person_ids:
+        return set()
+    found = set()
+    for start in range(0, len(person_ids), SQLITE_MAX_VARS_SAFE):
+        batch = person_ids[start:start + SQLITE_MAX_VARS_SAFE]
+        queryset = Show.objects.filter(**{f"{relation}__person_id__in": batch}, **(extra or {}))
+        found |= _ids(queryset)
+    return found
+
+
+def _branch(name, term, main_cast_only=False):
+    """Show ids matching `term` in one named branch. One query, one relation.
+
+    Never OR two fan-out relations into one filter(). Cast and crew are reverse
+    foreign keys with 128,577 and 24,482 rows behind 100 shows; Django compiles
+    a single filter() holding both into one SELECT and SQLite materialises the
+    cross product before DISTINCT collapses it. Measured, that query does not
+    return a slow answer, it does not return.
+    """
+    lead = {"cast__order__lt": 10} if main_cast_only else {}
+    queries = {
+        "title": lambda: Show.objects.filter(
+            _word("name", term) | _word("original_name", term)),
+        "cast": lambda: _shows_via_people(term, "cast", lead),
+        "crew": lambda: _shows_via_people(term, "crew"),
+        "character": lambda: Show.objects.filter(
+            _word("cast__character", term), **lead),
+        "genre": lambda: Show.objects.filter(_word("genres__name", term)),
+        "network": lambda: Show.objects.filter(_word("networks__name", term)),
+        "blurb": lambda: Show.objects.filter(
+            _word("overview", term) | _word("tagline", term)),
+        # Boilerplate season names stay searchable at Patricio's call, so
+        # "Thousand-Year Blood War" finds Bleach. Ranked low because most of
+        # the 141 distinct names read "Season 3".
+        "season_name": lambda: Show.objects.filter(_word("seasons__name", term)),
+        # The deepest branch. Synopsis only: episode titles were cut
+        # deliberately, they are short, generic and mostly noise.
+        "episode": lambda: Show.objects.filter(
+            _word("seasons__episodes__overview", term)),
+    }
+    result = queries[name]()
+    return result if isinstance(result, set) else _ids(result)
+
+
+# Rank order for free text. A title hit outranks a show whose fourth-billed
+# actor happens to share a name with the query.
+BRANCH_WEIGHTS = [
+    ("title", W_TITLE),
+    ("cast", W_PERSON),
+    ("crew", W_PERSON),
+    ("character", W_CHARACTER),
+    ("genre", W_TAXONOMY),
+    ("network", W_TAXONOMY),
+    ("blurb", W_BLURB),
+    ("season_name", W_SEASON),
+    ("episode", W_EPISODE),
+]
+
+
+def search(raw_query, *, status="", min_score=None, min_votes=None,
+           language="", main_cast_only=False, limit=120):
+    """Run a catalog search and return (shows, parsed).
+
+    Free text ORs across every branch and is ranked. Field operators AND
+    together, because someone typing two of them is narrowing. Explicit
+    arguments come from the advanced panel and lose to an operator typed in
+    the box, on the principle that what you typed beats what a form remembered.
+    """
+    parsed = ParsedQuery(raw_query)
+
+    if parsed.is_empty:
+        return [], parsed
+
+    ranks = {}
+    matched = None  # None means unconstrained by any text branch
+
+    term = parsed.searchable_text
+    if term:
+        for name, weight in BRANCH_WEIGHTS:
+            for show_id in _branch(name, term, main_cast_only=main_cast_only):
+                if ranks.get(show_id, 0) < weight:
+                    ranks[show_id] = weight
+        matched = set(ranks)
+        if not matched:
+            return [], parsed
+
+    # Operators intersect: actor:cranston genre:drama means both, not either.
+    for name, value in parsed.fields:
+        ids = _branch(name, value, main_cast_only=main_cast_only)
+        matched = ids if matched is None else (matched & ids)
+        if not matched:
+            return [], parsed
+
+    qs = Show.objects.all() if matched is None else Show.objects.filter(pk__in=matched)
+
+    # A year is "was airing then", not "premiered then". Someone typing 2005
+    # means a show that was on, and a show with no last_air_date has not ended.
+    if parsed.year is not None:
+        upper = parsed.year_to or parsed.year
+        qs = qs.filter(first_air_date__year__lte=upper).filter(
+            Q(last_air_date__isnull=True) | Q(last_air_date__year__gte=parsed.year)
+        )
+    if parsed.season is not None:
+        qs = qs.filter(seasons__season_number=parsed.season)
+
+    status = parsed.status or status
+    language = parsed.language or language
+    if parsed.min_score is not None:
+        min_score = parsed.min_score
+    if parsed.min_votes is not None:
+        min_votes = parsed.min_votes
+
+    if status:
+        qs = qs.filter(status__iexact=status)
+    if language:
+        qs = qs.filter(original_language__iexact=language)
+    if min_score is not None:
+        qs = qs.filter(vote_average__gte=min_score)
+    if parsed.max_score is not None:
+        qs = qs.filter(vote_average__lte=parsed.max_score)
+    if min_votes is not None:
+        qs = qs.filter(vote_count__gte=min_votes)
+
+    qs = qs.prefetch_related("genres")
+
+    # The season filter joins, so ids can repeat. Dedupe in Python rather than
+    # asking SQLite for DISTINCT across a join.
+    seen, shows = set(), []
+    for show in qs:
+        if show.id in seen:
+            continue
+        seen.add(show.id)
+        show.search_rank = ranks.get(show.id, 0)
+        shows.append(show)
+
+    # Rank bucket first, then the crowd's score inside a bucket. Never
+    # popularity: ADR-05 removed that as an ordering for good reason.
+    shows.sort(key=lambda s: (-s.search_rank, -(s.vote_average or 0), s.name))
+    return shows[:limit], parsed

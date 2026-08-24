@@ -249,14 +249,44 @@ class Ingestor:
         )
         return person
 
+    @staticmethod
+    def _upsert_child(model, tmdb_id, natural, fields):
+        """Upsert a row TMDb identifies two ways, neither of them reliable.
+
+        Season and Episode each carry a unique tmdb_id AND a unique natural key
+        (show + season_number, season + episode_number). TMDb keeps neither
+        stable: it reassigns a season's id when a show is reorganized, and it
+        moves an episode between seasons while keeping its id. Either drift
+        makes a single-key update_or_create insert a row that then collides on
+        the other key. Keying on tmdb_id alone fails the first way, keying on
+        the natural key alone fails the second.
+
+        So resolve by id first, fall back to the natural key, and evict the
+        stale row squatting on the natural key we are about to claim. Only
+        re-ingest can hit any of this, which is why a catalog built once in a
+        single pass never saw it.
+        """
+        obj = model.objects.filter(tmdb_id=tmdb_id).first()
+        if obj is None:
+            obj = model.objects.filter(**natural).first()
+        else:
+            model.objects.filter(**natural).exclude(pk=obj.pk).delete()
+        if obj is None:
+            obj = model()
+        obj.tmdb_id = tmdb_id
+        for key, value in {**natural, **fields}.items():
+            setattr(obj, key, value)
+        obj.save()
+        return obj
+
     def _upsert_season(self, show, season_data):
         if not season_data.get("id"):
             return
-        season, _ = Season.objects.update_or_create(
-            tmdb_id=season_data["id"],
-            defaults={
-                "show": show,
-                "season_number": season_data.get("season_number", 0),
+        season = self._upsert_child(
+            Season,
+            season_data["id"],
+            {"show": show, "season_number": season_data.get("season_number", 0)},
+            {
                 "name": season_data.get("name", ""),
                 "overview": season_data.get("overview", ""),
                 "poster_path": season_data.get("poster_path", "") or "",
@@ -270,11 +300,11 @@ class Ingestor:
         if not ep_data:
             return
         for ep in ep_data.get("episodes", []):
-            Episode.objects.update_or_create(
-                tmdb_id=ep["id"],
-                defaults={
-                    "season": season,
-                    "episode_number": ep.get("episode_number", 0),
+            self._upsert_child(
+                Episode,
+                ep["id"],
+                {"season": season, "episode_number": ep.get("episode_number", 0)},
+                {
                     "name": ep.get("name", ""),
                     "overview": ep.get("overview", ""),
                     "still_path": ep.get("still_path", "") or "",
