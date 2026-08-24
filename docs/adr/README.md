@@ -34,3 +34,5 @@ Copy `00-adr-template.md` to start a new one.
 - [10 - Rating saves in place, and TVLens takes its first script](10-rating-saves-in-place.md)
 - [11 - One visual identity, defined once, taken from the landing page itself](11-one-visual-identity.md)
 - [12 - Catalog search: one query per branch, matched on word boundaries](12-catalog-search.md)
+- [13 - Resolve child records by two keys, because TMDb keeps neither stable](13-child-record-identity.md) *(amends ADR-03 for Season and Episode)*
+- [14 - Tags are a shared vocabulary applied privately](14-tags-shared-vocabulary.md)
