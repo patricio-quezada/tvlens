@@ -149,6 +149,15 @@
         }
         nav .brand::before { content: 'TV'; font-size: 1.5rem; }
         nav .brand::after { content: 'LENS'; font-size: 1.5rem; color: var(--accent); }
+        .nav-search { margin-left: 1.5rem; flex: 0 1 260px; }
+        .nav-search input {
+            width: 100%; padding: 0.4rem 0.7rem; font-size: 0.88rem;
+            font-family: inherit; color: var(--text-primary);
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 999px;
+        }
+        .nav-search input:focus { outline: none; border-color: var(--accent); }
+        @media (max-width: 640px) { .nav-search { display: none; } }
         nav .user { color: var(--text-secondary); }
         nav form { display: inline; }
         nav button { background: none; border: none; color: var(--accent); cursor: pointer; font-family: inherit; font-size: inherit; padding: 0; }
@@ -283,6 +292,12 @@
 <body class="{% block body_class %}{% endblock %}">
     <nav>
         <a href="{% url 'shows:index' %}" class="brand">TVLens</a>
+        {% comment %}Search belongs in the bar, not behind a link: it is the
+           fastest way into a catalog and every page should offer it.{% endcomment %}
+        <form class="nav-search" method="get" action="{% url 'shows:search' %}" role="search">
+            <input type="search" name="q" value="{{ q|default:'' }}"
+                   placeholder="Search" aria-label="Search the catalog">
+        </form>
         {% if user.is_authenticated %}
             <a href="{% url 'shows:my_ratings' %}">My Ratings</a>
             <span class="user">{{ user.username }}</span>

@@ -21,6 +21,7 @@ from .models import (
     CrewMember,
     Episode,
     Genre,
+    Network,
     Person,
     Rating,
     Season,
@@ -28,6 +29,8 @@ from .models import (
     SimilarShow,
     WatchHistory,
 )
+from .search import ParsedQuery
+from .search import search as run_search
 from .personalization import (
     TOP_PICK_FLOOR,
     rated_shows,
@@ -2394,3 +2397,174 @@ class TrailerTests(TestCase):
         # that the container ships empty.
         self.assertIn('<div class="trailer-frame"></div>', body)
         self.assertIn("<dialog", body)
+
+
+class SearchParseTests(TestCase):
+    """A year or a season number typed into the box is a filter, not text.
+
+    Patricio's rule: no buttons for either. That means the parser has to lift
+    them out of the string, because leaving them in makes them run twice, once
+    as a filter and once as text, and "Season 3" as text matches nearly every
+    show in the catalog.
+    """
+
+    def test_year_is_lifted_out_of_the_text(self):
+        parsed = ParsedQuery("breaking 2010")
+        self.assertEqual(parsed.year, 2010)
+        self.assertEqual(parsed.text, "breaking")
+
+    def test_season_is_lifted_out_of_the_text(self):
+        parsed = ParsedQuery("bleach season 3")
+        self.assertEqual(parsed.season, 3)
+        self.assertEqual(parsed.text, "bleach")
+
+    def test_short_season_form_is_recognised(self):
+        self.assertEqual(ParsedQuery("s2").season, 2)
+
+    def test_a_bare_year_is_a_valid_search_with_no_text(self):
+        parsed = ParsedQuery("1999")
+        self.assertEqual(parsed.year, 1999)
+        self.assertEqual(parsed.text, "")
+        self.assertFalse(parsed.is_empty)
+
+    def test_a_title_starting_with_s_is_not_read_as_a_season(self):
+        self.assertIsNone(ParsedQuery("Stranger Things").season)
+
+    def test_a_single_character_is_not_worth_searching(self):
+        self.assertEqual(ParsedQuery("a").searchable_text, "")
+
+
+class SearchTests(TestCase):
+    """The catalog search, and the two rules that shape it.
+
+    One: a substring match lies. "hbo" matched 46 shows through the word
+    "neighbour" before word-boundary matching went in, which is why every
+    branch anchors on \\b.
+
+    Two: never OR two fan-out relations into one filter(). Cast crossed with
+    crew materialises tens of millions of rows and the query does not return.
+    The branches stay separate and the ids are unioned in Python.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.drama = Genre.objects.create(tmdb_id=18, name="Drama")
+        cls.hbo = Network.objects.create(tmdb_id=49, name="HBO")
+
+        cls.titled = Show.objects.create(
+            tmdb_id=9001, name="Cranston Manor", slug="cranston-manor",
+            overview="A house.", first_air_date="2001-01-01",
+            last_air_date="2004-01-01", vote_average=8.0, vote_count=900,
+            original_language="en", status="Ended",
+        )
+        cls.by_actor = Show.objects.create(
+            tmdb_id=9002, name="The Blue Hour", slug="the-blue-hour",
+            overview="Unrelated.", first_air_date="2008-01-01",
+            last_air_date="2012-01-01", vote_average=7.0, vote_count=800,
+            original_language="en", status="Ended",
+        )
+        person = Person.objects.create(tmdb_id=8001, name="Bryan Cranston")
+        CastMember.objects.create(show=cls.by_actor, person=person,
+                                  character="Lead", order=0, episode_count=10)
+
+        # The trap: "hbo" is a substring of "neighbour" and of "highborn".
+        cls.decoy = Show.objects.create(
+            tmdb_id=9003, name="Quiet Street", slug="quiet-street",
+            overview="A story about a neighbour who is highborn.",
+            first_air_date="2015-01-01", vote_average=6.0, vote_count=100,
+            original_language="en", status="Returning Series",
+        )
+        decoy_person = Person.objects.create(tmdb_id=8002, name="Ann Neighbour")
+        CastMember.objects.create(show=cls.decoy, person=decoy_person,
+                                  character="A neighbour", order=1, episode_count=5)
+
+        cls.on_network = Show.objects.create(
+            tmdb_id=9004, name="Carrier Pigeon", slug="carrier-pigeon",
+            overview="Birds.", first_air_date="2019-01-01",
+            vote_average=9.0, vote_count=2000,
+            original_language="ja", status="Returning Series",
+        )
+        cls.on_network.networks.add(cls.hbo)
+        cls.on_network.genres.add(cls.drama)
+
+    def test_substring_noise_is_excluded(self):
+        """The whole reason word-boundary matching exists."""
+        names = {s.name for s in run_search("hbo")[0]}
+        self.assertIn(self.on_network.name, names)
+        self.assertNotIn(self.decoy.name, names)
+
+    def test_a_word_prefix_still_matches(self):
+        """Anchoring must not cost prefix search: 'cran' should find Cranston."""
+        names = {s.name for s in run_search("cran")[0]}
+        self.assertIn(self.titled.name, names)
+
+    def test_a_title_match_outranks_a_cast_match(self):
+        results, _ = run_search("cranston")
+        self.assertEqual(results[0].name, self.titled.name)
+        self.assertIn(self.by_actor.name, {s.name for s in results})
+
+    def test_character_and_person_are_both_searched(self):
+        self.assertIn(self.by_actor.name, {s.name for s in run_search("bryan")[0]})
+
+    def test_network_is_searchable_as_text(self):
+        self.assertIn(self.on_network.name, {s.name for s in run_search("hbo")[0]})
+
+    def test_a_typed_year_filters_to_shows_airing_then(self):
+        """2010 should keep a 2008-2012 show and drop a 2001-2004 one."""
+        names = {s.name for s in run_search("2010")[0]}
+        self.assertIn(self.by_actor.name, names)
+        self.assertNotIn(self.titled.name, names)
+
+    def test_a_still_running_show_counts_as_airing(self):
+        """No last_air_date means it has not ended, so it was on in 2020."""
+        self.assertIn(self.on_network.name, {s.name for s in run_search("2020")[0]})
+
+    def test_an_empty_query_returns_nothing(self):
+        self.assertEqual(run_search("")[0], [])
+
+    def test_advanced_filters_narrow_the_result(self):
+        wide = run_search("cranston")[0]
+        narrow = run_search("cranston", min_votes=850)[0]
+        self.assertLess(len(narrow), len(wide))
+        self.assertIn(self.titled.name, {s.name for s in narrow})
+
+    def test_language_filter_uses_the_stored_code(self):
+        names = {s.name for s in run_search("2020", language="ja")[0]}
+        self.assertEqual(names, {self.on_network.name})
+
+    def test_no_branch_ors_two_fanout_relations(self):
+        """The regression guard for the query that never returned.
+
+        Reading the source is the only honest check: a timing assertion would
+        pass on a fast machine and a small fixture even if the shape came back.
+        """
+        import inspect
+
+        from . import search as search_module
+
+        source = inspect.getsource(search_module._branch)
+        for call in source.split("Show.objects.filter(")[1:]:
+            body = call.split("),\n")[0]
+            self.assertFalse(
+                "cast__" in body and "crew__" in body,
+                "cast and crew must never share one filter() call",
+            )
+
+
+class SearchViewTests(TestCase):
+    def test_the_page_renders_without_a_query(self):
+        self.assertEqual(self.client.get(reverse("shows:search")).status_code, 200)
+
+    def test_a_query_reaches_the_search_layer(self):
+        resp = self.client.get(reverse("shows:search"), {"q": "nothing-matches-this"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(list(resp.context["shows"]), [])
+
+    def test_a_typed_year_is_echoed_back_to_the_reader(self):
+        """A filter the reader cannot see is a filter they cannot undo."""
+        resp = self.client.get(reverse("shows:search"), {"q": "west 1999"})
+        self.assertEqual(resp.context["parsed"].year, 1999)
+
+    def test_using_an_advanced_filter_opens_the_disclosure(self):
+        resp = self.client.get(reverse("shows:search"), {"q": "west", "status": "Ended"})
+        self.assertTrue(resp.context["advanced_open"])
