@@ -1,3 +1,12 @@
+---
+adr: 11
+title: "One visual identity, defined once, taken from the landing page itself"
+status: accepted
+date: 2026-08-22
+tags:
+  - adr
+relates: []
+---
 # 11. One visual identity, defined once, taken from the landing page itself
 
 **Ten of eleven pages wore an older brown palette while only the show page carried the

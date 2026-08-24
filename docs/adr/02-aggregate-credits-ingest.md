@@ -1,3 +1,13 @@
+---
+adr: 2
+title: "Ingest aggregate_credits, and record episode counts"
+status: accepted
+date: 2026-08-11
+tags:
+  - adr
+relates:
+  - "[[04-episode-weighted-people-recommender]]"
+---
 # 2. Ingest aggregate_credits, and record episode counts
 
 **The credits endpoint TVLens was reading returns only series-level billing, which left the

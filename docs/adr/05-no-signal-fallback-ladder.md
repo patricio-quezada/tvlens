@@ -1,3 +1,13 @@
+---
+adr: 5
+title: Fall back down a ladder when the people graph has no signal
+status: accepted
+date: 2026-08-11
+tags:
+  - adr
+relates:
+  - "[[04-episode-weighted-people-recommender]]"
+---
 # 5. Fall back down a ladder when the people graph has no signal
 
 **When every weighted score comes out zero, sorting by it would quietly hand the ranking to the

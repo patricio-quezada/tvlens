@@ -1,3 +1,14 @@
+---
+adr: 6
+title: Lift the SQL variable ceiling in the recommenders
+status: accepted
+date: 2026-08-16
+tags:
+  - adr
+relates:
+  - "[[05-no-signal-fallback-ladder]]"
+  - "[[07-materialized-recommendations]]"
+---
 # 6. Lift the SQL variable ceiling in the recommenders
 
 **Every recommender passed the source show's people to SQLite as one bound variable each, which
