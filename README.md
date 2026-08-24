@@ -40,17 +40,31 @@ The significant, contested decisions each carry a short record:
 - [ADR-08, Layer 2: personalized re-ranking](docs/adr/08-layer2-personalized-reranking.md)
 
 The recommender lives in [`shows/recommenders.py`](shows/recommenders.py); ingestion
-in [`shows/ingestion.py`](shows/ingestion.py); the data model in
+in [`shows/ingestion.py`](shows/ingestion.py); catalog search in
+[`shows/search.py`](shows/search.py); the data model in
 [`shows/models.py`](shows/models.py).
+
+## Search
+
+Search covers titles, cast, crew, characters, descriptions, genres, networks, tags,
+season names and episode synopses. A year or season number typed into the box filters
+with no operator; `actor:`, `genre:`, `tag:`, `score:>8` and the rest scope to one field
+and stack by intersection. A misspelling falls back to the closest real name in the
+catalog. Why it is built as one query per branch rather than one query:
+[ADR-12](docs/adr/12-catalog-search.md).
 
 ## Data model
 
 TMDb-sourced metadata covers shows, seasons, episodes, genres, networks, and people, with separate cast and crew join tables that
 carry per-episode counts. User interactions span ratings, reviews with spoiler flags,
 watchlists with priority, and episode-level watch history. Community tagging uses a
-shared vocabulary plus per-user applied tags with relevance scores. Generated
-recommendations are stored per user per algorithm type. A `UserProfile` extends
-`auth.User` one-to-one for future personalization.
+shared vocabulary plus per-user applied tags with relevance scores: the `Tag` row is
+shared so two readers can agree what "slow burn" means, while the `ShowTag` row belongs
+to one person. A `UserProfile` extends `auth.User` one-to-one for future personalization.
+
+Layer 1 recommendations are materialized into `SimilarShow`
+([ADR-07](docs/adr/07-materialized-recommendations.md)) rather than stored per user. A
+`Recommendation` model was removed in favour of that table, since nothing wrote to it.
 
 Profiles are privacy-first, with no public surface, matching MovieLens. Personalization
 re-ranks the graph per user ([ADR-08](docs/adr/08-layer2-personalized-reranking.md)):

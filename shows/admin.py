@@ -10,7 +10,6 @@ from .models import (
     Network,
     Person,
     Rating,
-    Recommendation,
     Review,
     Season,
     Show,
@@ -145,13 +144,6 @@ class TagAdmin(admin.ModelAdmin):
 class ShowTagAdmin(admin.ModelAdmin):
     list_display = ("tag", "show", "user", "relevance", "created_at")
     list_filter = ("tag",)
-
-
-@admin.register(Recommendation)
-class RecommendationAdmin(admin.ModelAdmin):
-    list_display = ("user", "show", "score", "algorithm", "seen", "generated_at")
-    list_filter = ("algorithm", "seen")
-    readonly_fields = ("generated_at",)
 
 
 @admin.register(UserProfile)

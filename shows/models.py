@@ -8,7 +8,7 @@ Tables:
   4. Season            12. WatchHistory
   5. Episode           13. Tag
   6. Person            14. ShowTag
-  7. CastMember        15. Recommendation
+  7. CastMember
   8. CrewMember        16. UserProfile
 """
 
@@ -417,31 +417,6 @@ class ShowTag(models.Model):
 
     def __str__(self):
         return f"{self.tag.name} on {self.show.name} by {self.user.username}"
-
-
-# ── 15. Recommendation ───────────────────────────────────────────────────────
-
-class Recommendation(models.Model):
-    class Algorithm(models.TextChoices):
-        COLLABORATIVE = "collaborative", "Collaborative Filtering"
-        CONTENT = "content", "Content-Based"
-        HYBRID = "hybrid", "Hybrid"
-        POPULAR = "popular", "Popularity-Based"
-
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="recommendations")
-    show = models.ForeignKey(Show, on_delete=models.CASCADE, related_name="recommended_to")
-    score = models.FloatField(help_text="Predicted relevance score")
-    algorithm = models.CharField(max_length=20, choices=Algorithm.choices)
-    reason = models.TextField(blank=True, help_text="Human-readable explanation")
-    generated_at = models.DateTimeField(auto_now_add=True)
-    seen = models.BooleanField(default=False)
-
-    class Meta:
-        ordering = ["-score"]
-        unique_together = ["user", "show", "algorithm"]
-
-    def __str__(self):
-        return f"Rec: {self.show.name} for {self.user.username} ({self.algorithm})"
 
 
 # ── 16. UserProfile ──────────────────────────────────────────────────────────

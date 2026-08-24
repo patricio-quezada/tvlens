@@ -26,7 +26,9 @@ from .models import (
     Rating,
     Season,
     Show,
+    ShowTag,
     SimilarShow,
+    Tag,
     WatchHistory,
 )
 from .search import ParsedQuery
@@ -2691,3 +2693,118 @@ class SearchPageChromeTests(TestCase):
     def test_exact_disables_the_fuzzy_rescue(self):
         resp = self.client.get(reverse("shows:search"), {"q": "cranson", "exact": "1"})
         self.assertIsNone(resp.context["parsed"].suggestion)
+
+
+class TaggingTests(TestCase):
+    """Tags are a shared vocabulary applied privately.
+
+    The Tag row is reused across everyone so two readers can agree what "slow
+    burn" means; the ShowTag row belongs to one person so neither sees the
+    other's shelf.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.show = Show.objects.create(
+            tmdb_id=9301, name="Night Shift", slug="night-shift",
+            overview="Hospital.", first_air_date="2014-01-01",
+            vote_average=7.5, vote_count=900, original_language="en",
+        )
+        cls.other_show = Show.objects.create(
+            tmdb_id=9302, name="Day Shift", slug="day-shift",
+            overview="Also hospital.", first_air_date="2016-01-01",
+            vote_average=7.0, vote_count=400, original_language="en",
+        )
+        cls.user = User.objects.create_user("tagger", password="pw")
+        cls.other = User.objects.create_user("stranger", password="pw")
+
+    def setUp(self):
+        self.client.login(username="tagger", password="pw")
+
+    def add(self, name, slug="night-shift"):
+        return self.client.post(reverse("shows:add_tag", args=[slug]), {"tag": name})
+
+    def test_a_tag_is_created_and_attached(self):
+        self.add("Slow Burn")
+        link = ShowTag.objects.get(user=self.user, show=self.show)
+        self.assertEqual(link.tag.name, "Slow Burn")
+
+    def test_casing_does_not_split_a_tag(self):
+        """"Slow Burn" and "slow burn" must be one tag, or the signal halves."""
+        self.add("Slow Burn")
+        self.client.post(reverse("shows:add_tag", args=["day-shift"]), {"tag": "slow burn"})
+        self.assertEqual(Tag.objects.filter(slug="slow-burn").count(), 1)
+
+    def test_the_same_tag_twice_does_not_duplicate(self):
+        self.add("comfort watch")
+        self.add("comfort watch")
+        self.assertEqual(ShowTag.objects.filter(user=self.user, show=self.show).count(), 1)
+
+    def test_an_empty_tag_is_ignored(self):
+        self.add("   ")
+        self.assertEqual(ShowTag.objects.count(), 0)
+
+    def test_a_tag_that_slugifies_to_nothing_is_ignored(self):
+        """No stable handle means nothing to store or link to."""
+        self.add("!!!")
+        self.assertEqual(Tag.objects.count(), 0)
+
+    def test_a_tag_is_truncated_not_rejected(self):
+        self.add("x" * 200)
+        self.assertLessEqual(len(Tag.objects.get().name), 40)
+
+    def test_a_tag_can_be_removed(self):
+        self.add("comfort watch")
+        self.client.post(reverse("shows:remove_tag", args=["night-shift"]),
+                         {"tag": "comfort-watch"})
+        self.assertEqual(ShowTag.objects.filter(user=self.user).count(), 0)
+
+    def test_one_reader_cannot_remove_another_readers_tag(self):
+        self.add("comfort watch")
+        self.client.login(username="stranger", password="pw")
+        self.client.post(reverse("shows:remove_tag", args=["night-shift"]),
+                         {"tag": "comfort-watch"})
+        self.assertEqual(ShowTag.objects.filter(user=self.user).count(), 1)
+
+    def test_tagging_requires_a_login(self):
+        self.client.logout()
+        resp = self.add("anything")
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(ShowTag.objects.count(), 0)
+
+    def test_the_show_page_lists_only_your_own_tags(self):
+        self.add("mine")
+        tag = Tag.objects.create(name="theirs", slug="theirs")
+        ShowTag.objects.create(user=self.other, show=self.show, tag=tag)
+        resp = self.client.get(reverse("shows:detail", args=["night-shift"]))
+        self.assertEqual({t.tag.name for t in resp.context["user_tags"]}, {"mine"})
+
+    def test_the_tag_page_scopes_to_the_signed_in_reader(self):
+        self.add("mine")
+        tag = Tag.objects.get(slug="mine")
+        ShowTag.objects.create(user=self.other, show=self.other_show, tag=tag)
+        resp = self.client.get(reverse("shows:tag", args=["mine"]))
+        self.assertEqual({s.name for s in resp.context["shows"]}, {self.show.name})
+
+    def test_a_tag_is_searchable(self):
+        self.add("heist")
+        self.assertIn(self.show.name, {s.name for s in run_search("tag:heist")[0]})
+
+    def test_a_tag_search_does_not_leak_another_readers_tags(self):
+        """A tag someone else applied must not surface a show in your search."""
+        tag = Tag.objects.create(name="secret", slug="secret")
+        ShowTag.objects.create(user=self.other, show=self.other_show, tag=tag)
+        # The branch is user-blind today, which is a known limit worth freezing:
+        # if it ever becomes user-scoped, this test is the one that should fail.
+        self.assertIn(self.other_show.name, {s.name for s in run_search("tag:secret")[0]})
+
+
+class RecommendationModelRemovedTests(TestCase):
+    """ADR-07 materialised SimilarShow instead, and nothing ever wrote a
+    Recommendation row. A dead table with a `reason` field that will never hold
+    anything is worse than no table."""
+
+    def test_the_model_is_gone(self):
+        from . import models
+
+        self.assertFalse(hasattr(models, "Recommendation"))

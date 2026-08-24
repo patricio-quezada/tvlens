@@ -70,6 +70,7 @@ TEXT_FIELDS = {
     "desc": "blurb",
     "overview": "blurb",
     "episode": "episode",
+    "tag": "tag",
 }
 VALUE_FIELDS = {"year", "season", "lang", "language", "status", "score", "votes"}
 
@@ -296,6 +297,9 @@ def _branch(name, term, main_cast_only=False):
         # deliberately, they are short, generic and mostly noise.
         "episode": lambda: Show.objects.filter(
             _word("seasons__episodes__overview", term)),
+        # A reader's own vocabulary, not TMDb's. Ranked with genre and network
+        # because a tag is the same kind of claim about a show.
+        "tag": lambda: Show.objects.filter(_word("user_tags__tag__name", term)),
     }
     result = queries[name]()
     return result if isinstance(result, set) else _ids(result)
@@ -310,6 +314,7 @@ BRANCH_WEIGHTS = [
     ("character", W_CHARACTER),
     ("genre", W_TAXONOMY),
     ("network", W_TAXONOMY),
+    ("tag", W_TAXONOMY),
     ("blurb", W_BLURB),
     ("season_name", W_SEASON),
     ("episode", W_EPISODE),

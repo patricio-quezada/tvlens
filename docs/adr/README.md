@@ -33,3 +33,4 @@ Copy `00-adr-template.md` to start a new one.
 - [09 - Side Quests: strong edges into genres a user has not rated highly](09-side-quests-cross-genre-edges.md) *(amended 2026-08-21: the cold-start global row is withdrawn; amended 2026-08-22: the walk goes two hops and the ranking is rebalanced)*
 - [10 - Rating saves in place, and TVLens takes its first script](10-rating-saves-in-place.md)
 - [11 - One visual identity, defined once, taken from the landing page itself](11-one-visual-identity.md)
+- [12 - Catalog search: one query per branch, matched on word boundaries](12-catalog-search.md)

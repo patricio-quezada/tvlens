@@ -109,7 +109,7 @@
     <p class="hint-ops">Or scope it. Operators stack, and each one narrows:</p>
     <ul class="ops">
         <li><code>title:</code> <code>actor:</code> <code>crew:</code> <code>character:</code></li>
-        <li><code>genre:</code> <code>network:</code> <code>description:</code> <code>episode:</code></li>
+        <li><code>genre:</code> <code>network:</code> <code>tag:</code> <code>description:</code> <code>episode:</code></li>
         <li><code>year:2005</code> <code>year:2000-2010</code> <code>season:3</code></li>
         <li><code>lang:ja</code> <code>status:ended</code> <code>score:&gt;8</code> <code>votes:&gt;500</code></li>
     </ul>
@@ -118,10 +118,14 @@
 {% endif %}
 
 <style>
-    .search-form { margin: 1.5rem 0 0; }
+    /* One centred column holds the box, the Advanced disclosure and the
+       chips, so all three share a left edge instead of each finding its own. */
+    .search-form, .chips { max-width: 640px; margin-left: auto; margin-right: auto; }
+    .search-form { margin-top: 1.5rem; }
+    .search-header { max-width: 640px; margin-left: auto; margin-right: auto; }
     /* One column, so the Advanced disclosure lines up with the left edge of
        the box rather than floating against the page. */
-    .search-row { display: flex; gap: 0.5rem; max-width: 640px; }
+    .search-row { display: flex; gap: 0.5rem; }
     .search-form input[type="search"] {
         flex: 1 1 auto; min-width: 0; padding: 0.7rem 0.9rem;
         font-size: 1rem; font-family: inherit;
@@ -137,7 +141,7 @@
         background: var(--accent); color: #000;
         border: 0; border-radius: 6px; cursor: pointer;
     }
-    .advanced { margin-top: 0.9rem; max-width: 640px; }
+    .advanced { margin-top: 0.9rem; }
     .advanced summary {
         cursor: pointer; font-size: 0.85rem; color: var(--text-secondary);
         letter-spacing: 0.04em;
@@ -164,7 +168,8 @@
         border-radius: 999px; color: var(--accent); font-size: 0.78rem;
     }
     .chip-note { font-style: italic; }
-    .search-count { margin: 1.5rem 0 1rem; color: var(--text-secondary); font-size: 0.9rem; }
+    .did-you-mean, .search-count, .empty, .search-hint { max-width: 640px; margin-left: auto; margin-right: auto; }
+    .search-count { margin-top: 1.5rem; margin-bottom: 1rem; color: var(--text-secondary); font-size: 0.9rem; }
     .search-count .timing { margin-left: 0.6rem; opacity: 0.6; font-size: 0.8rem; }
     .search-hint { margin-top: 2rem; color: var(--text-secondary); max-width: 62ch; }
     .search-hint .hint-ops { margin-top: 1.4rem; }
