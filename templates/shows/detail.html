@@ -104,6 +104,24 @@
         border: 1px solid var(--border); border-radius: 999px; cursor: pointer;
     }
     .tag-add button:hover { border-color: var(--accent); }
+    .tag-others {
+        display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem;
+        margin-top: 0.85rem;
+    }
+    .tag-others form { display: inline; }
+    .tag-others-label {
+        font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase;
+        color: var(--text-tertiary); margin-right: 0.2rem;
+    }
+    .tag-suggest {
+        display: inline-flex; align-items: center; gap: 0.3rem;
+        padding: 0.15rem 0.55rem; font-family: inherit; font-size: 0.78rem;
+        color: var(--text-secondary); background: none; cursor: pointer;
+        border: 1px dashed var(--border); border-radius: 999px;
+    }
+    .tag-suggest:hover { color: var(--accent); border-color: var(--accent); border-style: solid; }
+    .tag-suggest span { color: var(--text-tertiary); font-size: 0.9rem; line-height: 1; }
+    .tag-suggest:hover span { color: var(--accent); }
     .genre-tag {
         font-size: 0.72rem; letter-spacing: 0.04em; padding: 0.28rem 0.7rem;
         border: 1px solid var(--border); border-radius: 999px;
@@ -454,26 +472,9 @@
                recommender reads both (ADR-08).{% endcomment %}
             <section class="tag-panel" id="tags">
                 <div class="tag-heading">Your tags</div>
-                <div class="tag-row">
-                    {% for link in user_tags %}
-                    <span class="user-tag">
-                        <a href="{% url 'shows:tag' link.tag.slug %}">{{ link.tag.name }}</a>
-                        <form method="post" action="{% url 'shows:remove_tag' show.slug %}">
-                            {% csrf_token %}
-                            <input type="hidden" name="tag" value="{{ link.tag.slug }}">
-                            <button type="submit" aria-label="Remove the tag {{ link.tag.name }}">&times;</button>
-                        </form>
-                    </span>
-                    {% empty %}
-                    {% if user.is_authenticated %}
-                    <span class="tag-empty">Nothing yet. Slow burn? Comfort watch? Ended too soon?</span>
-                    {% else %}
-                    <span class="tag-empty">Sign in to tag this show.</span>
-                    {% endif %}
-                    {% endfor %}
-                </div>
+                {% include "shows/_tags.html" %}
                 {% if user.is_authenticated %}
-                <form class="tag-add" method="post" action="{% url 'shows:add_tag' show.slug %}">
+                <form class="tag-add" method="post" action="{% url 'shows:add_tag' show.slug %}" data-tag-add>
                     {% csrf_token %}
                     <input type="text" name="tag" maxlength="40" list="tag-suggestions"
                            placeholder="Add a tag" aria-label="Add a tag to {{ show.name }}">
@@ -487,6 +488,52 @@
                 </datalist>
                 {% endif %}
             </section>
+
+{% comment %}Tagging saves in place, exactly as rating does (ADR-10). Without
+   this the POST redirects to #tags and throws the reader a third of the way
+   down the page, which is the behaviour the rating widget was built to avoid.
+   Every form below still works with script off; this only spares the reload.{% endcomment %}
+<script>
+(function () {
+    var panel = document.querySelector('.tag-panel');
+    if (!panel || !window.fetch) { return; }
+    var slot = panel.querySelector('[data-tag-row]');
+    if (!slot) { return; }
+
+    function replace(html) {
+        // The reply carries the row and the suggestion strip together, so swap
+        // whatever is currently between the heading and the add form.
+        var holder = document.createElement('div');
+        holder.innerHTML = html;
+        var current = panel.querySelector('[data-tag-row]');
+        var others = panel.querySelector('.tag-others');
+        if (others) { others.remove(); }
+        if (current) { current.replaceWith.apply(current, holder.childNodes); }
+    }
+
+    function send(form) {
+        fetch(form.action, {
+            method: 'POST',
+            body: new FormData(form),
+            credentials: 'same-origin',
+            headers: { 'X-Requested-With': 'fetch' }
+        }).then(function (response) {
+            return response.ok ? response.json() : null;
+        }).then(function (data) {
+            if (data && data.html) { replace(data.html); }
+        }).catch(function () { /* the plain form is still there to fall back on */ });
+    }
+
+    panel.addEventListener('submit', function (event) {
+        var form = event.target.closest('[data-tag-add], [data-tag-remove]');
+        if (!form) { return; }
+        event.preventDefault();
+        var field = form.querySelector('input[name="tag"][type="text"]');
+        send(form);
+        if (field) { field.value = ''; field.focus(); }
+    });
+}());
+</script>
 
             <section class="rate-panel" id="rate">
                 <div class="rate-heading">Rate this show</div>
