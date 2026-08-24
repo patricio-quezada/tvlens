@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TVLens: Discover Your Next Favorite Show</title>
+    <meta name="description" content="A MovieLens-inspired TV show recommendation platform. Rate shows, get personalized recommendations, and discover what to watch next.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --amber: #e89b2d;
+            --amber-glow: #f5a623;
+            --amber-dim: #c27d1a;
+            --bg-deep: #08080a;
+            --bg-card: #111115;
+            --text-primary: #f0ebe3;
+            --text-secondary: #7a756c;
+            --text-muted: #4a463f;
+            --grain-opacity: 0.035;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'DM Sans', sans-serif;
+            background: var(--bg-deep);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Film grain overlay */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            z-index: 100;
+            pointer-events: none;
+            opacity: var(--grain-opacity);
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+            background-repeat: repeat;
+            background-size: 256px 256px;
+        }
+
+        /* Cinematic top glow */
+        .glow-top {
+            position: fixed;
+            top: -40%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 140%;
+            height: 70%;
+            background: radial-gradient(ellipse at center, rgba(232, 155, 45, 0.07) 0%, transparent 65%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* Subtle horizontal light streak */
+        .streak {
+            position: fixed;
+            top: 38%;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent 10%, rgba(232, 155, 45, 0.08) 40%, rgba(232, 155, 45, 0.12) 50%, rgba(232, 155, 45, 0.08) 60%, transparent 90%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .page {
+            position: relative;
+            z-index: 1;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 3rem 2rem;
+        }
+
+        .container {
+            max-width: 640px;
+            width: 100%;
+        }
+
+        /* Logo */
+        .logo {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 5.5rem;
+            letter-spacing: 0.06em;
+            line-height: 1;
+            margin-bottom: 0.25rem;
+            animation: fadeUp 1s ease-out both;
+        }
+
+        .logo .tv {
+            color: var(--text-primary);
+        }
+
+        .logo .lens {
+            color: var(--amber);
+            text-shadow: 0 0 40px rgba(232, 155, 45, 0.3);
+        }
+
+        /* Tagline */
+        .tagline {
+            font-size: 1.15rem;
+            font-weight: 300;
+            color: var(--text-secondary);
+            line-height: 1.7;
+            margin-bottom: 4rem;
+            letter-spacing: 0.01em;
+            animation: fadeUp 1s ease-out 0.15s both;
+        }
+
+        /* Feature cards */
+        .features {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1px;
+            margin-bottom: 4rem;
+            background: rgba(232, 155, 45, 0.06);
+            border: 1px solid rgba(232, 155, 45, 0.06);
+            animation: fadeUp 1s ease-out 0.3s both;
+        }
+
+        .feature {
+            background: var(--bg-deep);
+            padding: 2rem 1.5rem;
+            text-align: left;
+            transition: background 0.4s ease;
+        }
+
+        .feature:hover {
+            background: var(--bg-card);
+        }
+
+        .feature-number {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 2rem;
+            color: var(--amber-dim);
+            opacity: 0.4;
+            line-height: 1;
+            margin-bottom: 1rem;
+        }
+
+        .feature h3 {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 1.3rem;
+            letter-spacing: 0.08em;
+            color: var(--text-primary);
+            margin-bottom: 0.6rem;
+        }
+
+        .feature p {
+            font-size: 0.85rem;
+            font-weight: 300;
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+
+        /* Status */
+        .status-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+            animation: fadeUp 1s ease-out 0.45s both;
+        }
+
+        .status-line {
+            width: 40px;
+            height: 1px;
+            background: var(--text-muted);
+        }
+
+        .status {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 0.95rem;
+            letter-spacing: 0.2em;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+        }
+
+        .status-dot {
+            width: 6px;
+            height: 6px;
+            background: var(--amber);
+            border-radius: 50%;
+            box-shadow: 0 0 12px rgba(232, 155, 45, 0.5);
+            animation: glow 3s ease-in-out infinite;
+        }
+
+        @keyframes glow {
+            0%, 100% { box-shadow: 0 0 12px rgba(232, 155, 45, 0.5); }
+            50% { box-shadow: 0 0 20px rgba(232, 155, 45, 0.8); }
+        }
+
+        /* Footer */
+        footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 1.5rem;
+            text-align: center;
+            font-size: 0.7rem;
+            letter-spacing: 0.15em;
+            color: var(--text-muted);
+            font-family: 'Bebas Neue', sans-serif;
+        }
+
+        /* Animations */
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @media (max-width: 600px) {
+            .logo { font-size: 3.5rem; }
+            .features { grid-template-columns: 1fr; }
+            .tagline { font-size: 1rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="glow-top"></div>
+    <div class="streak"></div>
+
+    <div class="page">
+        <div class="container">
+            <h1 class="logo"><span class="tv">TV</span><span class="lens">LENS</span></h1>
+            <p class="tagline">Discover your next favorite show.<br>Rate, track, and get personalized TV recommendations.</p>
+
+            <div class="features">
+                <div class="feature">
+                    <div class="feature-number">01</div>
+                    <h3>RATE</h3>
+                    <p>Rate shows you've watched and build your taste profile over time.</p>
+                </div>
+                <div class="feature">
+                    <div class="feature-number">02</div>
+                    <h3>DISCOVER</h3>
+                    <p>Get personalized recommendations for what to watch next, tuned to your taste.</p>
+                </div>
+                <div class="feature">
+                    <div class="feature-number">03</div>
+                    <h3>TRACK</h3>
+                    <p>Follow your watch progress across every series, season, and episode.</p>
+                </div>
+            </div>
+
+            <div class="status-row">
+                <div class="status-line"></div>
+                <div class="status">
+                    <span class="status-dot"></span>
+                    COMING SOON
+                </div>
+                <div class="status-line"></div>
+            </div>
+        </div>
+    </div>
+
+    <footer>TVLENS.ORG</footer>
+</body>
+</html>
