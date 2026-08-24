@@ -21,12 +21,14 @@ shipped work as `queued` is worse than no queue — it gets believed.
 | — | #9  | shipped Day 20 | Genre pages as a catalog grid |
 | — | #16 | shipped Day 20 | Demo papercuts, all five items |
 | 1  | #8  | queued | Search — a design day before a build day, its own scope |
-| 2  | #7  | queued | Personalized context box |
-| 3  | #4  | queued | Callout voice / "why recommended" |
-| 4  | #3  | queued | Per-pair "See all N" shared-people view |
-| 5  | #13 | queued | Actor pages *(design not recorded: propose first)* |
-| 6  | #14 | in-review | Trailers / YouTube link |
-| 7  | #20 | blocked | Side Quests constants — needs a catalog past 100 shows |
+| 2  | #21 | queued | Homepage branding: the name appears twice *(propose first)* |
+| 3  | #22 | queued | Signal a rating above the TVLens crowd *(propose first)* |
+| 4  | #7  | queued | Personalized context box |
+| 5  | #4  | queued | Callout voice / "why recommended" |
+| 6  | #3  | queued | Per-pair "See all N" shared-people view |
+| 7  | #13 | queued | Actor pages *(design not recorded: propose first)* |
+| 8  | #14 | in-review | Trailers / YouTube link |
+| 9  | #20 | blocked | Side Quests constants — needs a catalog past 100 shows |
 
 ## How the queue works
 
