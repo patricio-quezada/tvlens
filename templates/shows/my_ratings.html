@@ -1,38 +1,40 @@
 {% extends "base.html" %}
 {% block title %}My Ratings — TVLens{% endblock %}
 
-{% comment %}Piping only. The markup here is deliberately plain: the point of this
-   pass is that the data is correct, reachable and tested. Design comes after.{% endcomment %}
+{% comment %}A catalog grid, not a list. The first pass was piping only and said
+   so, and it showed: a bare <ul> where every other shelf in TVLens is the card
+   grid _grid.html draws. This page is a shelf of shows like the genre page is,
+   so it reuses that page's treatment rather than restating it, and the cards
+   stay one object across the app (ADR-11).
+
+   The per-row lift is gone. "+0.8" is the number Top Picks RANKS by (#15), not
+   a number anyone asked to read: it is the distance between a score the user
+   gave and a baseline they never saw, and on their own record it answered a
+   question they had not put. The view still computes it, because rated_shows()
+   is shared with Top Picks and that is where it means something.
+
+   What the card puts on the poster instead is the user's own score, in amber,
+   which is the one number this page exists to show back (#19).{% endcomment %}
 
 {% block content %}
-<div class="page-header">
+<div class="page-header genre-header">
     <h1>My Ratings</h1>
     <p>
         {% if rating_count %}
-            {{ rating_count }} show{{ rating_count|pluralize }} rated, averaging ★ {{ average_score|floatformat:1 }}.
+        {{ rating_count }} show{{ rating_count|pluralize }} rated, averaging ★ {{ average_score|floatformat:1 }}. Most recently rated first.
+        <a href="{% url 'shows:index' %}">← All shows</a>
         {% else %}
-            Nothing rated yet.
+        Nothing rated yet.
         {% endif %}
     </p>
 </div>
 
 {% if shows %}
-<ul class="rating-list">
-    {% for show in shows %}
-    <li>
-        <a class="rating-name" href="{{ show.get_absolute_url }}">{{ show.name }}</a>
-        <span class="rating-mine">★ {{ show.user_score|floatformat:1 }}</span>
-        <span class="rating-crowd">crowd ★ {{ show.baseline|floatformat:1 }}</span>
-        <span class="rating-lift{% if show.lift > 0 %} above{% elif show.lift < 0 %} below{% endif %}">
-            {% if show.lift > 0 %}+{% endif %}{{ show.lift|floatformat:1 }}
-        </span>
-    </li>
-    {% endfor %}
-</ul>
+{% include "shows/_grid.html" %}
 {% else %}
 <p class="empty">
     Nothing here yet. Rate a show and it will appear.
-    <a href="{% url 'shows:index' %}">Browse the catalog</a>.
+    <a class="empty-cta" href="{% url 'shows:index' %}">Browse the catalog</a>.
 </p>
 {% endif %}
 {% endblock %}

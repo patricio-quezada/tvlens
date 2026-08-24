@@ -20,7 +20,7 @@
             {% if show.first_air_date %}<span class="card-year">{{ show.first_air_date.year }}</span>{% endif %}
             <div class="card-genres">
                 {% for g in show.genres.all|slice:":2" %}
-                <span class="card-genre{% if g.id in favorite_genre_ids %} favorite{% endif %}">{{ g.name }}</span>
+                <span class="card-genre">{{ g.name }}</span>
                 {% endfor %}
             </div>
         </div>

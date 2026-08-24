@@ -78,6 +78,30 @@ def star_steps(user_rating):
     return steps
 
 
+def favorite_genre_ids_for(user, minimum=2):
+    """Genres the user rates highly, with enough evidence to mean it.
+
+    A show carries several genres at once, so one 5-star rating used to star
+    three of them. Game of Thrones alone marked Action & Adventure, Drama and
+    Sci-Fi & Fantasy, which is how a single opinion ended up glowing across
+    every page and reading as a filter left switched on.
+
+    Requiring more than one highly rated show per genre is what makes the
+    marker mean "you like this" instead of "you rated something once".
+    """
+    if not user.is_authenticated:
+        return set()
+    return set(
+        Genre.objects.filter(
+            shows__ratings__user=user,
+            shows__ratings__score__gte=4.0,
+        )
+        .annotate(rated=Count("shows", distinct=True))
+        .filter(rated__gte=minimum)
+        .values_list("id", flat=True)
+    )
+
+
 def index(request):
     base_qs = Show.objects.prefetch_related("genres")
 
@@ -93,14 +117,7 @@ def index(request):
         # A favorite genre is one the user has rated >= 4 stars (the same "high"
         # line Layer 2 personalizes from, ADR-08). The template glows these genre
         # pills and cards so the page shows what it thinks the user likes.
-        favorite_genre_ids = set(
-            Genre.objects.filter(
-                shows__ratings__user=request.user,
-                shows__ratings__score__gte=4.0,
-            )
-            .values_list("id", flat=True)
-            .distinct()
-        )
+        favorite_genre_ids = favorite_genre_ids_for(request.user)
 
     # One show, one row. The exclusion chain runs Top Picks > Side Quests >
     # Recently Added, and that priority is by how PERSONAL a row is, not by
@@ -172,14 +189,7 @@ def genre(request, pk):
     )
     favorite_genre_ids: set = set()
     if request.user.is_authenticated:
-        favorite_genre_ids = set(
-            Genre.objects.filter(
-                shows__ratings__user=request.user,
-                shows__ratings__score__gte=4.0,
-            )
-            .values_list("id", flat=True)
-            .distinct()
-        )
+        favorite_genre_ids = favorite_genre_ids_for(request.user)
     return render(
         request,
         "shows/genre.html",
@@ -242,6 +252,22 @@ def detail(request, slug):
         named, others = name_connections(connections)
         callout = compose_callout(show, candidate, connections, named, others)
         recommendations.append({"show": candidate, "callout": callout})
+
+    # The ladder climbs in place. ?show=N still works on its own, so the link
+    # is a real URL and the page is reachable at any rung without script; the
+    # fetch branch only spares the reader a reload, exactly as the rating
+    # widget does (ADR-10).
+    if request.headers.get("X-Requested-With") == "fetch":
+        return JsonResponse({
+            "step": step,
+            "next_step": next_step,
+            "available": available,
+            "recs_html": render_to_string(
+                "shows/_recs_list.html",
+                {"recommendations": recommendations},
+                request=request,
+            ),
+        })
 
     return render(
         request,
@@ -306,25 +332,46 @@ def rate(request, slug):
     would reject anyway. The widget only ever POSTs a valid half-step, but this
     is a public endpoint, so the 0.5-to-5.0 bounds and the half-step are
     enforced here too rather than trusted from the client.
+
+    The same endpoint also clears a rating, which is what the widget could not
+    do: a POST carrying `clear` deletes the row. Both paths answer the same two
+    ways, in place over fetch and by redirect without it (ADR-10).
     """
     show = get_object_or_404(Show, slug=slug)
-    try:
-        score = float(request.POST.get("score", ""))
-    except (TypeError, ValueError):
-        return HttpResponseBadRequest("Rating must be a number.")
-    if score not in VALID_SCORES:
-        return HttpResponseBadRequest(
-            "Rating must be a half-star step between 0.5 and 5.0."
+
+    # Deselection. The widget could change an opinion but never take one back:
+    # once a show was rated, every route out of that state stored a different
+    # score. Clearing is its own field rather than score=0, because 0 is not on
+    # the MovieLens scale and this endpoint has to keep rejecting it --
+    # VALID_SCORES is the contract Layer 2 reads (ADR-08) and it is enforced
+    # here because the endpoint is public, not because the widget is trusted.
+    # Deleting the row is the clear: an absent rating and a rating of nothing
+    # are the same fact, and there is only one way to store it.
+    if "clear" in request.POST:
+        Rating.objects.filter(user=request.user, show=show).delete()
+        score = None
+    else:
+        try:
+            score = float(request.POST.get("score", ""))
+        except (TypeError, ValueError):
+            return HttpResponseBadRequest("Rating must be a number.")
+        if score not in VALID_SCORES:
+            return HttpResponseBadRequest(
+                "Rating must be a half-star step between 0.5 and 5.0."
+            )
+        Rating.objects.update_or_create(
+            user=request.user, show=show, defaults={"score": score}
         )
-    Rating.objects.update_or_create(
-        user=request.user, show=show, defaults={"score": score}
-    )
 
     # The widget asked to stay where it is (ADR-10). Answer with the score it
     # should light and the re-rendered average line, so the wording of that
     # sentence lives in one template instead of being rebuilt in JavaScript.
     # No success message on this path: nothing navigates, so the message would
     # sit in the queue and surface later on an unrelated page.
+    # `score` is null on the clear path, which is how the script knows to empty
+    # the widget rather than light a star. The average line is re-rendered
+    # either way: removing a rating moves the average exactly as adding one
+    # does, and on the last rating it changes the sentence entirely.
     if request.headers.get("X-Requested-With") == "fetch":
         return JsonResponse({
             "score": score,
@@ -338,7 +385,10 @@ def rate(request, slug):
             ),
         })
 
-    messages.success(request, f"You rated {show.name} {score:g} stars.")
+    if score is None:
+        messages.success(request, f"Cleared your rating for {show.name}.")
+    else:
+        messages.success(request, f"You rated {show.name} {score:g} stars.")
     # Back to the stars, not to the top of the page. Rating is a plain POST and
     # redirect (#18), so the response is a fresh navigation and the browser
     # would otherwise land at the top with the widget scrolled out of sight --

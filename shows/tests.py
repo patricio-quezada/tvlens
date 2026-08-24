@@ -12,6 +12,8 @@ from django.contrib.auth.models import AnonymousUser, User
 from django.core.management import call_command
 from django.db.models import Max
 from django.test import TestCase
+
+from .ingestion import Ingestor
 from django.urls import reverse
 
 from .models import (
@@ -510,7 +512,7 @@ class ShowDetailViewTests(TestCase):
         self.assertIn("Source Show", body)
         self.assertIn("A tagline.", body)
         self.assertIn("1,234 votes", body)
-        self.assertIn("Ranked by shared cast and crew.", body)
+        self.assertIn("ordered by the people they share with this show", body)
         self.assertIn("Candidate Show", body)
         self.assertIn("Jane Star", body)
         self.assertIn("The Detective", body)
@@ -629,7 +631,7 @@ class StoredSimilarTests(TestCase):
         body = resp.content.decode()
         self.assertIn("Bshow", body)
         self.assertIn("Lead Actor", body)
-        self.assertIn("Ranked by shared cast and crew.", body)
+        self.assertIn("ordered by the people they share with this show", body)
 
     def test_rebuild_is_wholesale_replacing_stale_edges(self):
         # A stale edge left by a prior build must not survive the next rebuild.
@@ -836,6 +838,152 @@ class RatingTests(TestCase):
         body = self.client.get(self.show.get_absolute_url()).content.decode()
         self.assertIn("Log in", body)
         self.assertNotIn('class="star-rating"', body)
+
+
+class RatingDeselectionTests(TestCase):
+    """Taking a rating back, not only changing it.
+
+    From the 2026-08-22 demo review: "I cannot deselect my rating so maybe we
+    add the option as well. Maybe dragging it all the way to the beginning of
+    the first star allows for deselection." The widget had ten ways to say a
+    different thing and no way to say nothing, so a mis-click was permanent in
+    the only sense that matters -- it kept feeding Top Picks and Layer 2.
+
+    These freeze what clearing IS: deleting the row, not storing a zero. Zero is
+    not on the MovieLens scale, and rate() still rejects it as a score, so the
+    clear arrives as its own field. And they freeze that it degrades the whole
+    way down: the control is a plain submit button, so it works with JavaScript
+    off, and answers in place with the header when the script is there (ADR-10).
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.show = Show.objects.create(
+            tmdb_id=1, name="Rated Show", number_of_episodes=10
+        )
+        cls.alice = User.objects.create_user("alice", password="pw-alice-123")
+        cls.bob = User.objects.create_user("bob", password="pw-bob-123")
+
+    def _url(self):
+        return reverse("shows:rate", args=[self.show.slug])
+
+    def _clear(self, **kwargs):
+        return self.client.post(self._url(), {"clear": "1"}, **kwargs)
+
+    def _clear_in_place(self):
+        return self._clear(headers={"x-requested-with": "fetch"})
+
+    def test_clearing_deletes_the_row_it_does_not_store_a_zero(self):
+        # An absent rating and a rating of nothing are the same fact, and there
+        # is one way to store it. A 0.0 row would be a score off the scale
+        # sitting in the data Layer 2 reads (ADR-08).
+        Rating.objects.create(user=self.alice, show=self.show, score=4.0)
+        self.client.force_login(self.alice)
+        resp = self._clear()
+        self.assertEqual(resp.status_code, 302)
+        self.assertTrue(resp["Location"].endswith("#rate"))
+        self.assertFalse(Rating.objects.filter(user=self.alice).exists())
+
+    def test_zero_is_still_not_a_score(self):
+        # The clear is its own field precisely so this guard does not have to
+        # move: the endpoint is public and VALID_SCORES is the contract.
+        self.client.force_login(self.alice)
+        self.assertEqual(self.client.post(self._url(), {"score": "0"}).status_code, 400)
+        self.assertFalse(Rating.objects.filter(show=self.show).exists())
+
+    def test_clearing_leaves_everyone_elses_rating_alone(self):
+        # The delete is keyed on (user, show), like every other write here.
+        Rating.objects.create(user=self.alice, show=self.show, score=4.0)
+        Rating.objects.create(user=self.bob, show=self.show, score=2.0)
+        self.client.force_login(self.alice)
+        self._clear()
+        self.assertEqual(
+            Rating.objects.get(show=self.show).user_id, self.bob.id
+        )
+
+    def test_clearing_something_never_rated_is_harmless(self):
+        # Nothing to delete is not an error. The widget can be in this state
+        # whenever a second tab got there first.
+        self.client.force_login(self.alice)
+        self.assertEqual(self._clear().status_code, 302)
+        self.assertFalse(Rating.objects.exists())
+
+    def test_clearing_in_place_answers_with_a_null_score(self):
+        # ADR-10's shape, on the clear path: nothing navigates, and the null is
+        # how the script knows to empty the widget rather than light a star.
+        Rating.objects.create(user=self.alice, show=self.show, score=4.0)
+        self.client.force_login(self.alice)
+        resp = self._clear_in_place()
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.json()
+        self.assertIsNone(payload["score"])
+        # Removing the last rating changes the average sentence entirely, so it
+        # is re-rendered from its own template on this path too.
+        self.assertIn("Not yet rated on TVLens", payload["meta_html"])
+        self.assertFalse(Rating.objects.exists())
+
+    def test_clearing_in_place_queues_no_flash_message(self):
+        Rating.objects.create(user=self.alice, show=self.show, score=4.0)
+        self.client.force_login(self.alice)
+        self._clear_in_place()
+        body = self.client.get(self.show.get_absolute_url()).content.decode()
+        self.assertNotIn("Cleared your rating", body)
+
+    def test_clearing_requires_login(self):
+        Rating.objects.create(user=self.alice, show=self.show, score=4.0)
+        resp = self._clear()
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn("/accounts/login/", resp["Location"])
+        self.assertTrue(Rating.objects.exists())
+
+    def test_the_control_is_a_plain_submit_so_it_works_without_script(self):
+        # The whole widget degrades: ten stars are ten submit buttons (#18) and
+        # the clear is an eleventh. Asserting on the tag, not the word: the
+        # inline script names the same field in a selector string.
+        Rating.objects.create(user=self.alice, show=self.show, score=4.0)
+        self.client.force_login(self.alice)
+        body = self.client.get(self.show.get_absolute_url()).content.decode()
+        self.assertIn('<button type="submit" name="clear" value="1"', body)
+
+    def test_the_control_hides_itself_when_there_is_nothing_to_clear(self):
+        # Present but hidden rather than absent, so the widget keeps its width
+        # and the stars do not shift sideways the moment a rating is saved.
+        self.client.force_login(self.alice)
+        unrated = self.client.get(self.show.get_absolute_url()).content.decode()
+        self.assertIn('class="star-clear is-empty"', unrated)
+
+        Rating.objects.create(user=self.alice, show=self.show, score=4.0)
+        rated = self.client.get(self.show.get_absolute_url()).content.decode()
+        self.assertIn('class="star-clear"', rated)
+        self.assertNotIn('class="star-clear is-empty"', rated)
+
+    def test_the_widget_reads_as_unrated_again_after_a_clear(self):
+        # The round trip a user actually performs. Nothing is lit, and the
+        # readout says so in the same words it used before they ever rated.
+        Rating.objects.create(user=self.alice, show=self.show, score=3.5)
+        self.client.force_login(self.alice)
+        self._clear()
+        resp = self.client.get(self.show.get_absolute_url())
+        self.assertIsNone(resp.context["user_rating"])
+        # On the context, not the body: `chosen` is also a CSS selector and a
+        # string literal in the inline script, so a bare substring check would
+        # match the page's own machinery rather than a lit star.
+        self.assertFalse(any(s["chosen"] for s in resp.context["star_steps"]))
+        self.assertIn(
+            '<span class="score-label">Your rating</span>Not rated yet',
+            resp.content.decode(),
+        )
+
+    def test_a_cleared_show_leaves_my_ratings(self):
+        # The user's record is the mirror of what they have said (#11), so
+        # unsaying something has to remove it from there too.
+        Rating.objects.create(user=self.alice, show=self.show, score=3.5)
+        self.client.force_login(self.alice)
+        listed = self.client.get(reverse("shows:my_ratings"))
+        self.assertIn(self.show, listed.context["shows"])
+        self._clear()
+        after = self.client.get(reverse("shows:my_ratings"))
+        self.assertEqual(list(after.context["shows"]), [])
 
 
 class WatchedSignalTests(TestCase):
@@ -1105,8 +1253,11 @@ class Layer2DetailViewTests(TestCase):
         body = self.client.get(self.source.get_absolute_url()).content.decode()
         # The comedy preference lifts ComedyPick above the DramaPick that Layer 1
         # ranked first, and the page says so.
+        # The order is the evidence. The page used to say "reordered for you"
+        # above the list; that line was removed as noise, so nothing announces
+        # it any more.
         self.assertLess(body.index("ComedyPick"), body.index("DramaPick"))
-        self.assertIn("reordered for fan", body)
+        self.assertNotIn("reordered for", body)
 
 
 class TopPicksTests(TestCase):
@@ -1784,6 +1935,93 @@ class MyRatingsTests(TestCase):
         self.assertIn("My Ratings", signed_in)
 
 
+class MyRatingsCatalogTests(TestCase):
+    """My Ratings is a catalog, and it no longer shows the lift.
+
+    From the 2026-08-22 demo review: the page "needs to be a grid/catalog view",
+    and "I don't need the '+0.8'. That information is useless to the user."
+
+    The first pass was piping only and said so in a template comment: a bare
+    list, built to prove the data was right. It was, and it looked nothing like
+    the rest of TVLens. The genre page had already answered "how does a shelf of
+    shows look here" (#9), so this page reuses that grid rather than growing a
+    second one.
+
+    The lift is the number Top Picks RANKS by (#15), not one anybody asked to
+    read: the gap between a score the user gave and a baseline they never saw.
+    It stays in the context, because rated_shows() is shared with Top Picks and
+    the ordering there depends on it. It just stops being rendered.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user("viewer", password="pw-viewer-22")
+        cls.drama = Genre.objects.create(tmdb_id=1, name="Drama")
+        # Rated 5.0 against a crowd baseline of 3.0, so the lift is exactly
+        # +2.0 and the old markup would have printed it.
+        cls.loved = Show.objects.create(
+            tmdb_id=1, name="Loved Show", number_of_episodes=10,
+            vote_average=6.0, vote_count=500,
+        )
+        cls.loved.genres.set([cls.drama])
+
+    def _body(self):
+        self.client.force_login(self.user)
+        return self.client.get(reverse("shows:my_ratings")).content.decode()
+
+    def test_the_page_is_a_catalog_grid_not_a_list(self):
+        Rating.objects.create(user=self.user, show=self.loved, score=5.0)
+        body = self._body()
+        self.assertIn('class="grid"', body)
+        # The same partial the genre page includes, so a card is one object
+        # across TVLens (ADR-11) rather than two that drift.
+        self.assertIn('class="card card-link"', body)
+        self.assertNotIn('class="rating-list"', body)
+        # And not the horizontal scroller either: the home page rows are right
+        # for a handful of picks and wrong for "everything I have said" (#9).
+        self.assertNotIn('class="row-scroller"', body)
+
+    def test_the_lift_is_gone_from_the_page(self):
+        Rating.objects.create(user=self.user, show=self.loved, score=5.0)
+        body = self._body()
+        self.assertNotIn("+2.0", body)
+        self.assertNotIn("rating-lift", body)
+        # The crowd's number went with it. The card shows one score per poster
+        # and on this page that is the user's own (#19).
+        self.assertNotIn("crowd", body)
+
+    def test_the_lift_is_still_computed_because_top_picks_needs_it(self):
+        # Removed from the view, not from the model of the page. rated_shows()
+        # is shared, and Top Picks ranks by exactly this number.
+        Rating.objects.create(user=self.user, show=self.loved, score=5.0)
+        self.client.force_login(self.user)
+        show = self.client.get(reverse("shows:my_ratings")).context["shows"][0]
+        self.assertAlmostEqual(show.lift, 2.0)
+
+    def test_each_card_carries_the_users_own_score_in_amber(self):
+        # The one number the page exists to show back. `yours` is the amber
+        # class; without it the poster would be showing TMDb's opinion on the
+        # page about the user's (#19).
+        Rating.objects.create(user=self.user, show=self.loved, score=5.0)
+        body = self._body()
+        self.assertIn('class="poster-rating yours"', body)
+        self.assertIn("★ 5.0", body)
+
+    def test_the_summary_still_counts_and_averages(self):
+        # The header survived the redesign: it is a summary of the user's own
+        # scores, not a comparison against anyone.
+        Rating.objects.create(user=self.user, show=self.loved, score=5.0)
+        self.assertIn("1 show rated, averaging ★ 5.0", self._body())
+
+    def test_the_empty_state_is_still_its_own_copy_not_the_grids(self):
+        # _grid.html says "Nothing here yet." for a genre with no shows. A user
+        # with no ratings needs the route out, so the page keeps its own.
+        body = self._body()
+        self.assertIn("Nothing rated yet", body)
+        self.assertIn("Browse the catalog", body)
+        self.assertNotIn('class="grid"', body)
+
+
 class GenrePageTests(TestCase):
     """The genre page is a catalog, and nothing is ever "selected" (#9).
 
@@ -1850,9 +2088,17 @@ class GenrePageTests(TestCase):
         still_none = self.client.get(reverse("shows:index")).context["favorite_genre_ids"]
         self.assertEqual(set(still_none), set())
 
+        # One highly rated show is not enough. A show carries several genres,
+        # so a single rating used to star all of them at once, which is what
+        # made the marker look like a filter left switched on.
         Rating.objects.create(user=self.user, show=self.drama0, score=4.5)
-        now = self.client.get(reverse("shows:index")).context["favorite_genre_ids"]
-        self.assertEqual(set(now), {self.drama.id})
+        one = self.client.get(reverse("shows:index")).context["favorite_genre_ids"]
+        self.assertEqual(set(one), set())
+
+        # A second one in the same genre is evidence, and stars it.
+        Rating.objects.create(user=self.user, show=self.drama1, score=4.5)
+        two = self.client.get(reverse("shows:index")).context["favorite_genre_ids"]
+        self.assertEqual(set(two), {self.drama.id})
 
     def test_the_home_page_says_what_the_star_means(self):
         self.client.force_login(self.user)
@@ -2041,7 +2287,10 @@ class RecommendationLadderTests(TestCase):
             self.assertEqual(
                 resp.context["next_recommendation_step"], expect_next, asked
             )
-            self.assertContains(resp, f"See {expect_next}")
+            # The label stopped naming the number, so check the link climbs
+            # to the right rung rather than checking the wording.
+            self.assertContains(resp, "See more")
+            self.assertContains(resp, f'href="?show={expect_next}"')
 
     def test_the_top_of_the_ladder_is_everything_stored(self):
         resp = self.client.get(self.source.get_absolute_url(), {"show": "12"})
@@ -2064,11 +2313,23 @@ class RecommendationLadderTests(TestCase):
         self.assertEqual(self._count(resp), 4)
         self.assertIsNone(resp.context["next_recommendation_step"])
 
+    @staticmethod
+    def _steps(resp):
+        """Only the rung links.
+
+        The ladder's script builds these same labels client-side, so it names
+        "See more", "Show fewer" and ?show= in the page source. Asserting
+        against the whole body matches the script instead of the markup.
+        """
+        body = resp.content.decode()
+        start = body.index("data-recs-steps")
+        return body[start:body.index("</span>", start)]
+
     def test_a_show_with_nothing_to_show_offers_no_rung(self):
         resp = self.client.get(self.lonely.get_absolute_url())
         self.assertEqual(self._count(resp), 0)
         self.assertIsNone(resp.context["next_recommendation_step"])
-        self.assertNotContains(resp, "See 5")
+        self.assertNotIn("?show=", self._steps(resp))
 
     def test_climbing_is_not_remembered(self):
         # ?show=N describes this request, not a setting kept about a person.
@@ -2079,7 +2340,57 @@ class RecommendationLadderTests(TestCase):
 
     def test_an_expanded_page_offers_the_way_back(self):
         resp = self.client.get(self.source.get_absolute_url(), {"show": "7"})
-        self.assertContains(resp, "Show fewer")
-        self.assertNotContains(
-            self.client.get(self.source.get_absolute_url()), "Show fewer"
+        self.assertIn("Show fewer", self._steps(resp))
+        self.assertNotIn(
+            "Show fewer",
+            self._steps(self.client.get(self.source.get_absolute_url())),
         )
+
+
+class TrailerTests(TestCase):
+    """#14. TMDb returns clips and bloopers beside trailers, so the pick is
+    a ranking, not a first-match. The page links out and script upgrades it."""
+
+    def test_prefers_official_trailer_over_teaser_and_fan_upload(self):
+        videos = {"results": [
+            {"site": "YouTube", "type": "Teaser",     "official": True,  "key": "teaser", "published_at": "2020-01-01"},
+            {"site": "YouTube", "type": "Trailer",    "official": False, "key": "fan",    "published_at": "2021-01-01"},
+            {"site": "YouTube", "type": "Trailer",    "official": True,  "key": "wanted", "published_at": "2019-01-01"},
+            {"site": "Vimeo",   "type": "Trailer",    "official": True,  "key": "vimeo",  "published_at": "2022-01-01"},
+            {"site": "YouTube", "type": "Featurette", "official": True,  "key": "extra",  "published_at": "2023-01-01"},
+        ]}
+        self.assertEqual(Ingestor._pick_trailer(videos), "wanted")
+
+    def test_newest_wins_when_rank_ties(self):
+        videos = {"results": [
+            {"site": "YouTube", "type": "Trailer", "official": True, "key": "old", "published_at": "2019-01-01"},
+            {"site": "YouTube", "type": "Trailer", "official": True, "key": "new", "published_at": "2024-06-01"},
+        ]}
+        self.assertEqual(Ingestor._pick_trailer(videos), "new")
+
+    def test_no_usable_video_returns_empty(self):
+        self.assertEqual(Ingestor._pick_trailer({}), "")
+        self.assertEqual(Ingestor._pick_trailer(
+            {"results": [{"site": "Vimeo", "type": "Trailer", "key": "v"}]}), "")
+
+    def test_trailer_url_is_empty_without_a_key(self):
+        show = Show.objects.create(tmdb_id=99001, name="No Trailer Here")
+        self.assertEqual(show.trailer_url, "")
+        show.trailer_key = "abc123"
+        self.assertEqual(show.trailer_url, "https://www.youtube.com/watch?v=abc123")
+
+    def test_detail_page_links_out_and_only_when_a_trailer_exists(self):
+        bare = Show.objects.create(tmdb_id=99002, name="Bare Show")
+        body = self.client.get(bare.get_absolute_url()).content.decode()
+        self.assertNotIn('class="trailer-chip"', body)
+
+        withtrailer = Show.objects.create(tmdb_id=99003, name="Trailer Show", trailer_key="xyz789")
+        body = self.client.get(withtrailer.get_absolute_url()).content.decode()
+        self.assertIn('class="trailer-chip"', body)
+        self.assertIn("https://www.youtube.com/watch?v=xyz789", body)
+        # No third-party frame until the reader asks for one. The embed URL
+        # and the iframe tag both appear in the page, but only as strings
+        # inside the script that builds the frame on click. What matters is
+        # that the container ships empty.
+        self.assertIn('<div class="trailer-frame"></div>', body)
+        self.assertIn("<dialog", body)

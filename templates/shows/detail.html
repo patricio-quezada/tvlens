@@ -105,12 +105,6 @@
         text-transform: uppercase; font-size: 0.85rem;
         color: var(--accent); white-space: nowrap;
     }
-    .recs-personalized {
-        font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.1em;
-        text-transform: uppercase; font-size: 0.78rem;
-        color: var(--accent); border: 1px solid var(--border);
-        border-radius: 999px; padding: 0.15rem 0.6rem;
-    }
 
     .rec {
         display: grid; grid-template-columns: 92px 1fr; gap: 1.5rem;
@@ -245,14 +239,42 @@
        That is #12's "shows only faintly ... worse on mobile". The preview is now
        a solid colour, and a touch device never enters that state at all. */
     .star-rating .chosen,
-    .star-rating .chosen ~ button { color: var(--accent); }
+    .star-rating .chosen ~ button[name="score"] { color: var(--accent); }
     @media (hover: hover) and (pointer: fine) {
         .star-rating:hover .chosen,
-        .star-rating:hover .chosen ~ button { color: var(--text-tertiary); }
-        .star-rating:hover > button:hover,
-        .star-rating:hover > button:hover ~ button { color: var(--star-preview); }
+        .star-rating:hover .chosen ~ button[name="score"] { color: var(--text-tertiary); }
+        .star-rating:hover > button[name="score"]:hover,
+        .star-rating:hover > button[name="score"]:hover ~ button[name="score"] { color: var(--star-preview); }
+        .star-rating .star-clear:hover::before { color: var(--star-preview); }
     }
     .star-rating button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    /* Deselect. Patricio asked for it as a gesture -- "dragging it all the way
+       to the beginning of the first star" -- so it lives at the left edge of
+       the widget, past the half-star, and is reached by continuing the same
+       movement that picks a score. It is the last child in DOM order, which
+       row-reverse puts furthest left, and which also keeps it out of every
+       `~` fill selector above: those are pinned to [name="score"] so a clear
+       control appended after the chosen star is never painted as part of the
+       fill.
+
+       Hovering it needs no rule of its own to preview the result. The widget's
+       existing :hover rule greys the saved fill for any hover inside it, and
+       nothing here re-lights the stars, so the preview of clearing is the
+       stars going out, which is exactly what clicking does.
+
+       Hidden with nothing to clear, rather than absent: `visibility` keeps the
+       widget the same width whether or not a rating exists, so the stars do
+       not shift sideways the moment one is saved, and a hidden button leaves
+       the tab order. The script toggles the same class, so the JS and no-JS
+       paths converge on one rendering. */
+    .star-rating .star-clear { width: 0.68em; color: var(--text-tertiary); }
+    .star-rating .star-clear::before {
+        content: '×';
+        font-family: inherit; font-size: 0.72em;
+        left: auto; right: 0.1em; top: 0.12em;
+    }
+    .star-rating .star-clear.is-empty { visibility: hidden; pointer-events: none; }
 
     /* MovieLens-style: the saved score reads at full size next to the stars,
        replacing the per-star title tooltip (#12's "hover box"), which no
@@ -285,6 +307,68 @@
         .rec-poster img { width: 68px; }
         .rec-strength { margin-left: 0; width: 100%; }
     }
+
+    /* ── Trailer ──────────────────────────────────────────────────────────
+       Sits in the genre row as one more pill, so it adds nothing to the
+       vertical rhythm. Renders as a plain YouTube link and is upgraded to a
+       modal by script, so it still works with JavaScript off. The iframe is
+       built on click, never at page load, so YouTube sets nothing on readers
+       who do not press play. */
+    .trailer-chip {
+        display: inline-flex; align-items: center; gap: 0.4rem;
+        font-size: 0.72rem; letter-spacing: 0.04em; padding: 0.28rem 0.7rem;
+        border: 1px solid var(--accent-dim); border-radius: 999px;
+        color: var(--accent); white-space: nowrap; text-decoration: none;
+        cursor: pointer; transition: border-color 0.2s, color 0.2s;
+    }
+    .trailer-chip:hover { border-color: var(--accent); color: var(--accent-bright); }
+    .trailer-chip span { font-size: 0.6rem; line-height: 1; }
+    .trailer-modal {
+        width: min(90vw, 960px); padding: 0; border: 1px solid var(--border);
+        border-radius: 12px; background: #000; overflow: hidden;
+    }
+    .trailer-modal::backdrop { background: rgba(0, 0, 0, 0.82); }
+    .trailer-frame { aspect-ratio: 16 / 9; }
+    .trailer-frame iframe { width: 100%; height: 100%; border: 0; display: block; }
+    .trailer-close {
+        position: absolute; top: 0.5rem; right: 0.75rem; z-index: 2;
+        background: none; border: 0; color: #fff; opacity: 0.7;
+        font-size: 1.6rem; line-height: 1; cursor: pointer;
+    }
+    .trailer-close:hover { opacity: 1; }
+
+    /* ── Why this order ───────────────────────────────────────────────────
+       The ranking used to explain itself in a sentence that sat above every
+       list whether or not anyone wanted it. Now it is one icon, and the
+       explanation is a native popover: no script, Escape closes it, clicking
+       away dismisses it. */
+    .recs-why {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 1.15rem; height: 1.15rem; padding: 0;
+        border: 1px solid var(--border); border-radius: 999px;
+        background: none; color: var(--text-tertiary);
+        font-family: Georgia, serif; font-style: italic; font-size: 0.72rem;
+        line-height: 1; cursor: pointer; transition: border-color 0.2s, color 0.2s;
+    }
+    .recs-why:hover { border-color: var(--accent); color: var(--accent); }
+    .recs-why { anchor-name: --recs-why; margin-left: 0.55rem; vertical-align: middle; }
+    .recs-explainer {
+        max-width: 30rem; padding: 1.1rem 1.25rem;
+        border: 1px solid var(--border); border-radius: 10px;
+        background: var(--surface); color: var(--text-secondary);
+        font-size: 0.86rem; line-height: 1.55;
+        /* A popover lives in the top layer, so ordinary positioning cannot
+           reach it and it lands centred by default. Anchor positioning pins
+           it under the icon that opened it. Browsers without anchor support
+           keep the centred default, which is worse but never broken. */
+        position-anchor: --recs-why;
+        position-area: block-end span-inline-end;
+        margin: 0.45rem 0 0;
+        position-try-fallbacks: flip-block, flip-inline;
+    }
+    .recs-explainer p { margin: 0 0 0.7rem; }
+    .recs-explainer p:last-child { margin-bottom: 0; }
+    .recs-explainer::backdrop { background: rgba(0, 0, 0, 0.5); }
 </style>
 {% endblock %}
 
@@ -313,10 +397,17 @@
                 {% if show.status %}<span class="dot">·</span><span class="status">{% if show.status == 'Returning Series' or show.status == 'In Production' %}<span class="dot-live"></span>{% endif %}{{ show.get_status_display }}</span>{% endif %}
             </div>
 
-            {% if show.genres.all %}
+            {% if show.genres.all or show.trailer_key %}
             <div class="genre-row">
                 {% for g in show.genres.all %}<span class="genre-tag">{{ g.name }}</span>{% endfor %}
+                {% if show.trailer_key %}<a class="trailer-chip" href="{{ show.trailer_url }}" target="_blank" rel="noopener" data-trailer="{{ show.trailer_key }}" title="Watch the trailer" aria-label="Watch the trailer for {{ show.name }}"><span aria-hidden="true">&#9654;</span> Trailer</a>{% endif %}
             </div>
+            {% endif %}
+            {% if show.trailer_key %}
+            <dialog class="trailer-modal" data-trailer-modal aria-label="Trailer for {{ show.name }}">
+                <button class="trailer-close" type="button" data-trailer-close aria-label="Close trailer">&times;</button>
+                <div class="trailer-frame"></div>
+            </dialog>
             {% endif %}
 
             {% if show.overview %}<p class="hero-overview">{{ show.overview }}</p>{% endif %}
@@ -330,6 +421,10 @@
                         {% for step in star_steps %}
                         <button type="submit" name="score" value="{{ step.value }}" class="{{ step.css_class }}{% if step.chosen %} chosen{% endif %}"><span class="sr-only">Rate {{ step.value|floatformat:1 }} stars</span></button>
                         {% endfor %}
+                        {% comment %}Last in DOM, so row-reverse draws it left of the half-star.
+                        It is a plain submit like every star, so clearing works with JavaScript
+                        off; the script below only spares the reload (ADR-10).{% endcomment %}
+                        <button type="submit" name="clear" value="1" class="star-clear{% if not user_rating %} is-empty{% endif %}" data-rate-clear title="Clear your rating"><span class="sr-only">Clear your rating</span></button>
                     </div>
                     {% if user_rating %}<span class="your-score" data-your-score><span class="score-label">Your rating</span>★ {{ user_rating|floatformat:1 }}</span>{% else %}<span class="your-score unrated" data-your-score><span class="score-label">Your rating</span>Not rated yet</span>{% endif %}
                 </form>
@@ -344,42 +439,30 @@
 
 <section class="recs">
     <div class="recs-head">
-        <h2 class="section-title">More shows like this</h2>
-        <p class="recs-caption">
-            {% if mode == 'estimated' %}Limited episode data, ranked by an estimate.
-            {% elif mode == 'rating' %}No shared-crew signal yet, ranked by rating.
-            {% else %}Ranked by shared cast and crew.{% endif %}
-            {% if personalized %}<span class="recs-personalized">reordered for {{ user.username }}</span>{% endif %}
-        </p>
-        <span class="recs-steps">
+        <h2 class="section-title">More shows like this<button class="recs-why" type="button"
+                popovertarget="recs-explainer" title="How this order is decided"
+                aria-label="How this order is decided">i</button></h2>
+        <div class="recs-explainer" id="recs-explainer" popover>
+            {% if mode == 'estimated' %}
+            <p>This show has limited episode data, so the order is an estimate rather than a measured overlap.</p>
+            <p>As the catalog fills in, it will switch to ranking by the people these shows actually share.</p>
+            {% elif mode == 'rating' %}
+            <p>No shared cast or crew turned up between this show and the rest of the catalog yet, so these are ordered by rating instead.</p>
+            <p>That is a weaker signal. It says these are good, not that they are related.</p>
+            {% else %}
+            <p>These are ordered by the people they share with this show, cast and crew who worked on both.</p>
+            <p>More overlap ranks higher. Someone who worked on almost everything counts for less than a rare connection, so a person who links only these two shows is worth more than a prolific one.</p>
+            {% endif %}
+        </div>
+        <span class="recs-steps" data-recs-steps>
             {% if recommendation_step > 3 %}<a class="recs-more" href="{{ show.get_absolute_url }}">Show fewer</a>{% endif %}
-            {% if next_recommendation_step %}<a class="recs-more" href="?show={{ next_recommendation_step }}">See {{ next_recommendation_step }} →</a>{% endif %}
+            {% if next_recommendation_step %}<a class="recs-more" href="?show={{ next_recommendation_step }}">See more →</a>{% endif %}
         </span>
     </div>
 
-    {% for rec in recommendations %}
-    <a class="rec" href="{{ rec.show.get_absolute_url }}">
-        <div class="rec-poster">
-            {% if rec.show.poster_url %}
-            <img src="{{ rec.show.poster_url }}" alt="Poster for {{ rec.show.name }}" loading="lazy">
-            {% else %}
-            <div class="placeholder"></div>
-            {% endif %}
-        </div>
-        <div class="rec-body">
-            <div class="rec-head">
-                <span class="rec-title">{{ rec.show.name }}</span>
-                {% if rec.show.first_air_date %}<span class="rec-year">{{ rec.show.first_air_date.year }}</span>{% endif %}
-                <span class="rec-strength">{{ rec.show.shared_people }} shared {{ rec.show.shared_people|pluralize:"person,people" }}</span>
-            </div>
-            <div class="rec-callout">
-                <p class="callout-prose">{% for seg in rec.callout.segments %}{% if seg.t == 'name' %}<span class="conn-name">{{ seg.v }}</span>{% else %}{{ seg.v }}{% endif %}{% endfor %}</p>
-            </div>
-        </div>
-    </a>
-    {% empty %}
-    <p class="recs-empty">Nothing shares a person with this one yet.</p>
-    {% endfor %}
+    <div data-recs-list>
+        {% include "shows/_recs_list.html" %}
+    </div>
 </section>
 
 {% if user.is_authenticated %}
@@ -396,26 +479,29 @@
 
     var stars = form.querySelector('.star-rating');
     var score = form.querySelector('[data-your-score]');
+    var clear = form.querySelector('[data-rate-clear]');
     var meta = document.querySelector('[data-rate-meta]');
 
     function fallback(button) {
         /* form.submit() does not carry a submit button's own name and value,
-           so the score has to be put back by hand before giving up. */
+           so whichever field the button stood for -- score, or clear -- has to
+           be put back by hand before giving up. */
         var hidden = document.createElement('input');
         hidden.type = 'hidden';
-        hidden.name = 'score';
+        hidden.name = button.name;
         hidden.value = button.value;
         form.appendChild(hidden);
         form.submit();
     }
 
     form.addEventListener('click', function (event) {
-        var button = event.target.closest && event.target.closest('button[name="score"]');
+        var button = event.target.closest &&
+            event.target.closest('button[name="score"], button[name="clear"]');
         if (!button) { return; }
         event.preventDefault();
 
         var data = new FormData(form);
-        data.set('score', button.value);
+        data.set(button.name, button.value);
 
         fetch(form.action, {
             method: 'POST',
@@ -430,12 +516,24 @@
                 stars.querySelectorAll('button'),
                 function (other) { other.classList.remove('chosen'); }
             );
-            button.classList.add('chosen');
-            if (score) {
-                score.classList.remove('unrated');
-                score.innerHTML =
-                    '<span class="score-label">Your rating</span>\u2605 ' +
-                    state.score.toFixed(1);
+            /* A null score is a cleared rating. Repaint it as the unrated state
+               the server would have rendered, so a reload changes nothing. */
+            if (state.score === null) {
+                if (clear) { clear.classList.add('is-empty'); }
+                if (score) {
+                    score.classList.add('unrated');
+                    score.innerHTML =
+                        '<span class="score-label">Your rating</span>Not rated yet';
+                }
+            } else {
+                button.classList.add('chosen');
+                if (clear) { clear.classList.remove('is-empty'); }
+                if (score) {
+                    score.classList.remove('unrated');
+                    score.innerHTML =
+                        '<span class="score-label">Your rating</span>\u2605 ' +
+                        state.score.toFixed(1);
+                }
             }
             if (meta) { meta.innerHTML = state.meta_html; }
         }).catch(function () {
@@ -445,4 +543,72 @@
 })();
 </script>
 {% endif %}
+
+{% if show.trailer_key %}
+<script>
+(function () {
+    var link  = document.querySelector('[data-trailer]');
+    var modal = document.querySelector('[data-trailer-modal]');
+    if (!link || !modal || typeof modal.showModal !== 'function') { return; }
+    var frame = modal.querySelector('.trailer-frame');
+
+    link.addEventListener('click', function (event) {
+        event.preventDefault();
+        // Error 153 is YouTube refusing to play because the embed could not
+        // prove where it came from. An explicit origin plus a referrer policy
+        // that survives the cross-origin hop is what satisfies it.
+        frame.innerHTML =
+            '<iframe src="https://www.youtube-nocookie.com/embed/' +
+            encodeURIComponent(link.dataset.trailer) +
+            '?autoplay=1&rel=0&playsinline=1&origin=' +
+            encodeURIComponent(window.location.origin) +
+            '" title="Trailer" referrerpolicy="strict-origin-when-cross-origin"' +
+            ' allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe>';
+        modal.showModal();
+    });
+
+    modal.querySelector('[data-trailer-close]').addEventListener('click', function () { modal.close(); });
+    modal.addEventListener('click', function (event) { if (event.target === modal) { modal.close(); } });
+    // Emptying the frame is what stops playback. Closing the dialog alone
+    // leaves the audio running underneath.
+    modal.addEventListener('close', function () { frame.innerHTML = ''; });
+})();
+</script>
+{% endif %}
+
+<script>
+(function () {
+    // The ladder used to reload the whole page to show two more rows. The
+    // links stay real URLs, so this only removes the reload.
+    var steps = document.querySelector('[data-recs-steps]');
+    var list  = document.querySelector('[data-recs-list]');
+    if (!steps || !list || !window.fetch) { return; }
+
+    function render(data, url) {
+        list.innerHTML = data.recs_html;
+        var html = '';
+        if (data.step > 3) {
+            html += '<a class="recs-more" href="' + location.pathname + '">Show fewer</a>';
+        }
+        if (data.next_step) {
+            html += '<a class="recs-more" href="?show=' + data.next_step + '">See more \u2192</a>';
+        }
+        steps.innerHTML = html;
+        // Keep the address bar honest: the rung is in the URL, so a reload or
+        // a shared link lands on the same view.
+        history.replaceState(null, '', url);
+    }
+
+    steps.addEventListener('click', function (event) {
+        var link = event.target.closest('a.recs-more');
+        if (!link) { return; }
+        event.preventDefault();
+        var url = link.getAttribute('href');
+        fetch(url, { headers: { 'X-Requested-With': 'fetch' } })
+            .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
+            .then(function (data) { render(data, url); })
+            .catch(function () { window.location.href = url; });
+    });
+})();
+</script>
 {% endblock %}
