@@ -1,3 +1,13 @@
+---
+adr: 1
+title: Exclude casting roles from crew matching
+status: accepted
+date: 2026-08-11
+tags:
+  - adr
+relates:
+  - "[[04-episode-weighted-people-recommender]]"
+---
 # 1. Exclude casting roles from crew matching
 
 **A casting office works across a studio's whole slate, so two shows sharing a casting director

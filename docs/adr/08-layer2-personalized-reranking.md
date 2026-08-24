@@ -1,3 +1,14 @@
+---
+adr: 8
+title: "Layer 2: personalize by re-ranking the graph per user"
+status: accepted
+date: 2026-08-18
+tags:
+  - adr
+relates:
+  - "[[05-no-signal-fallback-ladder]]"
+  - "[[07-materialized-recommendations]]"
+---
 # 8. Layer 2: personalize by re-ranking the graph per user
 
 **Two users looking at the same show saw the identical list. Layer 2 keeps a signed weight per

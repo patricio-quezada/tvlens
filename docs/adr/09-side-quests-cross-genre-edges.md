@@ -1,3 +1,15 @@
+---
+adr: 9
+title: "Side Quests: strong edges into genres a user has not rated highly"
+status: amended
+date: 2026-08-21
+tags:
+  - adr
+relates:
+  - "[[05-no-signal-fallback-ladder]]"
+  - "[[07-materialized-recommendations]]"
+  - "[[08-layer2-personalized-reranking]]"
+---
 # 9. Side Quests: strong edges into genres a user has not rated highly
 
 **A side quest is a show a user would plausibly like but would not have reached for, and

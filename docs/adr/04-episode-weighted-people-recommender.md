@@ -1,3 +1,16 @@
+---
+adr: 4
+title: Recommend by episode-weighted shared people
+status: accepted
+date: 2026-08-11
+tags:
+  - adr
+relates:
+  - "[[01-exclude-casting-roles]]"
+  - "[[02-aggregate-credits-ingest]]"
+  - "[[05-no-signal-fallback-ladder]]"
+  - "[[07-materialized-recommendations]]"
+---
 # 4. Recommend by episode-weighted shared people
 
 **Counting shared people equally made two shows look alike when they had cycled through the
