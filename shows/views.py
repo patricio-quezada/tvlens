@@ -8,11 +8,14 @@ from django.contrib.auth.decorators import login_required
 from django.db.models import Count
 from django.http import HttpResponseBadRequest, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.template.loader import render_to_string
 from django.views.decorators.http import require_POST
 
 from .forms import RegistrationForm
-from .models import Genre, Rating, Show
+from django.utils.text import slugify
+
+from .models import Genre, Rating, Show, ShowTag, Tag
 from .search import search as run_search
 from .personalization import (
     build_profile,
@@ -287,6 +290,14 @@ def detail(request, slug):
             "star_steps": star_steps(user_rating),
             "average_rating": show.average_rating,
             "rating_count": show.ratings.count(),
+            "user_tags": (
+                ShowTag.objects.filter(user=request.user, show=show)
+                .select_related("tag").order_by("tag__name")
+                if request.user.is_authenticated else []
+            ),
+            # Offer the vocabulary that already exists so a second reader does
+            # not invent "slowburn" beside someone else's "slow burn".
+            "tag_suggestions": Tag.objects.order_by("name")[:200],
         },
     )
 
@@ -356,6 +367,76 @@ def search(request):
             "advanced_open": any([status, language, request.GET.get("min_score"), request.GET.get("min_votes"), main_cast_only]),
         },
     )
+
+
+
+# A tag is a handle, not an essay. Long enough for "slow burn", short enough
+# that nobody pastes a sentence into the catalog's shared vocabulary.
+TAG_MAX_LENGTH = 40
+
+
+@login_required
+@require_POST
+def add_tag(request, slug):
+    """Attach one of the reader's own tags to a show.
+
+    Tags are shared vocabulary but private application: the Tag row is reused
+    across everyone, the ShowTag row belongs to one person. That is what lets
+    two readers agree that "slow burn" means something without either of them
+    seeing the other's shelf.
+    """
+    show = get_object_or_404(Show, slug=slug)
+    raw = (request.POST.get("tag") or "").strip()[:TAG_MAX_LENGTH]
+    name = " ".join(raw.split())
+
+    if not name:
+        return redirect("shows:detail", slug=slug)
+
+    key = slugify(name)
+    if not key:
+        # Nothing survived slugification, so there is no stable handle to store.
+        return redirect("shows:detail", slug=slug)
+
+    # Match on the slug, not the name: "Slow Burn" and "slow burn" are the same
+    # tag, and letting both exist splits the signal personalization reads.
+    tag = Tag.objects.filter(slug=key).first()
+    if tag is None:
+        tag = Tag.objects.create(name=name, slug=key)
+
+    ShowTag.objects.get_or_create(user=request.user, show=show, tag=tag)
+    return redirect(f"{reverse('shows:detail', args=[slug])}#tags")
+
+
+@login_required
+@require_POST
+def remove_tag(request, slug):
+    show = get_object_or_404(Show, slug=slug)
+    ShowTag.objects.filter(
+        user=request.user, show=show, tag__slug=request.POST.get("tag", "")
+    ).delete()
+    return redirect(f"{reverse('shows:detail', args=[slug])}#tags")
+
+
+def tag(request, slug):
+    """Everything one reader has filed under a tag.
+
+    Anonymous readers get the tag's whole population, which is the only honest
+    answer when there is nobody to scope it to.
+    """
+    tag_obj = get_object_or_404(Tag, slug=slug)
+    links = ShowTag.objects.filter(tag=tag_obj).select_related("show")
+    if request.user.is_authenticated:
+        links = links.filter(user=request.user)
+
+    seen, shows = set(), []
+    for link in links:
+        if link.show_id in seen:
+            continue
+        seen.add(link.show_id)
+        shows.append(link.show)
+    shows.sort(key=lambda s: (-(s.vote_average or 0), s.name))
+
+    return render(request, "shows/tag.html", {"tag": tag_obj, "shows": shows})
 
 
 @login_required

@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}{{ tag.name }} · TVLens{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>{{ tag.name }}</h1>
+    <p>
+        {{ shows|length }} show{{ shows|length|pluralize }}
+        {% if user.is_authenticated %}you have tagged{% else %}tagged with this{% endif %}.
+        <a href="{% url 'shows:index' %}">← All shows</a>
+    </p>
+</div>
+{% include "shows/_grid.html" %}
+{% endblock %}

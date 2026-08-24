@@ -69,6 +69,41 @@
         box-shadow: 0 0 10px var(--accent-glow);
     }
     .genre-row { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 1.5rem; }
+    .tag-panel { margin: 1.75rem 0 0; }
+    .tag-heading {
+        font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.12em;
+        font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.6rem;
+    }
+    .tag-row { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+    .user-tag {
+        display: inline-flex; align-items: center; gap: 0.3rem;
+        padding: 0.2rem 0.3rem 0.2rem 0.6rem;
+        background: var(--surface-2); border: 1px solid var(--border);
+        border-radius: 999px; font-size: 0.82rem;
+    }
+    .user-tag a { color: var(--text-primary); text-decoration: none; }
+    .user-tag a:hover { color: var(--accent); }
+    .user-tag form { display: inline; }
+    .user-tag button {
+        background: none; border: 0; cursor: pointer; padding: 0 0.2rem;
+        color: var(--text-tertiary); font-size: 0.9rem; line-height: 1;
+    }
+    .user-tag button:hover { color: var(--error); }
+    .tag-empty { font-size: 0.85rem; color: var(--text-secondary); }
+    .tag-add { display: flex; gap: 0.4rem; margin-top: 0.7rem; max-width: 340px; }
+    .tag-add input {
+        flex: 1 1 auto; min-width: 0; padding: 0.35rem 0.6rem;
+        font-family: inherit; font-size: 0.85rem; color: var(--text-primary);
+        background: var(--surface); border: 1px solid var(--border); border-radius: 999px;
+    }
+    .tag-add input:focus { outline: none; border-color: var(--accent); }
+    .tag-add button {
+        padding: 0.35rem 0.9rem; font-size: 0.78rem;
+        font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.08em;
+        background: none; color: var(--accent);
+        border: 1px solid var(--border); border-radius: 999px; cursor: pointer;
+    }
+    .tag-add button:hover { border-color: var(--accent); }
     .genre-tag {
         font-size: 0.72rem; letter-spacing: 0.04em; padding: 0.28rem 0.7rem;
         border: 1px solid var(--border); border-radius: 999px;
@@ -411,6 +446,47 @@
             {% endif %}
 
             {% if show.overview %}<p class="hero-overview">{{ show.overview }}</p>{% endif %}
+
+            {% comment %}Tags are a shared vocabulary applied privately: the Tag
+               row is reused across everyone, the ShowTag row belongs to one
+               person. Genres come from TMDb and describe the show; a tag comes
+               from the viewer and describes what it was like to watch. The
+               recommender reads both (ADR-08).{% endcomment %}
+            <section class="tag-panel" id="tags">
+                <div class="tag-heading">Your tags</div>
+                <div class="tag-row">
+                    {% for link in user_tags %}
+                    <span class="user-tag">
+                        <a href="{% url 'shows:tag' link.tag.slug %}">{{ link.tag.name }}</a>
+                        <form method="post" action="{% url 'shows:remove_tag' show.slug %}">
+                            {% csrf_token %}
+                            <input type="hidden" name="tag" value="{{ link.tag.slug }}">
+                            <button type="submit" aria-label="Remove the tag {{ link.tag.name }}">&times;</button>
+                        </form>
+                    </span>
+                    {% empty %}
+                    {% if user.is_authenticated %}
+                    <span class="tag-empty">Nothing yet. Slow burn? Comfort watch? Ended too soon?</span>
+                    {% else %}
+                    <span class="tag-empty">Sign in to tag this show.</span>
+                    {% endif %}
+                    {% endfor %}
+                </div>
+                {% if user.is_authenticated %}
+                <form class="tag-add" method="post" action="{% url 'shows:add_tag' show.slug %}">
+                    {% csrf_token %}
+                    <input type="text" name="tag" maxlength="40" list="tag-suggestions"
+                           placeholder="Add a tag" aria-label="Add a tag to {{ show.name }}">
+                    <button type="submit">Add</button>
+                </form>
+                {% comment %}Suggesting tags already in use is the whole point of a
+                   shared vocabulary. Without it everyone invents their own spelling
+                   of the same idea and the signal splits.{% endcomment %}
+                <datalist id="tag-suggestions">
+                    {% for t in tag_suggestions %}<option value="{{ t.name }}"></option>{% endfor %}
+                </datalist>
+                {% endif %}
+            </section>
 
             <section class="rate-panel" id="rate">
                 <div class="rate-heading">Rate this show</div>
