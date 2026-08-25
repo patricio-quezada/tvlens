@@ -24,6 +24,7 @@ from .personalization import (
     rerank,
     side_quests,
     top_picks,
+    without_watched,
 )
 from .recommenders import (
     compose_callout,
@@ -218,7 +219,15 @@ def detail(request, slug):
     )
     # Layer 1 order in, personalized order out. Anonymous and ratingless users
     # get the cold-start ordering (Layer 1 under a light quality prior).
-    ranked = rerank(request.user, stored_similar(show))
+    #
+    # Then drop what this reader has already seen (#27), and drop it AFTER the
+    # re-rank rather than before. rerank derives each candidate's gravity from
+    # its position in a list of length n, so removing a row first would shift
+    # the survivors ahead of it down by a rank-step and quietly reorder a list
+    # that should only have got shorter. Filtering the whole list here, before
+    # the ladder slices a rung off it below, is also what backfills the gap:
+    # the reader still sees three, the fourth candidate just moves up.
+    ranked = without_watched(request.user, rerank(request.user, stored_similar(show)))
 
     # TVLens's own rating (distinct from the TMDb vote_average in the hero). The
     # widget shows the signed-in user their current score and lets them change it.
@@ -243,6 +252,9 @@ def detail(request, slug):
     if step not in RECOMMENDATION_STEPS:
         step = DETAIL_RECOMMENDATION_LIMIT
 
+    # Counted after the watched filter, so the ladder never offers a rung with
+    # nothing behind it: a reader who has seen much of one neighbourhood gets a
+    # shorter climb rather than an empty step.
     available = min(len(ranked), RECOMMENDATION_MAX)
     shown = list(ranked)[:step]
     next_step = None
