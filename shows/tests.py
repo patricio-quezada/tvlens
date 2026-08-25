@@ -43,6 +43,7 @@ from .personalization import (
     rerank,
     side_quests,
     top_picks,
+    without_watched,
 )
 from .views import DETAIL_RECOMMENDATION_LIMIT
 from .recommenders import (
@@ -3103,3 +3104,165 @@ class SqliteWalTests(TestCase):
         first.execute("ROLLBACK;")
         first.close()
         second.close()
+
+
+class AlreadyWatchedFilterTests(TestCase):
+    """"More shows like this" stopped recommending what the reader rated (#27).
+
+    A rating says you have seen it, so recommending it back tells someone to
+    watch what they just finished. The half that matters is the backfill: the
+    row has to pull the next candidate down rather than quietly get shorter.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user("rater", password="pw-rater-123")
+        cls.stranger = User.objects.create_user("stranger", password="pw-str-123")
+        cls.source = Show.objects.create(
+            tmdb_id=1, name="Source", number_of_episodes=10
+        )
+        # One shared lead ties every candidate to the source, so Layer 1
+        # connects all of them and the store fills past the opening rung.
+        person = Person.objects.create(tmdb_id=1, name="Shared Lead")
+        CastMember.objects.create(
+            show=cls.source, person=person, order=0, character="Lead",
+            episode_count=10,
+        )
+        cls.candidates = []
+        for i in range(10):
+            show = Show.objects.create(
+                tmdb_id=100 + i, name=f"Candidate {i}", number_of_episodes=10,
+                # Descending vote_average keeps the Layer 1 order stable and
+                # readable, so "the next one down" is a nameable show.
+                vote_average=9.0 - i * 0.1, vote_count=100,
+            )
+            CastMember.objects.create(
+                show=show, person=person, order=0, character="Lead",
+                episode_count=10,
+            )
+            cls.candidates.append(show)
+        call_command("rebuild_similar_shows", stdout=StringIO())
+
+    def shown(self, step=None):
+        url = self.source.get_absolute_url()
+        if step:
+            url += f"?show={step}"
+        resp = self.client.get(url)
+        return [r["show"] for r in resp.context["recommendations"]]
+
+    def test_baseline_order_before_anyone_rates_anything(self):
+        """What the row looks like untouched, so the rest of these mean something."""
+        self.assertEqual(len(self.shown()), DETAIL_RECOMMENDATION_LIMIT)
+
+    def test_a_rated_show_is_not_recommended(self):
+        self.client.login(username="rater", password="pw-rater-123")
+        top = self.shown()[0]
+        Rating.objects.create(user=self.user, show=top, score=4.5)
+        self.assertNotIn(top, self.shown())
+
+    def test_the_row_does_not_shrink_when_a_show_is_filtered_out(self):
+        """The backfill. Three in, three out, with the fourth pulled down."""
+        self.client.login(username="rater", password="pw-rater-123")
+        before = self.shown()
+        Rating.objects.create(user=self.user, show=before[0], score=4.5)
+        after = self.shown()
+        self.assertEqual(len(after), len(before))
+        self.assertEqual(len(after), DETAIL_RECOMMENDATION_LIMIT)
+        # The survivors keep their order and the next candidate joins the end.
+        self.assertEqual(after[:2], before[1:])
+        self.assertNotIn(after[2], before)
+
+    def test_filtering_does_not_reorder_the_survivors(self):
+        """Removing a row must only shorten the list, never permute it. rerank
+        derives gravity from a candidate's position in a list of length n, so
+        filtering before the re-rank would shift the shows ahead of the dropped
+        one and change the answer."""
+        self.client.login(username="rater", password="pw-rater-123")
+        full = [s.pk for s in self.shown(step=12)]
+        Rating.objects.create(user=self.user, show=self.candidates[3], score=4.5)
+        after = [s.pk for s in self.shown(step=12)]
+        self.assertEqual(after, [pk for pk in full if pk != self.candidates[3].pk])
+
+    def test_several_ratings_all_get_filtered(self):
+        self.client.login(username="rater", password="pw-rater-123")
+        for show in self.shown()[:3]:
+            Rating.objects.create(user=self.user, show=show, score=4.0)
+        names = {s.name for s in self.shown()}
+        self.assertEqual(len(names), DETAIL_RECOMMENDATION_LIMIT)
+        self.assertFalse(
+            names & {"Candidate 0", "Candidate 1", "Candidate 2"}
+            & {s.name for s in Show.objects.watched_by(self.user)}
+        )
+
+    def test_watch_history_filters_too_even_with_no_rating(self):
+        """watched_by is rating OR logged episodes (ADR-08). WatchHistory has
+        no rows today, so this is the half of the rule nothing else exercises."""
+        self.client.login(username="rater", password="pw-rater-123")
+        target = self.shown()[0]
+        season = Season.objects.create(show=target, tmdb_id=900, season_number=1)
+        episode = Episode.objects.create(
+            season=season, tmdb_id=9001, episode_number=1
+        )
+        WatchHistory.objects.create(user=self.user, episode=episode)
+        self.assertNotIn(target, self.shown())
+
+    def test_another_readers_ratings_do_not_filter_my_row(self):
+        Rating.objects.create(user=self.stranger, show=self.candidates[0], score=5.0)
+        self.client.login(username="rater", password="pw-rater-123")
+        self.assertIn(self.candidates[0], self.shown())
+
+    def test_an_anonymous_reader_sees_the_unfiltered_row(self):
+        Rating.objects.create(user=self.user, show=self.candidates[0], score=5.0)
+        self.assertIn(self.candidates[0], self.shown())
+
+    def test_the_ladder_stops_offering_rungs_that_no_longer_exist(self):
+        """With eleven candidates the ladder can reach 9. Rate enough of them
+        away and the climb has to end sooner rather than offer an empty step."""
+        self.client.login(username="rater", password="pw-rater-123")
+        for show in self.candidates[:8]:
+            Rating.objects.create(user=self.user, show=show, score=4.0)
+        resp = self.client.get(self.source.get_absolute_url())
+        self.assertEqual(resp.context["recommendations_available"], 2)
+        self.assertIsNone(resp.context["next_recommendation_step"])
+        self.assertEqual(len(resp.context["recommendations"]), 2)
+
+    def test_my_ratings_is_never_filtered(self):
+        """It exists to show the reader what they rated. Filtering it would
+        empty the page it is."""
+        self.client.login(username="rater", password="pw-rater-123")
+        Rating.objects.create(user=self.user, show=self.candidates[0], score=4.5)
+        resp = self.client.get(reverse("shows:my_ratings"))
+        self.assertIn(self.candidates[0].pk, [s.pk for s in resp.context["shows"]])
+
+    def test_top_picks_is_never_filtered(self):
+        """Top Picks is built FROM the user's ratings. The same filter applied
+        there would leave the row permanently empty."""
+        self.client.login(username="rater", password="pw-rater-123")
+        for show in self.candidates[:3]:
+            Rating.objects.create(user=self.user, show=show, score=4.5)
+        resp = self.client.get(reverse("shows:index"))
+        self.assertTrue(resp.context["top_picks"])
+
+    def test_side_quests_already_excluded_watched(self):
+        """Not a new fix: side_quests() has always blocked watched shows, and
+        this pins that it stays true so #27 is not re-opened against it."""
+        self.client.login(username="rater", password="pw-rater-123")
+        for show in self.candidates[:4]:
+            Rating.objects.create(user=self.user, show=show, score=4.5)
+        resp = self.client.get(reverse("shows:index"))
+        quest_pks = {s.pk for s in resp.context["side_quests"]}
+        watched_pks = set(
+            Show.objects.watched_by(self.user).values_list("pk", flat=True)
+        )
+        self.assertFalse(quest_pks & watched_pks)
+
+    def test_without_watched_keeps_the_ranked_shape(self):
+        """It composes either side of rerank, so mode and the re-rank's own
+        attributes have to survive the filter."""
+        Rating.objects.create(user=self.user, show=self.candidates[0], score=4.5)
+        ranked = rerank(self.user, stored_similar(self.source))
+        filtered = without_watched(self.user, ranked)
+        self.assertEqual(filtered.mode, ranked.mode)
+        self.assertEqual(filtered.personalized, ranked.personalized)
+        self.assertIs(filtered.profile, ranked.profile)
+        self.assertEqual(len(filtered), len(ranked) - 1)
