@@ -2972,3 +2972,134 @@ class MyRatingsTagsTests(TestCase):
         self.client.login(username="stranger2", password="pw")
         resp = self.client.get(reverse("shows:my_ratings"))
         self.assertEqual(resp.status_code, 200)
+
+
+class SqliteWalTests(TestCase):
+    """WAL so a background ingest stops starving live writes (#23).
+
+    The test database runs in memory, where journal_mode is always "memory",
+    so asserting on the live connection would prove nothing. These build a
+    real file-backed database with the settings the project configures and
+    measure the behaviour the issue is about.
+    """
+
+    def options(self):
+        from django.conf import settings
+
+        return settings.DATABASES["default"].get("OPTIONS", {})
+
+    def test_the_project_asks_for_wal_and_a_patient_timeout(self):
+        options = self.options()
+        self.assertEqual(options.get("timeout"), 20)
+        self.assertIn("journal_mode=WAL", options.get("init_command", ""))
+
+    def test_durability_is_left_alone(self):
+        """synchronous stays at SQLite's FULL. NORMAL would drop the last few
+        transactions on power loss and that decision has not been made."""
+        self.assertNotIn("synchronous", self.options().get("init_command", "").lower())
+
+    def open_probe(self, mode):
+        """A file-backed connection in `mode`, plus a table to fight over."""
+        import sqlite3
+        import tempfile
+
+        path = tempfile.mkdtemp() + "/probe.sqlite3"
+        setup = sqlite3.connect(path, isolation_level=None)
+        actual = setup.execute(f"PRAGMA journal_mode={mode};").fetchone()[0]
+        setup.execute("CREATE TABLE t (id INTEGER PRIMARY KEY, v TEXT);")
+        setup.execute("INSERT INTO t (v) VALUES ('seed');")
+        setup.close()
+        return path, actual
+
+    def connect(self, path):
+        import sqlite3
+
+        options = self.options()
+        conn = sqlite3.connect(path, timeout=0.2, isolation_level=None)
+        conn.execute(options["init_command"])
+        return conn
+
+    def test_the_configured_options_actually_produce_wal(self):
+        """A fresh connection carrying the project's init_command reports wal,
+        and SQLite creates the sidecar files while that connection is open."""
+        import os
+
+        path, _ = self.open_probe("delete")
+        conn = self.connect(path)
+        self.assertEqual(conn.execute("PRAGMA journal_mode;").fetchone()[0], "wal")
+        conn.execute("INSERT INTO t (v) VALUES ('x');")
+        self.assertTrue(os.path.exists(path + "-wal"))
+        self.assertTrue(os.path.exists(path + "-shm"))
+        conn.close()
+
+    def test_a_writer_no_longer_blocks_a_reader(self):
+        """The ingest holding the database open is what broke rating. Under
+        delete a commit takes an exclusive lock and readers fail; under WAL
+        the reader is untouched."""
+        import sqlite3
+
+        for mode, reader_survives in (("delete", False), ("wal", True)):
+            with self.subTest(mode=mode):
+                path, actual = self.open_probe(mode)
+                self.assertEqual(actual, mode)
+                writer = sqlite3.connect(path, timeout=0.2, isolation_level=None)
+                if mode == "wal":
+                    writer.execute("PRAGMA journal_mode=WAL;")
+                writer.execute("BEGIN EXCLUSIVE;")
+                writer.execute("INSERT INTO t (v) VALUES ('held');")
+                reader = sqlite3.connect(path, timeout=0.2, isolation_level=None)
+                try:
+                    reader.execute("SELECT COUNT(*) FROM t;").fetchone()
+                    read_worked = True
+                except sqlite3.OperationalError:
+                    read_worked = False
+                self.assertIs(read_worked, reader_survives)
+                writer.execute("ROLLBACK;")
+                writer.close()
+                reader.close()
+
+    def test_a_reader_no_longer_blocks_a_writer(self):
+        """The mirror case, and the one Patricio hit: a page holding a read
+        transaction open made the rating write fail under delete."""
+        import sqlite3
+
+        for mode, write_survives in (("delete", False), ("wal", True)):
+            with self.subTest(mode=mode):
+                path, _ = self.open_probe(mode)
+                reader = sqlite3.connect(path, timeout=0.2, isolation_level=None)
+                if mode == "wal":
+                    reader.execute("PRAGMA journal_mode=WAL;")
+                reader.execute("BEGIN;")
+                reader.execute("SELECT COUNT(*) FROM t;").fetchone()
+                writer = sqlite3.connect(path, timeout=0.2, isolation_level=None)
+                try:
+                    writer.execute("BEGIN IMMEDIATE;")
+                    writer.execute("INSERT INTO t (v) VALUES ('during-read');")
+                    writer.execute("COMMIT;")
+                    wrote = True
+                except sqlite3.OperationalError:
+                    wrote = False
+                self.assertIs(wrote, write_survives)
+                reader.close()
+                writer.close()
+
+    def test_a_second_writer_still_waits_its_turn(self):
+        """WAL does not give SQLite two writers. It gives the loser a queue,
+        which is what `timeout` is for: it waits rather than failing at once."""
+        import sqlite3
+        import time
+
+        path, _ = self.open_probe("wal")
+        first = sqlite3.connect(path, timeout=0.2, isolation_level=None)
+        first.execute("PRAGMA journal_mode=WAL;")
+        first.execute("BEGIN IMMEDIATE;")
+        first.execute("INSERT INTO t (v) VALUES ('held');")
+        second = sqlite3.connect(path, timeout=0.5, isolation_level=None)
+        started = time.monotonic()
+        with self.assertRaises(sqlite3.OperationalError):
+            second.execute("INSERT INTO t (v) VALUES ('queued');")
+        # It waited for the timeout instead of giving up immediately.
+        self.assertGreaterEqual(time.monotonic() - started, 0.4)
+        first.execute("ROLLBACK;")
+        first.close()
+        second.close()
