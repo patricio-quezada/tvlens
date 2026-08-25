@@ -14,6 +14,9 @@ env/
 # Django
 db.sqlite3
 db.sqlite3-journal
+# WAL sidecars, present whenever a connection is open (#23)
+db.sqlite3-wal
+db.sqlite3-shm
 staticfiles/
 media/
 

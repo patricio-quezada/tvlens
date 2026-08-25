@@ -75,6 +75,16 @@ DATABASES = {
         "PASSWORD": os.getenv("DB_PASSWORD", ""),
         "HOST": os.getenv("DB_HOST", ""),
         "PORT": os.getenv("DB_PORT", ""),
+        # WAL so a background job writing continuously stops starving everyone
+        # else. Under the default "delete" journal a commit needs an exclusive
+        # lock on the whole file, so an open read blocks the ingest and the
+        # ingest blocks reads; measured on this catalog, both fail outright.
+        # Under WAL a reader and a writer coexist and only writer-versus-writer
+        # contends. "timeout" makes that loser wait its turn for 20s instead of
+        # raising "database is locked" after Python's 5s default.
+        # Left "synchronous" at FULL: NORMAL would trade the last few
+        # transactions on power loss, and nobody has made that call. See #23.
+        "OPTIONS": {"timeout": 20, "init_command": "PRAGMA journal_mode=WAL;"},
     }
 }
 
