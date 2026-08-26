@@ -34,6 +34,9 @@ from .models import (
 from .search import ParsedQuery
 from .search import search as run_search
 from .personalization import (
+    MIN_CONNECTION_TYPE_EDGES,
+    MIN_CONNECTION_TYPE_LEAN,
+    PreferenceProfile,
     TOP_PICK_FLOOR,
     rated_shows,
     SIDE_QUEST_CENTRALITY_EXPONENT,
@@ -50,8 +53,10 @@ from .recommenders import (
     SQLITE_MAX_VARS_SAFE,
     RankedShows,
     compose_callout,
+    connection_type,
     name_connections,
     role_index,
+    role_indexes,
     shared_connections,
     similar_by_cast,
     similar_by_crew,
@@ -3266,3 +3271,458 @@ class AlreadyWatchedFilterTests(TestCase):
         self.assertEqual(filtered.personalized, ranked.personalized)
         self.assertIs(filtered.profile, ranked.profile)
         self.assertEqual(len(filtered), len(ranked) - 1)
+
+
+class ConnectionTypePreferenceTests(TestCase):
+    """What a user's own ratings say about cast connections versus crew ones.
+
+    Issue #7. Two rated pairs: one held together by a shared lead on every
+    episode of both, one by a shared creator on every episode of both. Each
+    pair is a mutual Layer 1 edge, so the rated set carries the four directed
+    edges MIN_CONNECTION_TYPE_EDGES asks for, and one whole-run person on each
+    side clears the per-type mass floor. Moving only the ratings therefore
+    moves only the lean, which is the thing under test.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user("typed", password="pw-typed-9x")
+        cls.lead = Person.objects.create(tmdb_id=1, name="Shared Lead")
+        cls.creator = Person.objects.create(tmdb_id=2, name="Shared Creator")
+
+        def show(tmdb_id, name):
+            return Show.objects.create(
+                tmdb_id=tmdb_id, name=name, number_of_episodes=10, vote_average=8.0
+            )
+
+        cls.cast_a, cls.cast_b = show(1, "Cast A"), show(2, "Cast B")
+        cls.crew_a, cls.crew_b = show(3, "Crew A"), show(4, "Crew B")
+        for s in (cls.cast_a, cls.cast_b):
+            CastMember.objects.create(
+                show=s, person=cls.lead, order=0, character="Hero", episode_count=10
+            )
+        for s in (cls.crew_a, cls.crew_b):
+            CrewMember.objects.create(
+                show=s, person=cls.creator, job="Creator", episode_count=10
+            )
+        cls._edge(cls.cast_a, cls.cast_b)
+        cls._edge(cls.cast_b, cls.cast_a)
+        cls._edge(cls.crew_a, cls.crew_b)
+        cls._edge(cls.crew_b, cls.crew_a)
+
+    @classmethod
+    def _edge(cls, source, target):
+        SimilarShow.objects.create(
+            source=source, target=target, rank=0, score=1.0,
+            shared_people=1, mode="weighted",
+        )
+
+    def _rate(self, cast_score, crew_score):
+        for s in (self.cast_a, self.cast_b):
+            Rating.objects.create(user=self.user, show=s, score=cast_score)
+        for s in (self.crew_a, self.crew_b):
+            Rating.objects.create(user=self.user, show=s, score=crew_score)
+        return build_profile(self.user)
+
+    def test_cold_start_has_no_connection_type_opinion(self):
+        profile = build_profile(self.user)
+        self.assertTrue(profile.is_cold_start)
+        self.assertEqual(profile.connection_type_weights, {})
+        self.assertEqual(profile.connection_type_lean, 0.0)
+        self.assertIsNone(profile.leans_toward)
+
+    def test_anonymous_visitor_has_no_connection_type_opinion(self):
+        profile = build_profile(AnonymousUser())
+        self.assertEqual(profile.connection_type_weights, {})
+        self.assertEqual(profile.connection_type_lean, 0.0)
+
+    def test_cast_leaning_user(self):
+        # 5.0 on the cast-tied pair is a +2.0 signal, 3.5 on the crew-tied pair
+        # is +0.5: the affinities are the signals those connections earned.
+        profile = self._rate(cast_score=5.0, crew_score=3.5)
+        self.assertAlmostEqual(profile.connection_type_weights["cast"], 2.0)
+        self.assertAlmostEqual(profile.connection_type_weights["crew"], 0.5)
+        self.assertAlmostEqual(profile.connection_type_lean, 1.5)
+        self.assertEqual(profile.leans_toward, "cast")
+
+    def test_crew_leaning_user(self):
+        profile = self._rate(cast_score=3.5, crew_score=5.0)
+        self.assertAlmostEqual(profile.connection_type_weights["cast"], 0.5)
+        self.assertAlmostEqual(profile.connection_type_weights["crew"], 2.0)
+        self.assertAlmostEqual(profile.connection_type_lean, -1.5)
+        self.assertEqual(profile.leans_toward, "crew")
+
+    def test_a_low_rating_signs_the_lean_negative(self):
+        # A 1-star rating is information (ADR-08): disliking the crew-tied pair
+        # is a reason to name cast first, not merely a weaker positive.
+        profile = self._rate(cast_score=4.0, crew_score=1.0)
+        self.assertAlmostEqual(profile.connection_type_weights["crew"], -2.0)
+        self.assertEqual(profile.leans_toward, "cast")
+
+    def test_equal_ratings_earn_no_lean_however_many_edges(self):
+        # The user loves everything. Both types earned the same signal, so
+        # there is no preference to assert and the gap gate holds it at zero.
+        profile = self._rate(cast_score=5.0, crew_score=5.0)
+        self.assertEqual(profile.connection_type_weights, {})
+        self.assertEqual(profile.connection_type_lean, 0.0)
+
+    def test_a_gap_below_the_floor_is_not_called(self):
+        # 0.25 of a star apart: real arithmetic, not a real opinion.
+        profile = self._rate(cast_score=5.0, crew_score=4.75)
+        self.assertGreater(MIN_CONNECTION_TYPE_LEAN, 0.25)
+        self.assertEqual(profile.connection_type_weights, {})
+
+    def test_too_few_edges_inside_the_rated_set_is_not_called(self):
+        # Rating one pair leaves two directed edges, under the floor, and the
+        # gap between them would otherwise be enormous.
+        Rating.objects.create(user=self.user, show=self.cast_a, score=5.0)
+        Rating.objects.create(user=self.user, show=self.cast_b, score=5.0)
+        profile = build_profile(self.user)
+        self.assertEqual(profile.rating_count, 2)
+        self.assertFalse(profile.is_cold_start)
+        self.assertEqual(profile.connection_type_weights, {})
+        self.assertEqual(profile.connection_type_lean, 0.0)
+
+    def test_ratings_with_no_edges_between_them_are_not_called(self):
+        # Ten ratings that share nothing say nothing about connection types.
+        # Measured on the real catalog: ten shows picked at random have zero
+        # Layer 1 edges between them, so this is the common case, not the edge.
+        for i in range(10):
+            s = Show.objects.create(
+                tmdb_id=100 + i, name=f"Lonely {i}",
+                number_of_episodes=10, vote_average=8.0,
+            )
+            Rating.objects.create(user=self.user, show=s, score=5.0 if i % 2 else 1.0)
+        profile = build_profile(self.user)
+        self.assertEqual(profile.rating_count, 10)
+        self.assertEqual(profile.connection_type_weights, {})
+
+    def test_a_watched_but_unrated_show_does_not_vote(self):
+        # WATCHED_SIGNAL is a constant, so counting views would pull both
+        # affinities toward the same number and wash out the difference.
+        self._rate(cast_score=5.0, crew_score=3.5)
+        extra = Show.objects.create(
+            tmdb_id=200, name="Watched Only", number_of_episodes=10, vote_average=8.0
+        )
+        season = Season.objects.create(show=extra, tmdb_id=1, season_number=1)
+        episode = Episode.objects.create(
+            season=season, tmdb_id=1, episode_number=1, name="E1"
+        )
+        WatchHistory.objects.create(user=self.user, episode=episode)
+        self.assertAlmostEqual(build_profile(self.user).connection_type_lean, 1.5)
+
+    def test_the_lean_never_reaches_the_show_ranking(self):
+        # Layer 2 owns genre and tag preference; this dimension orders NAMES in
+        # a callout and must not become a third term in score_for (ADR-08).
+        profile = self._rate(cast_score=5.0, crew_score=3.5)
+        blank = Show.objects.create(
+            tmdb_id=300, name="Blank", number_of_episodes=10, vote_average=8.0
+        )
+        self.assertEqual(profile.score_for(blank), 0.0)
+
+    def test_minimum_edge_floor_is_the_documented_one(self):
+        self.assertEqual(MIN_CONNECTION_TYPE_EDGES, 4)
+
+
+class ConnectionTypeNamingTests(TestCase):
+    """Ordering the named connections by a learned lean (issue #7).
+
+    The source shares a marquee crew member on the whole run of both shows and
+    a recognizable lead on rather less of it, so by score alone the crew credit
+    is named first. A cast-leaning reader flips that; a crew-leaning one does
+    not; and a blowout crew edge survives either way.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.source = Show.objects.create(
+            tmdb_id=1, name="Source", number_of_episodes=10
+        )
+        cls.cand = Show.objects.create(tmdb_id=2, name="Cand", number_of_episodes=10)
+        cls.lead = Person.objects.create(tmdb_id=1, name="Lead Actor")
+        cls.maker = Person.objects.create(tmdb_id=2, name="The Maker")
+
+    def _profile(self, cast, crew):
+        return PreferenceProfile({}, {}, {}, {}, 4, {"cast": cast, "crew": crew})
+
+    def _connections(self, lead_episodes, maker_episodes):
+        for show in (self.source, self.cand):
+            CastMember.objects.create(
+                show=show, person=self.lead, order=0,
+                character="Hero", episode_count=lead_episodes,
+            )
+            CrewMember.objects.create(
+                show=show, person=self.maker, job="Creator",
+                episode_count=maker_episodes,
+            )
+        return shared_connections(
+            self.source, role_index(self.source),
+            self.cand, role_index(self.cand),
+        )
+
+    def test_no_profile_keeps_the_score_order(self):
+        conns = self._connections(lead_episodes=6, maker_episodes=10)
+        named, others = name_connections(conns)
+        self.assertEqual([c.name for c in named], ["The Maker", "Lead Actor"])
+        self.assertEqual(others, 0)
+
+    def test_a_flat_profile_keeps_the_score_order(self):
+        conns = self._connections(lead_episodes=6, maker_episodes=10)
+        named, _ = name_connections(conns, profile=build_profile(AnonymousUser()))
+        self.assertEqual([c.name for c in named], ["The Maker", "Lead Actor"])
+
+    def test_a_cast_leaning_reader_hears_the_actor_first(self):
+        # 0.6 * 1.5 = 0.90 beats 1.0 * 0.5 = 0.50.
+        conns = self._connections(lead_episodes=6, maker_episodes=10)
+        named, _ = name_connections(conns, profile=self._profile(2.0, 0.5))
+        self.assertEqual([c.name for c in named], ["Lead Actor", "The Maker"])
+
+    def test_a_crew_leaning_reader_keeps_the_creator_first(self):
+        conns = self._connections(lead_episodes=6, maker_episodes=10)
+        named, _ = name_connections(conns, profile=self._profile(0.5, 2.0))
+        self.assertEqual([c.name for c in named], ["The Maker", "Lead Actor"])
+
+    def test_a_dominant_edge_resists_the_lean(self):
+        # 0.2 * 1.5 = 0.30 still loses to 1.0 * 0.5 = 0.50. A tilt reorders the
+        # near-ties, it does not overturn what Layer 1 actually measured.
+        conns = self._connections(lead_episodes=2, maker_episodes=10)
+        named, _ = name_connections(conns, profile=self._profile(2.0, 0.5))
+        self.assertEqual([c.name for c in named], ["The Maker", "Lead Actor"])
+
+    def test_the_lean_can_drop_a_credit_out_of_the_named_few(self):
+        conns = self._connections(lead_episodes=6, maker_episodes=10)
+        named, others = name_connections(
+            conns, max_named=1, profile=self._profile(2.0, 0.5)
+        )
+        self.assertEqual([c.name for c in named], ["Lead Actor"])
+        self.assertEqual(others, 1)
+
+    def test_the_lean_never_changes_how_many_people_are_counted(self):
+        conns = self._connections(lead_episodes=6, maker_episodes=10)
+        plain = name_connections(conns)
+        tilted = name_connections(conns, profile=self._profile(2.0, 0.5))
+        self.assertEqual({c.name for c in plain[0]}, {c.name for c in tilted[0]})
+        self.assertEqual(plain[1], tilted[1])
+
+    def test_marquee_and_plain_crew_are_one_type(self):
+        self.assertEqual(connection_type("cast"), "cast")
+        self.assertEqual(connection_type("marquee"), "crew")
+        self.assertEqual(connection_type("crew"), "crew")
+
+
+class RoleIndexesBulkTests(TestCase):
+    """role_indexes is role_index for a set, in a fixed number of queries.
+
+    The detail page indexes every candidate it renders and Layer 2 indexes every
+    show in a user's rated set, so the per-show form was two queries times N.
+    Verified against the live 464-show catalog on 2026-08-26: identical
+    RoleInfo for all 280,229 person-show entries.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.a = Show.objects.create(tmdb_id=1, name="A", number_of_episodes=10)
+        cls.b = Show.objects.create(tmdb_id=2, name="B", number_of_episodes=10)
+        cls.empty = Show.objects.create(tmdb_id=3, name="Empty", number_of_episodes=10)
+        lead = Person.objects.create(tmdb_id=1, name="Lead")
+        maker = Person.objects.create(tmdb_id=2, name="Maker")
+        caster = Person.objects.create(tmdb_id=3, name="Caster")
+        CastMember.objects.create(show=cls.a, person=lead, order=0,
+                                  character="Hero", episode_count=10)
+        CrewMember.objects.create(show=cls.b, person=maker, job="Creator",
+                                  episode_count=10)
+        # Service jobs stay excluded through the bulk path too (ADR-01).
+        CrewMember.objects.create(show=cls.b, person=caster, job="Casting",
+                                  episode_count=10)
+
+    def test_bulk_matches_the_one_show_form(self):
+        shows = [self.a, self.b, self.empty]
+        bulk = role_indexes(shows)
+        self.assertEqual(bulk, {s.id: role_index(s) for s in shows})
+
+    def test_a_show_with_nobody_still_gets_an_entry(self):
+        self.assertEqual(role_indexes([self.empty])[self.empty.id], {})
+
+    def test_service_jobs_stay_excluded(self):
+        names = {info.name for info in role_indexes([self.b])[self.b.id].values()}
+        self.assertEqual(names, {"Maker"})
+
+    def test_the_whole_set_costs_a_fixed_number_of_queries(self):
+        with self.assertNumQueries(2):
+            role_indexes([self.a, self.b, self.empty])
+
+
+class CalloutOrderingTests(TestCase):
+    """Which block opens the sentence is the reader's, not the catalog's.
+
+    Issue #7, amending issue #2's fixed "pitch by cast" order on 2026-08-26. A
+    reader whose ratings say their shows hang together on crew hears the crew
+    first; every reader without an earned lean gets the same cast-first
+    sentence as before, by the same path rather than a repaired one.
+    """
+
+    def setUp(self):
+        self.source = Show.objects.create(
+            tmdb_id=1, name="Source", number_of_episodes=10
+        )
+        self.cand = Show.objects.create(
+            tmdb_id=2, name="Cand", number_of_episodes=10
+        )
+        lead = Person.objects.create(tmdb_id=1, name="Lead Actor")
+        maker = Person.objects.create(tmdb_id=2, name="The Maker")
+        for show in (self.source, self.cand):
+            CastMember.objects.create(show=show, person=lead, order=0,
+                                      character="Hero", episode_count=10)
+            CrewMember.objects.create(show=show, person=maker, job="Creator",
+                                      episode_count=10)
+
+    def _profile(self, cast, crew):
+        return PreferenceProfile({}, {}, {}, {}, 4, {"cast": cast, "crew": crew})
+
+    def _text(self, profile=None):
+        conns = shared_connections(
+            self.source, role_index(self.source),
+            self.cand, role_index(self.cand),
+        )
+        named, others = name_connections(conns, profile=profile)
+        callout = compose_callout(
+            self.source, self.cand, conns, named, others, profile=profile
+        )
+        return "".join(seg["v"] for seg in callout["segments"])
+
+    def test_no_profile_opens_on_cast(self):
+        self.assertTrue(self._text().startswith("Lead Actor plays Hero"))
+
+    def test_an_unearned_lean_takes_the_identical_default_path(self):
+        # Cold start, insufficient signal and anonymous all arrive as a 0.0
+        # lean, so this is the same sentence, not an approximation of it.
+        default = self._text()
+        for profile in (
+            build_profile(AnonymousUser()),
+            self._profile(1.0, 1.0),
+            PreferenceProfile({}, {}, {}, {}, 7, {}),
+        ):
+            self.assertEqual(self._profile(0, 0).connection_type_lean, 0.0)
+            self.assertEqual(self._text(profile=profile), default)
+
+    def test_a_cast_leaning_reader_opens_on_cast(self):
+        self.assertTrue(
+            self._text(profile=self._profile(2.0, 0.5)).startswith("Lead Actor")
+        )
+
+    def test_a_crew_leaning_reader_opens_on_crew(self):
+        text = self._text(profile=self._profile(0.5, 2.0))
+        self.assertTrue(text.startswith("Creator The Maker created both"), text)
+        self.assertIn("Lead Actor plays Hero", text)
+
+    def test_opening_on_crew_still_capitalizes_the_sentence(self):
+        # The crew clause opens on a lowercase role noun; the cast clause opens
+        # on a name and needs no help.
+        self.assertTrue(self._text(profile=self._profile(0.5, 2.0))[0].isupper())
+
+    def test_the_lean_reorders_and_never_drops_anyone(self):
+        cast_first = self._text(profile=self._profile(2.0, 0.5))
+        crew_first = self._text(profile=self._profile(0.5, 2.0))
+        self.assertNotEqual(cast_first, crew_first)
+        for name in ("Lead Actor", "The Maker"):
+            self.assertIn(name, cast_first)
+            self.assertIn(name, crew_first)
+
+    def test_the_tail_count_is_untouched_by_the_lean(self):
+        for i in range(4):
+            extra = Person.objects.create(tmdb_id=50 + i, name=f"Extra {i}")
+            for show in (self.source, self.cand):
+                CastMember.objects.create(show=show, person=extra, order=600,
+                                          character="Waiter", episode_count=1)
+        self.assertIn("with 4 others", self._text())
+        self.assertIn("with 4 others", self._text(profile=self._profile(0.5, 2.0)))
+
+
+class CrewRoleCollapseTests(TestCase):
+    """One role noun per clause, however many people held the role (issue #4).
+
+    Four shared directors used to read "director W directed one episode,
+    director X directed one episode, director Y..." Only the strongest holder
+    of a role keeps the full clause now; the rest collapse behind it, exactly
+    as the cast side has always done with "and Leslie Hope appears too".
+    """
+
+    def setUp(self):
+        self.source = Show.objects.create(
+            tmdb_id=1, name="Source", number_of_episodes=20
+        )
+        self.cand = Show.objects.create(
+            tmdb_id=2, name="Cand", number_of_episodes=20
+        )
+        self._pid = 0
+
+    def _shared_crew(self, name, job, src_eps, cand_eps=None):
+        self._pid += 1
+        person = Person.objects.create(tmdb_id=self._pid, name=name)
+        CrewMember.objects.create(show=self.source, person=person, job=job,
+                                  episode_count=src_eps)
+        CrewMember.objects.create(show=self.cand, person=person, job=job,
+                                  episode_count=cand_eps or src_eps)
+
+    def _text(self):
+        conns = shared_connections(
+            self.source, role_index(self.source),
+            self.cand, role_index(self.cand),
+        )
+        named, others = name_connections(conns)
+        callout = compose_callout(self.source, self.cand, conns, named, others)
+        return "".join(seg["v"] for seg in callout["segments"])
+
+    def test_two_directors_say_director_once(self):
+        self._shared_crew("Ana Reyes", "Director", 12)
+        self._shared_crew("Ben Cole", "Director", 4)
+        text = self._text()
+        self.assertEqual(text.lower().count("director"), 1, text)
+        self.assertIn("Ana Reyes directed 12 episodes", text)
+        self.assertIn("Ben Cole directed too", text)
+
+    def test_the_strongest_holder_keeps_the_full_clause(self):
+        self._shared_crew("Ben Cole", "Director", 4)
+        self._shared_crew("Ana Reyes", "Director", 12)
+        text = self._text()
+        self.assertIn("Director Ana Reyes directed 12 episodes", text)
+        self.assertLess(text.index("Ana Reyes"), text.index("Ben Cole"))
+
+    def test_four_directors_collapse_into_one_clause(self):
+        for name, eps in (
+            ("Ana Reyes", 12), ("Ben Cole", 8), ("Cara Diaz", 4), ("Dev Okafor", 2)
+        ):
+            self._shared_crew(name, "Director", eps)
+        text = self._text()
+        self.assertEqual(text.lower().count("director"), 1, text)
+        self.assertIn("Ben Cole, Cara Diaz and Dev Okafor directed too", text)
+
+    def test_different_roles_keep_their_own_clauses(self):
+        self._shared_crew("Ana Reyes", "Creator", 20)
+        self._shared_crew("Ben Cole", "Director", 12)
+        text = self._text()
+        self.assertIn("Creator Ana Reyes created both", text)
+        self.assertIn("director Ben Cole directed 12 episodes", text)
+
+    def test_roles_that_read_alike_collapse_together(self):
+        # "Original Music Composer" and "Composer" are two TMDb jobs that both
+        # read "composer", so grouping is by the prose noun rather than the raw
+        # job. Otherwise the sentence says "composer" twice for one role.
+        self._shared_crew("Ana Reyes", "Original Music Composer", 20)
+        self._shared_crew("Ben Cole", "Composer", 20)
+        text = self._text()
+        self.assertEqual(text.lower().count("composer"), 1, text)
+        self.assertIn("Ben Cole scored too", text)
+
+    def test_a_lone_role_holder_reads_exactly_as_before(self):
+        self._shared_crew("Ben Cole", "Director", 12)
+        self.assertIn("Director Ben Cole directed 12 episodes", self._text())
+
+    def test_an_unlisted_job_still_collapses(self):
+        # A job outside ROLE_PROSE takes the generic phrasing on both halves,
+        # so the callout never breaks on a job nobody anticipated.
+        self._shared_crew("Ana Reyes", "Animal Wrangler", 20)
+        self._shared_crew("Ben Cole", "Animal Wrangler", 10)
+        text = self._text()
+        self.assertIn("Animal wrangler Ana Reyes worked on both", text)
+        self.assertIn("Ben Cole worked on it too", text)
