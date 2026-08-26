@@ -3895,8 +3895,14 @@ class CrewRoleCollapseTests(TestCase):
     def test_an_unlisted_job_still_collapses(self):
         # A job outside ROLE_PROSE takes the generic phrasing on both halves,
         # so the callout never breaks on a job nobody anticipated.
-        self._shared_crew("Ana Reyes", "Animal Wrangler", 20)
-        self._shared_crew("Ben Cole", "Animal Wrangler", 10)
+        #
+        # The job here must be absent from SERVICE_JOBS as well as ROLE_PROSE.
+        # This test originally used "Animal Wrangler", which ADR-01's 2026-08-26
+        # amendment later excluded as an on-set vendor, so the crew member left
+        # the graph entirely and the callout came back empty. "Storyboard Artist"
+        # carries 760 real credits and sits on neither list.
+        self._shared_crew("Ana Reyes", "Storyboard Artist", 20)
+        self._shared_crew("Ben Cole", "Storyboard Artist", 10)
         text = self._text()
-        self.assertIn("Animal wrangler Ana Reyes worked on both", text)
+        self.assertIn("Storyboard artist Ana Reyes worked on both", text)
         self.assertIn("Ben Cole worked on it too", text)
