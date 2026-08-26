@@ -96,3 +96,40 @@ them. That is a real piece of work, deliberately not attempted here.
 
 Provenance: issue #1 (Recommender scale hardening), problem 2, the caching follow-up named in
 [ADR-06](06-sql-variable-ceiling.md).
+## Note, 2026-08-26: the review above is a measurement, not an invariant
+**status: draft**
+
+The After Action Review records "Better Call Saul 14.79, The Blacklist 1.09, CSI 0.19 in eighth"
+as Breaking Bad's preview, along with 1041 edges across 96 sources. Those numbers were true of
+the 100-show catalog they were measured on. They are left as written, because an After Action
+Review is a record of what was found at the time and rewriting it would destroy that.
+
+They are no longer true, and one of them stopped being true long before anyone noticed. **CSI:
+Crime Scene Investigation left Breaking Bad's top 12 entirely as the catalog grew past 100
+shows.** It is still in the catalog. Nothing failed, because a claim in prose cannot fail, and
+the sentence sat here being wrong for months.
+
+On the 464-show catalog, after the rescoring in
+[ADR-04](04-episode-weighted-people-recommender.md) and the widened `SERVICE_JOBS` in
+[ADR-01](01-exclude-casting-roles.md), the store holds **4,013 edges across 409 sources**, and
+Breaking Bad reads:
+
+| # | show | score |
+|---|---|---|
+| 1 | Better Call Saul | 9.7473 |
+| 2 | The Blacklist | 1.0204 |
+| 3 | Malcolm in the Middle | 1.0133 |
+| 4 | Westworld | 0.3775 |
+| 5 | The Mandalorian | 0.3641 |
+| 6 | The Boys | 0.3584 |
+| 7 | House of the Dragon | 0.3552 |
+| 8 | Fargo | 0.3418 |
+
+**The real fix is that these facts now live somewhere that can fail.** `python manage.py
+check_ground_truth` asserts them against the live store and exits non-zero when they break. Run
+it after every rebuild. It is a management command rather than a unit test on purpose: the test
+database is empty, and recreating Breaking Bad's 75 shared people as a fixture would freeze a
+copy of the data rather than the data, which is exactly the failure this note is about.
+
+Numbers quoted in this file, or in `docs/artifacts/design-kit/03-sample-data.md`, should be
+treated as dated measurements. The command is the live record.
