@@ -8,10 +8,11 @@ The second edge is crew, which is denser than cast and catches franchise
 structure that cast cannot. It needs one correction: not every job on a
 production says something about the show. See SERVICE_JOBS below.
 
-The merged edge weights every shared person by episode share, so a lead who
-carried a whole run outranks a crowd of one-episode guests. See
-similar_by_people and docs/adr/04-episode-weighted-people-recommender.md
-for the four decisions behind it.
+The merged edge weights every shared person by episode share raised to
+INVOLVEMENT_EXPONENT, so a lead who carried a whole run outranks a crowd of
+one-episode guests instead of being buried by it. See similar_by_people and
+docs/adr/04-episode-weighted-people-recommender.md for the decisions behind
+it, and INVOLVEMENT_EXPONENT below for why the weight is not linear.
 
 Later layers stack genre and learned weights on top of these edges. Layer 2
 re-ranks this list per user rather than scoring shows a second time; see
@@ -24,6 +25,27 @@ from itertools import batched
 from django.db.models import Count, Q
 
 from .models import CastMember, CrewMember, Show, SimilarShow
+
+# How much of a show a person actually is, before their share is summed. Each
+# shared person contributes min(share_A, share_B) ** this, so involvement is
+# worth more than headcount: carrying a whole run should outweigh appearing
+# once, and 300 one-episode guests should not outrank a co-lead. Above 1 and
+# continuous, so it reweights rather than cutting: ADR-04's rejected
+# alternatives ruled out a hard cutoff, which "creates a cliff, throws away
+# thin shows, and hurts short-form content", and a curve does none of that.
+# Same shape and same argument as SIDE_QUEST_CENTRALITY_EXPONENT in
+# personalization.py.
+#
+# 1.375 is measured, not chosen by taste (ADR-04, amended 2026-08-26). The
+# defect it fixes: 217,622 of 278,632 cast rows carry episode_count = 1, so
+# under a linear sum 300 guests at 0.01 each beat a full-run co-lead at 1.0.
+# The acceptance case is 300 guests at one episode of a hundred against one
+# co-lead: break-even is 1.24, so 1.25 clears it by 1.05x and 1.375 by 1.87x.
+# Going higher is worse, not safer. Past about 1.4 the score collapses toward
+# whoever has the single strongest tie and the mid-strength tail stops
+# carrying register: at 1.5 Silent Witness recommends Loki, The Pitt loses ER,
+# and Pokemon loses Pokemon Horizons. 1.375 is the top of that plateau.
+INVOLVEMENT_EXPONENT = 1.375
 
 # Jobs that connect two productions without connecting the two shows.
 #
@@ -56,6 +78,121 @@ SERVICE_JOBS = [
     "Extras Casting Assistant",
     "Extras Casting Coordinator",
     "Location Casting",
+
+    # Widened 2026-08-26 for the involvement exponent (ADR-01 amended, ADR-04
+    # amended). The exponent below makes a single full-run credit decisive, and
+    # that surfaced a class of credit ADR-01's argument already covered but its
+    # list did not reach: a facility or a vendor contracted per production. On
+    # the 464-show catalog, 121 of the 525 show pairs sharing someone at
+    # episode-share >= 0.9 were one of these, and under a linear score they were
+    # invisible because one person's 1.0 drowned in the crowd. Costs 1,985 crew
+    # credits (3.5%), 1,820 person-show links (0.6%), and no show's coverage.
+    #
+    # Sound post: a sound house books across a studio slate the way a casting
+    # office does. One sound director tied The Apothecary Diaries to Frieren,
+    # SPY x FAMILY and Isekai Office Worker; a re-recording mixer tied The
+    # Mentalist to Lanterns and The Pitt.
+    "Sound",
+    "Sound mixer",
+    "Sound Mixer",
+    "Sound Re-Recording Mixer",
+    "Additional Sound Re-Recording Mixer",
+    "Sound Re-Recording Assistant",
+    "Additional Sound Re-Recordist",
+    "Production Sound Mixer",
+    "Sound Recordist",
+    "Sound Director",
+    "Sound Supervisor",
+    "Supervising Sound Editor",
+    "Sound Editor",
+    "Assistant Sound Editor",
+    "First Assistant Sound Editor",
+    "Sound Effects",
+    "Sound Effects Editor",
+    "Sound Effects Designer",
+    "Special Sound Effects",
+    "Supervising Sound Effects Editor",
+    "Sound Designer",
+    "Sound Engineer",
+    "Sound Assistant",
+    "Sound Mix Technician",
+    "Utility Sound",
+    "Second Assistant Sound",
+    "Boom Operator",
+    "Dialogue Editor",
+    "Supervising Dialogue Editor",
+    "Foley",
+    "Foley Artist",
+    "Foley Editor",
+    "Foley Mixer",
+    "Foley Recordist",
+    "Foley Supervisor",
+    "Scoring Mixer",
+    "ADR Supervisor",
+    "ADR Editor",
+    "Supervising ADR Editor",
+    "ADR Mixer",
+    "ADR Recordist",
+    "ADR Recording Engineer",
+    "ADR Coordinator",
+    "ADR & Dubbing",
+    "Additional Soundtrack",
+
+    # Music SERVICE, never composition. A music supervisor licenses tracks
+    # across a slate; a music house produces for whoever books it. Composing is
+    # deliberately absent: a score is authorial, MARQUEE_JOBS already treats it
+    # as show-defining, and its full-run pairs are mostly right (Berlin and its
+    # spinoff, Breaking Bad and Better Call Saul). One music supervisor is why
+    # Silo ranked second on Breaking Bad ahead of Bryan Cranston's own show.
+    "Music Supervisor",
+    "Assistant Music Supervisor",
+    "Music Producer",
+    "Executive Music Producer",
+    "Music Score Producer",
+    "Music Coordinator",
+    "Music Editor",
+    "Supervising Music Editor",
+    "Music Consultant",
+
+    # Picture finishing: the post house that finishes the picture, booked per
+    # production. A colorist working the full run of both put Marvel's
+    # Daredevil first on Elementary.
+    "Colorist",
+    "Additional Colorist",
+    "Senior Colorist",
+    "Online Editor",
+    "Digital Intermediate Editor",
+    "Digital Intermediate Producer",
+    "Post Production Supervisor",
+    "Post Production Coordinator",
+    "Post Production Assistant",
+    "Post-Production Manager",
+    "Post Production Consulting",
+    "Post Producer",
+    "Post Production Producer",
+    "Finishing Producer",
+    "Executive In Charge Of Post Production",
+
+    # Vendors and on-set services hired by the production, not part of the
+    # show. A marine coordinator credited on all 110 episodes of Miami Vice and
+    # a writer credited on all 740 of Real Time with Bill Maher made Bill Maher
+    # Miami Vice's top recommendation.
+    "Driver",
+    "Production Driver",
+    "Specialized Driver",
+    "Transportation Captain",
+    "Transportation Co-Captain",
+    "Transportation Coordinator",
+    "Picture Car Coordinator",
+    "Marine Coordinator",
+    "Animal Wrangler",
+    "Craft Service",
+    "Catering",
+    "Catering Head Chef",
+    "Set Medic",
+    "Medical Consultant",
+    "Security",
+    "Security Coordinator",
 ]
 
 # Above-the-line crew worth naming next to the cast in a recommendation's
@@ -131,14 +268,19 @@ def similar_by_people(show, limit=12):
         score(A, B) = sum over shared people of
             min(episode_count on A / A.number_of_episodes,
                 episode_count on B / B.number_of_episodes)
+            ** INVOLVEMENT_EXPONENT
 
     Relative counts make cast and crew the same unit, episode share, so the
     two edges merge without a cast-versus-crew exchange rate. `min` means the
     edge takes the weaker end: a Breaking Bad lead who did three episodes of
     Better Call Saul does not create a strong edge. No floor: every shared
-    person contributes their share, however small. Service jobs stay excluded
-    on both sides because a casting office links productions, not shows, and
-    sixty episodes of casting credit does not change that.
+    person contributes their share, however small. The exponent is what stops
+    "however small" from adding up to more than a co-lead; it shrinks a thin
+    share without ever zeroing it, so nothing is thrown away (ADR-04, amended
+    2026-08-26). Service jobs stay excluded on both sides because a casting
+    office links productions, not shows, and sixty episodes of casting credit
+    does not change that. That list was widened the same day to the facility
+    and vendor credits that argument also covers; see SERVICE_JOBS.
 
     A person can hold several roles on one show, across cast and crew. They
     count once per show pair, at their best episode_count on each show. A null
@@ -164,11 +306,15 @@ def similar_by_people(show, limit=12):
     and revised the same day (2026-08-07), the order falls down a ladder, and
     only the order, the candidate set never changes:
 
-        1. weighted   sum of min(source share, candidate share)
+        1. weighted   sum of min(source share, candidate share), each raised
+                      to INVOLVEMENT_EXPONENT
         2. estimated  the source side is unknowable, so rank by the half we
-                      can see: the sum of candidate-side shares. A candidate
-                      whose shared person carried their whole show outranks
-                      one where they were a one-episode guest.
+                      can see: the sum of candidate-side shares, under the
+                      same exponent. A candidate whose shared person carried
+                      their whole show outranks one where they were a
+                      one-episode guest, and that is precisely the exponent's
+                      claim, so both rungs have to mean the same thing by
+                      "involvement" or they disagree about what they rank.
         3. rating     nothing measurable on any edge, so rank by TMDb rating,
                       vote_average then vote_count so a 10.0 on three votes
                       cannot beat an 8.9 on ten thousand. Rating is a quality
@@ -239,8 +385,11 @@ def similar_by_people(show, limit=12):
         for person_id, other_count in best_by_show[other.pk].items():
             own_ratio = min(own_best[person_id] / own_episodes, 1.0) if own_episodes else 0.0
             other_ratio = min(other_count / other_episodes, 1.0) if other_episodes else 0.0
-            score += min(own_ratio, other_ratio)
-            estimate += other_ratio
+            # Zero-guarded because 0.0 ** x is fine but the branch keeps a
+            # null-count credit at exactly 0.0 rather than trusting float pow.
+            pair = min(own_ratio, other_ratio)
+            score += pair ** INVOLVEMENT_EXPONENT if pair else 0.0
+            estimate += other_ratio ** INVOLVEMENT_EXPONENT if other_ratio else 0.0
         other.score = score
         other.estimate = estimate
         other.shared_people = len(best_by_show[other.pk])
@@ -404,8 +553,12 @@ def role_indexes(shows):
 def shared_connections(source, source_index, candidate, candidate_index):
     """The people who tie `candidate` back to `source`, richest edge first.
 
-    contribution is the same min(source share, candidate share) that built the
-    score, so the order here is the order that earned the ranking. Role and
+    contribution is the same exponent-weighted min(source share, candidate
+    share) that built the score, so the order here is the order that earned
+    the ranking. The exponent is monotonic, so applying it cannot reorder this
+    list and no ordering test can catch its absence; it is applied anyway so
+    that a contribution stays a real share of the score. Anything that later
+    divides one by the total would otherwise be quietly wrong. Role and
     kind come from the source side: this is the source show's page, so a person
     is named by what they did on the show you are looking at. Every shared
     person is on the source by construction, so a source-side role always
@@ -429,7 +582,7 @@ def shared_connections(source, source_index, candidate, candidate_index):
                 name=info.name,
                 role=info.role,
                 kind=info.kind,
-                contribution=min(src_share, cand_share),
+                contribution=min(src_share, cand_share) ** INVOLVEMENT_EXPONENT,
                 cast_order=info.cast_order,
                 marquee_rank=info.marquee_rank,
                 src_count=info.best_count,
