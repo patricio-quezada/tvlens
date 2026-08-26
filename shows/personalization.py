@@ -30,11 +30,18 @@ watching, and neither row exists at all for a user who has rated nothing.
 """
 
 import math
+from itertools import batched
 
 from django.db.models import Avg, Count
 
 from .models import Genre, Rating, Show, ShowTag, SimilarShow
-from .recommenders import SQLITE_MAX_VARS_SAFE, RankedShows
+from .recommenders import (
+    SQLITE_MAX_VARS_SAFE,
+    RankedShows,
+    connection_type,
+    role_indexes,
+    shared_connections,
+)
 
 # A rating at NEUTRAL_SCORE says nothing about taste; above it is a positive
 # signal, below it a negative one. 3.0 is the conventional middle of a 5-star
@@ -67,6 +74,47 @@ RANK_STEP = 1.0
 # affinity is worth one rank of Layer 1 gravity. Raise it to personalize harder,
 # lower it to keep closer to Layer 1.
 PREFERENCE_WEIGHT = 1.0
+
+# ── The connection-type dimension (issue #7) ──────────────────────────────────
+#
+# See docs/adr/15-connection-type-preference.md for why this exists and what it
+# is forbidden to do: it orders the people a callout names, it never ranks a
+# show, and it never reads another user's ratings.
+#
+# The three gates below decide whether a user's ratings have earned an opinion
+# about cast versus crew connections at all. They exist because the honest
+# answer for most users, and for every user of this database today, is "not
+# yet": a preference asserted from four ratings is noise wearing a number.
+# When any gate fails the lean is 0.0 and the callout keeps its pre-#7 order.
+
+# Directed Layer 1 edges required inside the user's own rated set. Fewer than
+# this and one show pair is the whole opinion. Measured on the catalog: a user
+# with ten ratings scattered at random has zero such edges, while the one real
+# ten-rating user, whose ratings cluster by taste, has twelve. So the gate is
+# not "rate more shows", it is "rate shows that are actually connected", which
+# is the only situation where a connection-type preference means anything.
+MIN_CONNECTION_TYPE_EDGES = 4
+
+# Episode-share mass required on EACH side before the two are compared. One
+# person on the whole run of both shows contributes 1.0, so this asks for about
+# one whole-run collaborator's worth of evidence per type. A user whose edges
+# are entirely cast has no crew number to compare against, and inventing one
+# from a single guest director is how a recommender starts making things up.
+MIN_CONNECTION_TYPE_MASS = 1.0
+
+# How far apart the two affinities must be, in stars, before we act on the
+# difference. Half a star is the smallest gap that can be said out loud without
+# embarrassment: "the shows you rate highly are held together by shared actors
+# rather than shared crew". Below it, the two types earned the same ratings and
+# the reader has no preference to honour.
+MIN_CONNECTION_TYPE_LEAN = 0.5
+
+# Ceiling on how many of the user's own edges are read for this. The affinities
+# are weighted means, which settle long before the tail of a large rated set is
+# reached, and the strongest edges are both the most informative and the ones
+# the reader actually saw. Bounds the work at a user who has rated most of the
+# catalog: on this catalog, all 464 shows rated is 4,014 inner edges.
+CONNECTION_TYPE_MAX_EDGES = 60
 
 
 def genre_quality():
@@ -106,6 +154,14 @@ class PreferenceProfile:
     just the user's own signal, so the "why" can say "because you rate Crime
     highly" without the prior muddying it (issue #7). rating_count == 0 is the
     cold-start case: the effective affinities are the prior alone.
+
+    connection_type_weights is the third, separate dimension (issue #7): the
+    average rating signal that cast connections and crew connections have each
+    earned from this user, {} when their ratings have not earned an opinion.
+    connection_type_lean is the signed difference, cast-positive, and 0.0
+    whenever the weights are unearned. It does NOT rank shows and is never
+    added to score_for: it orders the people named in a callout, nothing else.
+    See docs/adr/15-connection-type-preference.md.
     """
 
     def __init__(
@@ -115,16 +171,40 @@ class PreferenceProfile:
         learned_genre_weights,
         learned_tag_weights,
         rating_count,
+        connection_type_weights=None,
     ):
         self.genre_weights = genre_weights
         self.tag_weights = tag_weights
         self.learned_genre_weights = learned_genre_weights
         self.learned_tag_weights = learned_tag_weights
         self.rating_count = rating_count
+        self.connection_type_weights = connection_type_weights or {}
 
     @property
     def is_cold_start(self):
         return self.rating_count == 0
+
+    @property
+    def connection_type_lean(self):
+        """How far this reader leans toward cast connections, in stars, signed.
+
+        Positive means the shows they rate highly are held together by shared
+        actors; negative means by shared crew. 0.0 means the question has not
+        been answered, which is the honest default and the one every gate in
+        _connection_type_weights falls back to.
+        """
+        weights = self.connection_type_weights
+        if not weights:
+            return 0.0
+        return weights.get("cast", 0.0) - weights.get("crew", 0.0)
+
+    @property
+    def leans_toward(self):
+        """"cast", "crew", or None: the readable form of connection_type_lean."""
+        lean = self.connection_type_lean
+        if not lean:
+            return None
+        return "cast" if lean > 0 else "crew"
 
     def score_for(self, show, show_tags=None):
         """How well one candidate's genres and tags line up with these affinities.
@@ -165,6 +245,86 @@ def _mean(sums, counts):
     return {key: sums[key] / counts[key] for key in sums}
 
 
+def _connection_type_weights(signal_by_show):
+    """What cast connections and crew connections have each earned from a user.
+
+    Patricio's shaping, 2026-08-26: "if I rate 10 shows and some of them that I
+    have watched are top recommendations of others, if the connection is more
+    cast overlap heavy instead of crew overlap heavy then maybe I prefer one
+    over the other." So the evidence is the Layer 1 edges that fall INSIDE the
+    user's own rated set, not the whole graph: an edge whose two ends the user
+    has both judged is the only place we can see a connection and a verdict on
+    it at the same time.
+
+    For each such edge, shared_connections gives the same episode-share
+    contributions that ranked the show, split into cast and crew by
+    connection_type. The edge carries the mean of its two ends' signals. Each
+    type's affinity is then the contribution-weighted mean of those signals,
+    the same shape ShowTag relevance already uses above: "the average rating
+    signal a cast connection earned from you". Two shows tied by one whole-run
+    shared lead weigh more than two tied by a guest, and a user who rates
+    everything the same gets two equal affinities and therefore no lean, which
+    is correct rather than a shortcoming.
+
+    Returns {"cast": affinity, "crew": affinity}, or {} when the gates above are
+    not met. Layer 1 is only READ here; nothing is scored a second time (ADR-08).
+    See docs/adr/15-connection-type-preference.md.
+    """
+    show_ids = list(signal_by_show)
+    if len(show_ids) < 2:
+        return {}
+
+    # Edges out of the rated shows, narrowed to those landing back inside the
+    # set in Python: one bound list rather than two, which keeps the query
+    # under the SQLite variable ceiling for a user who has rated the catalog
+    # (ADR-06). At twelve stored edges per source the rows are cheap.
+    rated = set(show_ids)
+    edges = [
+        edge
+        for batch in batched(show_ids, SQLITE_MAX_VARS_SAFE)
+        for edge in SimilarShow.objects.filter(source_id__in=batch).values_list(
+            "source_id", "target_id", "score"
+        )
+        if edge[1] in rated
+    ]
+    if len(edges) < MIN_CONNECTION_TYPE_EDGES:
+        return {}
+
+    # Strongest first, then capped: the weighted mean has long settled, and the
+    # strongest edges are the connections the reader actually saw named.
+    edges.sort(key=lambda e: -e[2])
+    edges = edges[:CONNECTION_TYPE_MAX_EDGES]
+
+    touched = {sid for sid, _, _ in edges} | {tid for _, tid, _ in edges}
+    shows = {s.id: s for s in Show.objects.filter(id__in=touched)}
+    indexes = role_indexes(shows.values())
+
+    signal_mass = {"cast": 0.0, "crew": 0.0}
+    mass = {"cast": 0.0, "crew": 0.0}
+    for source_id, target_id, _ in edges:
+        signal = (signal_by_show[source_id] + signal_by_show[target_id]) / 2
+        for connection in shared_connections(
+            shows[source_id], indexes[source_id],
+            shows[target_id], indexes[target_id],
+        ):
+            group = connection_type(connection.kind)
+            mass[group] += connection.contribution
+            signal_mass[group] += signal * connection.contribution
+
+    # Both types need real evidence: with only one of them measured there is no
+    # comparison to make, only a number to over-read.
+    if min(mass.values()) < MIN_CONNECTION_TYPE_MASS:
+        return {}
+
+    weights = {
+        group: signal_mass[group] / mass[group] for group in mass
+    }
+    if abs(weights["cast"] - weights["crew"]) < MIN_CONNECTION_TYPE_LEAN:
+        return {}
+    return weights
+
+
+
 def build_profile(user):
     """Assemble a user's PreferenceProfile: the light quality prior, then learned.
 
@@ -181,6 +341,7 @@ def build_profile(user):
     tag_weights = {}
     learned_genre = {}
     learned_tag = {}
+    connection_type_weights = {}
     rating_count = 0
 
     if user is not None and user.is_authenticated:
@@ -227,13 +388,26 @@ def build_profile(user):
                 tid: t_sum[tid] / t_relsum[tid] for tid in t_sum if t_relsum[tid]
             }
 
+            # The connection-type dimension reads only RATED shows: a watched
+            # show carries no verdict, and WATCHED_SIGNAL is a constant, so
+            # including views would pull both affinities toward the same number
+            # and wash out the only difference this dimension exists to see.
+            connection_type_weights = _connection_type_weights(
+                {sid: signal_by_show[sid] for sid in rated}
+            )
+
     for gid, w in learned_genre.items():
         genre_weights[gid] = genre_weights.get(gid, 0.0) + w
     for tid, w in learned_tag.items():
         tag_weights[tid] = tag_weights.get(tid, 0.0) + w
 
     return PreferenceProfile(
-        genre_weights, tag_weights, learned_genre, learned_tag, rating_count
+        genre_weights,
+        tag_weights,
+        learned_genre,
+        learned_tag,
+        rating_count,
+        connection_type_weights,
     )
 
 

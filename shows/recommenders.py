@@ -19,6 +19,7 @@ docs/adr/08-layer2-personalized-reranking.md.
 """
 
 from collections import namedtuple
+from itertools import batched
 
 from django.db.models import Count, Q
 
@@ -298,6 +299,14 @@ def stored_similar(show):
 def role_index(show):
     """Map every person on `show` to how we score and how we name them.
 
+    The one-show form of role_indexes; see it for what the mapping means.
+    """
+    return role_indexes([show])[show.id]
+
+
+def role_indexes(shows):
+    """role_index for several shows at once, in a fixed number of queries.
+
     The scoring half mirrors similar_by_people exactly: best episode_count per
     person, cast and crew merged, service jobs excluded on the crew side. The
     naming half resolves one display role per person: a marquee crew job if
@@ -305,75 +314,91 @@ def role_index(show):
     character, otherwise a plain crew job. cast_order keeps their best billing
     so the recognizable actors sort to the front of a callout.
 
-    Returns {person_id: RoleInfo}. Used by shared_connections to describe why
-    two shows are connected, in the same currency that ranked them.
-    """
-    marquee_rank = {job: i for i, job in enumerate(MARQUEE_JOBS)}
+    Returns {show_id: {person_id: RoleInfo}}. Used by shared_connections to
+    describe why two shows are connected, in the same currency that ranked
+    them, and by Layer 2 to read the cast/crew composition of a user's own
+    edges (issue #7).
 
-    best_count = {}
+    Bulk because both callers ask about a whole set of shows at once: a detail
+    page indexes every candidate it renders, and the connection-type profile
+    indexes every show the user rated. Two queries for the set beats two per
+    show. Batched under the SQLite variable ceiling (ADR-06).
+    """
+    show_ids = [s.id for s in shows]
+    known = {s.id for s in shows}
+
+    best_count = {}      # (show_id, person_id) -> best episode_count
     name = {}
     cast_order = {}
-    character = {}      # person_id -> (episode_count, character) of biggest role
-    best_marquee = {}   # person_id -> (rank, job)
-    plain_crew = {}     # person_id -> a non-marquee crew job, as a fallback
+    character = {}       # -> (episode_count, character) of biggest role
+    best_marquee = {}    # -> (rank, job)
+    plain_crew = {}      # -> a non-marquee crew job, as a fallback
+    marquee_rank = {job: i for i, job in enumerate(MARQUEE_JOBS)}
 
-    for pid, pname, char, order, count in CastMember.objects.filter(
-        show=show
-    ).values_list(
-        "person_id", "person__name", "character", "order", "episode_count"
-    ):
-        c = count or 0
-        if pid not in best_count or c > best_count[pid]:
-            best_count[pid] = c
-        name[pid] = pname
-        if pid not in cast_order or order < cast_order[pid]:
-            cast_order[pid] = order
-        # Their biggest cast role names them; a lead's main character, not a
-        # one-episode second credit.
-        if pid not in character or c > character[pid][0]:
-            character[pid] = (c, char)
+    for batch in batched(show_ids, SQLITE_MAX_VARS_SAFE):
+        for sid, pid, pname, char, order, count in CastMember.objects.filter(
+            show_id__in=batch
+        ).values_list(
+            "show_id", "person_id", "person__name", "character", "order",
+            "episode_count",
+        ):
+            key = (sid, pid)
+            c = count or 0
+            if key not in best_count or c > best_count[key]:
+                best_count[key] = c
+            name[key] = pname
+            if key not in cast_order or order < cast_order[key]:
+                cast_order[key] = order
+            # Their biggest cast role names them; a lead's main character, not
+            # a one-episode second credit.
+            if key not in character or c > character[key][0]:
+                character[key] = (c, char)
 
-    for pid, pname, job, count in (
-        CrewMember.objects.filter(show=show)
-        .exclude(job__in=SERVICE_JOBS)
-        .values_list("person_id", "person__name", "job", "episode_count")
-    ):
-        c = count or 0
-        if pid not in best_count or c > best_count[pid]:
-            best_count[pid] = c
-        name[pid] = pname
-        rank = marquee_rank.get(job)
-        if rank is not None:
-            if pid not in best_marquee or rank < best_marquee[pid][0]:
-                best_marquee[pid] = (rank, job)
-        else:
-            plain_crew.setdefault(pid, job)
+        for sid, pid, pname, job, count in (
+            CrewMember.objects.filter(show_id__in=batch)
+            .exclude(job__in=SERVICE_JOBS)
+            .values_list("show_id", "person_id", "person__name", "job",
+                         "episode_count")
+        ):
+            key = (sid, pid)
+            c = count or 0
+            if key not in best_count or c > best_count[key]:
+                best_count[key] = c
+            name[key] = pname
+            rank = marquee_rank.get(job)
+            if rank is not None:
+                if key not in best_marquee or rank < best_marquee[key][0]:
+                    best_marquee[key] = (rank, job)
+            else:
+                plain_crew.setdefault(key, job)
 
-    index = {}
-    for pid in best_count:
-        order = cast_order.get(pid, 9999)
+    indexes = {sid: {} for sid in known}
+    for key in best_count:
+        sid, pid = key
+        order = cast_order.get(key, 9999)
         # A recognizable actor is named by their character even when they also
         # crewed (leads often direct or produce an episode); their fame is the
         # character. Everyone else takes their marquee crew role if they hold
         # one, then a plain cast or crew credit.
-        if pid in character and order < RECOGNIZABLE_BILLING:
-            role, kind, mrank = (character[pid][1] or "Cast"), "cast", 9999
-        elif pid in best_marquee:
-            rank, job = best_marquee[pid]
+        if key in character and order < RECOGNIZABLE_BILLING:
+            role, kind, mrank = (character[key][1] or "Cast"), "cast", 9999
+        elif key in best_marquee:
+            rank, job = best_marquee[key]
             role, kind, mrank = job, "marquee", rank
-        elif pid in character:
-            role, kind, mrank = (character[pid][1] or "Cast"), "cast", 9999
+        elif key in character:
+            role, kind, mrank = (character[key][1] or "Cast"), "cast", 9999
         else:
-            role, kind, mrank = plain_crew.get(pid, "Crew"), "crew", 9999
-        index[pid] = RoleInfo(
-            name=name.get(pid, ""),
-            best_count=best_count[pid],
-            cast_order=cast_order.get(pid, 9999),
+            role, kind, mrank = plain_crew.get(key, "Crew"), "crew", 9999
+        indexes[sid][pid] = RoleInfo(
+            name=name.get(key, ""),
+            best_count=best_count[key],
+            cast_order=cast_order.get(key, 9999),
             role=role,
             kind=kind,
             marquee_rank=mrank,
         )
-    return index
+    return indexes
+
 
 
 def shared_connections(source, source_index, candidate, candidate_index):
@@ -418,7 +443,41 @@ def shared_connections(source, source_index, candidate, candidate_index):
     return connections
 
 
-def name_connections(connections, max_named=5):
+# The two connection types a callout can lean toward, and the tilt a reader's
+# learned preference is allowed to apply to them. See
+# docs/adr/15-connection-type-preference.md.
+#
+# Layer 1 scores every shared person the same way whatever they did (ADR-04),
+# but a reader does not read them the same way: "they share three of the same
+# actors" and "the same showrunner made both" are different pitches. This is the
+# only place the distinction exists, and it exists for naming, never for
+# scoring. marquee and crew collapse together because the split a reader feels
+# is on-screen versus behind it, not marquee versus ordinary.
+def connection_type(kind):
+    """Which of the two nameable types a RoleInfo/Connection kind belongs to."""
+    return "cast" if kind == "cast" else "crew"
+
+
+# How hard a learned connection-type preference is allowed to bend the named
+# order. lean is measured in stars (see PreferenceProfile.connection_type_lean),
+# clamped to one star, so a fully cast-leaning reader multiplies cast
+# contributions by 1.5 and crew by 0.5: a 3:1 tilt, enough to reorder the
+# middle of a callout and push a marginal credit out of the named few, not
+# enough to unseat a dominant shared lead. Same instinct as Layer 2's
+# re-ranking, where a blowout edge resists personalization (ADR-08).
+CONNECTION_TYPE_TILT = 0.5
+
+
+def connection_type_multipliers(lean):
+    """Per-type score multipliers for a signed, cast-positive lean."""
+    lean = max(-1.0, min(1.0, lean))
+    return {
+        "cast": 1.0 + CONNECTION_TYPE_TILT * lean,
+        "crew": 1.0 - CONNECTION_TYPE_TILT * lean,
+    }
+
+
+def name_connections(connections, max_named=5, profile=None):
     """Choose the few people to name, and count the rest.
 
     The rule (issue #2, refined 2026-08-14 from "name by prominence" to "name by
@@ -429,6 +488,15 @@ def name_connections(connections, max_named=5):
     marquee crew member who scored every episode of both is named ahead of a
     lead who only guested. No reserved cast slot, no role-based ordering, no
     creator guarantee: one pool, sorted by score.
+
+    With a `profile` whose ratings have earned a connection-type lean (issue #7),
+    that score is multiplied by the reader's learned preference for cast versus
+    crew before the pool is cut and ordered, so a reader whose own highly-rated
+    shows are tied together by shared actors sees the actors named first and a
+    marginal crew credit fall off the end. The lean is 0.0 for a cold-start
+    reader, for one whose ratings have not earned it, and for an anonymous
+    visitor, and a 0.0 lean makes both multipliers 1.0: the paragraph below is
+    then exactly the pre-#7 behaviour, not an approximation of it.
 
     Only recognizable cast (billed above RECOGNIZABLE_BILLING) and marquee crew
     are eligible to be named. The long tail of bit players and technical crew
@@ -450,39 +518,69 @@ def name_connections(connections, max_named=5):
         if c.kind == "marquee"
         or (c.kind == "cast" and c.cast_order < RECOGNIZABLE_BILLING)
     ]
+
+    lean = getattr(profile, "connection_type_lean", 0.0) or 0.0
+    if lean and eligible:
+        multiplier = connection_type_multipliers(lean)
+        # Same sort keys as shared_connections, so with a 0.0 lean this is a
+        # no-op re-sort of an already-sorted list and equal edges still break on
+        # billing then name.
+        eligible.sort(
+            key=lambda c: (
+                -c.contribution * multiplier[connection_type(c.kind)],
+                c.cast_order,
+                c.name,
+            )
+        )
     named = eligible[:max_named]
 
     # Neither recognizable cast nor marquee crew: name the strongest edges so
-    # the callout is never just a bare count.
+    # the callout is never just a bare count. Untilted on purpose: this is the
+    # "never a bare count" floor, and there is no type preference to express
+    # when the candidate shares no nameable person of either type.
     if not named:
         named = list(connections[:3])
 
     return named, len(connections) - len(named)
 
 
-# How a crew role reads in prose: a noun to introduce the person and a verb
-# phrase framed as "both", since every named person is, by construction, on both
-# shows. DIRECTED and SHOT are placeholders resolved against the candidate-side
-# episode count so a one-off guest director reads as "directed one episode", not
+# How a crew role reads in prose: a noun to introduce the person, a verb phrase
+# framed as "both" (every named person is, by construction, on both shows), and
+# a short "so did these people" phrase for everyone else who held the same role.
+# DIRECTED and SHOT are placeholders resolved against the source-side episode
+# count so a one-off guest director reads as "directed one episode", not
 # "directed both". Roles absent here fall back to a lowercased job and "worked on
 # both"; the graph rarely names a plain crew job, but the callout never breaks.
+#
+# The third phrase exists because a callout that names four directors used to
+# repeat the noun four times: "director X directed one episode and director Y
+# directed one episode" (issue #4). Only the strongest holder of a role now gets
+# the full clause and the rest collapse behind it, which is exactly what the cast
+# side has always done with "and Leslie Hope and Carlos Bernard appear too". It
+# is past tense throughout, so one phrase serves any number of people.
 ROLE_PROSE = {
-    "Creator": ("creator", "created both"),
-    "Showrunner": ("showrunner", "ran both shows"),
-    "Executive Producer": ("executive producer", "produced both"),
-    "Producer": ("producer", "produced both"),
-    "Co-Executive Producer": ("producer", "produced both"),
-    "Co-Producer": ("producer", "produced both"),
-    "Writer": ("writer", "wrote for both"),
-    "Original Music Composer": ("composer", "scored both"),
-    "Composer": ("composer", "scored both"),
-    "Music": ("composer", "scored both"),
-    "Music Supervisor": ("music supervisor", "supervised the music on both"),
-    "Director": ("director", "DIRECTED"),
-    "Director of Photography": ("cinematographer", "SHOT"),
-    "Cinematographer": ("cinematographer", "SHOT"),
-    "Editor": ("editor", "edited both"),
+    "Creator": ("creator", "created both", "created it too"),
+    "Showrunner": ("showrunner", "ran both shows", "ran it too"),
+    "Executive Producer": ("executive producer", "produced both", "produced too"),
+    "Producer": ("producer", "produced both", "produced too"),
+    "Co-Executive Producer": ("producer", "produced both", "produced too"),
+    "Co-Producer": ("producer", "produced both", "produced too"),
+    "Writer": ("writer", "wrote for both", "wrote too"),
+    "Original Music Composer": ("composer", "scored both", "scored too"),
+    "Composer": ("composer", "scored both", "scored too"),
+    "Music": ("composer", "scored both", "scored too"),
+    "Music Supervisor": (
+        "music supervisor", "supervised the music on both", "supervised too",
+    ),
+    "Director": ("director", "DIRECTED", "directed too"),
+    "Director of Photography": ("cinematographer", "SHOT", "shot too"),
+    "Cinematographer": ("cinematographer", "SHOT", "shot too"),
+    "Editor": ("editor", "edited both", "edited too"),
 }
+
+# What an unlisted crew job falls back to, so ROLE_PROSE.get always unpacks
+# into three.
+DEFAULT_ROLE_PROSE = ("crew", "worked on both", "worked on it too")
 
 # Verb phrases that read naturally sharpened to "every episode of both" when the
 # person is on the whole run of each show. "created both" and "ran both shows"
@@ -554,12 +652,16 @@ def _secondary_cast_clause(cast):
     return _join_names([c.name for c in cast]) + [_text(f" {verb}")]
 
 
+def _role_prose(c):
+    """The (noun, verb, also) prose for one connection's crew role."""
+    default = ((c.role or "crew").lower(),) + DEFAULT_ROLE_PROSE[1:]
+    return ROLE_PROSE.get(c.role, default)
+
+
 def _crew_clause(c):
     """A crew tie as prose: 'composer Dave Porter scored every episode of both',
     'director Tim Hunter directed one episode'."""
-    noun, verb = ROLE_PROSE.get(
-        c.role, ((c.role or "crew").lower(), "worked on both")
-    )
+    noun, verb, _also = _role_prose(c)
     if verb == "DIRECTED":
         phrase = f"directed {_episodes(c.src_count)}" if c.src_count else "directed both"
     elif verb == "SHOT":
@@ -573,7 +675,43 @@ def _crew_clause(c):
     return [_text(noun + " "), _name(c.name), _text(" " + phrase)]
 
 
-def compose_callout(source, candidate, connections, named, others):
+def _secondary_crew_clause(crew):
+    """The other holders of a role, behind the one who earned the full clause.
+
+    The crew mirror of _secondary_cast_clause. 'Kevin Hooks, Dwight H. Little
+    and Milan Cheylov directed too' says the same thing as three more "director
+    X directed N episodes" clauses without saying "director" three more times
+    (issue #4). The episode counts of the collapsed members are the cost, and
+    they are the least interesting numbers in the sentence: the strongest holder
+    of the role keeps theirs, and the tail was already being read as a list of
+    names rather than a table of counts.
+    """
+    _noun, _verb, also = _role_prose(crew[0])
+    return _join_names([c.name for c in crew]) + [_text(f" {also}")]
+
+
+def _crew_clauses(crew):
+    """Every named crew member, grouped so a role noun is said once.
+
+    Groups by prose noun rather than raw job, so "Executive Producer" and
+    "Co-Executive Producer" collapse together the way they already read
+    together. First appearance sets a group's position, and within a group the
+    order name_connections gave is preserved, so the strongest tie of each role
+    is the one that keeps its full clause.
+    """
+    groups = {}
+    for c in crew:
+        groups.setdefault(_role_prose(c)[0], []).append(c)
+
+    clauses = []
+    for members in groups.values():
+        clauses.append(_crew_clause(members[0]))
+        if len(members) > 1:
+            clauses.append(_secondary_crew_clause(members[1:]))
+    return clauses
+
+
+def compose_callout(source, candidate, connections, named, others, profile=None):
     """Turn a candidate's shared people into one flowing prose sentence.
 
     The 7a treatment (issue #2): lead with the recognizable actor named by their
@@ -584,25 +722,38 @@ def compose_callout(source, candidate, connections, named, others):
     people:" leads are gone). Composition lives here in Python, not the template,
     so it stays testable.
 
+    Which of the two blocks opens the sentence is the reader's, not the
+    catalog's (issue #7, amending issue #2's fixed "pitch by cast" order on
+    2026-08-26). A reader whose own ratings say their shows hang together on
+    crew hears the crew first. Every other reader, which is cold start,
+    insufficient signal, anonymous, and anyone whose two affinities landed
+    within half a star of each other, has a lean of exactly 0.0 and gets cast
+    first: the same default, reached by the same path, not a repaired version
+    of it. See docs/adr/15-connection-type-preference.md.
+
     Returns a dict for the template:
         segments  an ordered list of {"t": "text"|"name", "v": str}, so the
                   shared people render as amber tokens and everything else as
                   quiet prose, all auto-escaped
         shared_total  the candidate's shared-people count
 
-    The names come pre-ordered by name_connections (highest score first); the
-    prose then opens on the cast to pitch by cast, and the reasoning follows.
+    The names come pre-ordered by name_connections (highest score first), so
+    whichever block opens, it opens on the strongest tie of its kind.
     """
     cast = [c for c in named if c.kind == "cast"]
     crew = [c for c in named if c.kind in ("marquee", "crew")]
 
-    clauses = []
+    cast_clauses = []
     if cast:
-        clauses.append(_cast_clause(cast[0]))
+        cast_clauses.append(_cast_clause(cast[0]))
         if len(cast) > 1:
-            clauses.append(_secondary_cast_clause(cast[1:]))
-    for c in crew:
-        clauses.append(_crew_clause(c))
+            cast_clauses.append(_secondary_cast_clause(cast[1:]))
+
+    lean = getattr(profile, "connection_type_lean", 0.0) or 0.0
+    blocks = [_crew_clauses(crew), cast_clauses] if lean < 0 else [
+        cast_clauses, _crew_clauses(crew)
+    ]
+    clauses = [clause for block in blocks for clause in block]
     if not clauses:  # neither cast nor crew named: fall back to bare names
         clauses.append(_join_names([c.name for c in named]))
 
