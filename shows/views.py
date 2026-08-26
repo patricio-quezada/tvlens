@@ -29,7 +29,7 @@ from .personalization import (
 from .recommenders import (
     compose_callout,
     name_connections,
-    role_index,
+    role_indexes,
     shared_connections,
     similar_by_cast,
     similar_by_crew,
@@ -261,14 +261,24 @@ def detail(request, slug):
     if step < available:
         next_step = next(n for n in RECOMMENDATION_STEPS if n > step)
 
-    source_index = role_index(show)
+    # One bulk index for the source and every candidate on the page, rather
+    # than a pair of queries per candidate.
+    indexes = role_indexes([show, *shown])
+    source_index = indexes[show.id]
+    # rerank hangs the reader's profile on the list it returns, and
+    # without_watched carries it through. It orders the people named below by
+    # the reader's learned cast-versus-crew preference (issue #7); an anonymous
+    # visitor has none and gets the unchanged order.
+    profile = getattr(ranked, "profile", None)
     recommendations = []
     for candidate in shown:
         connections = shared_connections(
-            show, source_index, candidate, role_index(candidate)
+            show, source_index, candidate, indexes[candidate.id]
         )
-        named, others = name_connections(connections)
-        callout = compose_callout(show, candidate, connections, named, others)
+        named, others = name_connections(connections, profile=profile)
+        callout = compose_callout(
+            show, candidate, connections, named, others, profile=profile
+        )
         recommendations.append({"show": candidate, "callout": callout})
 
     # The ladder climbs in place. ?show=N still works on its own, so the link
