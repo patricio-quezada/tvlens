@@ -248,3 +248,30 @@ change repo-wide is a separate decision with a wider blast radius and is not set
 - a watched show is never a pick and still carries the walk
 - a show every seed reaches ranks below one that only a single seed found
 - the surprise arithmetic appears once, written out against a known pick
+## Note, 2026-08-26: the hop decay is tilted, and left alone
+**status: draft**
+
+[ADR-04](04-episode-weighted-people-recommender.md) raised each shared person's episode share to
+`INVOLVEMENT_EXPONENT = 1.375` before summing. That changes the input to `math.log1p(score)`,
+and this note records the effect so it is not rediscovered later as a mystery.
+
+`log1p` is concave, so it compresses large scores while the exponent crushes small ones. On the
+rank<=5 edges the walk actually uses, the maximum strength falls by 3.4% while the median falls
+by 43%. Strong edges keep their strength and weak edges lose theirs, so a two-hop path through
+two strong edges competes better against a one-hop path through a weak one than it used to.
+
+Measured on the rebuilt catalog, sampling from that pool: the probability that a two-hop path
+out-scores a one-hop path rises from 22.5% to 26.1%, a factor of 1.16. Restoring the old balance
+would mean `SIDE_QUEST_HOP_DECAY = 0.33` rather than 0.5.
+
+**Left at 0.5 deliberately.** This ADR already flags the constant as needing a re-fit at real
+catalog scale, tracked in #20, and it was tuned against a 100-show catalog that no longer
+exists. Re-fitting it inside the rescoring change would mix two adjustments and make neither
+measurable. Side Quests is also due to be replaced by Watch Next as the homepage row, which will
+re-open these constants with a clearer question to answer.
+
+The direction of the tilt is toward novelty, which is the axis this row exists to serve, so 3.6
+percentage points is not a regression. It is written down here so the next person to touch the
+constant knows part of the drift came from Layer 1 rather than from this row.
+
+`ADR-04` records the same measurement from the other side.

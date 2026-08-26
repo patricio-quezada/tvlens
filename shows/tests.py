@@ -47,6 +47,7 @@ from .personalization import (
 )
 from .views import DETAIL_RECOMMENDATION_LIMIT
 from .recommenders import (
+    INVOLVEMENT_EXPONENT,
     SQLITE_MAX_VARS_SAFE,
     RankedShows,
     compose_callout,
@@ -61,40 +62,72 @@ from .recommenders import (
 
 
 class SimilarByPeopleTests(TestCase):
+    """ADR-04's decisions, frozen against a fixture with a real spread of shares.
+
+    The fixture this replaced gave both shows 10 episodes and nearly every
+    credit episode_count=10, so almost every share was exactly 1.0. Since
+    1.0 ** anything is 1.0, the suite was very nearly blind to the involvement
+    weight it exists to protect: measured 2026-08-26, only two assertions in
+    248 moved when INVOLVEMENT_EXPONENT went from 1.0 to 1.375. A fixture that
+    cannot see the thing it freezes is worse than no fixture, so A and B now
+    have unequal, unround runs and the shares below span 0.01 to 1.0 the way
+    the catalog's do.
+
+    Tests that freeze the min rule assert against INVOLVEMENT_EXPONENT rather
+    than a baked float, because what they protect is which end the edge takes,
+    not what the exponent happens to be. The exponent's own value is pinned in
+    InvolvementExponentTests.
+    """
+
     @classmethod
     def setUpTestData(cls):
-        cls.a = Show.objects.create(tmdb_id=1, name="A", number_of_episodes=10)
-        cls.b = Show.objects.create(tmdb_id=2, name="B", number_of_episodes=10)
+        cls.a = Show.objects.create(tmdb_id=1, name="A", number_of_episodes=100)
+        cls.b = Show.objects.create(tmdb_id=2, name="B", number_of_episodes=40)
         cls.p = Person.objects.create(tmdb_id=1, name="Lead")
 
     def test_min_rule_takes_weaker_end(self):
-        CastMember.objects.create(show=self.a, person=self.p, episode_count=10)
-        CastMember.objects.create(show=self.b, person=self.p, episode_count=2)
+        # All 100 episodes of A (share 1.0), 10 of B's 40 (share 0.25). The
+        # edge is worth the weaker end, so 0.25 and never 1.0.
+        CastMember.objects.create(show=self.a, person=self.p, episode_count=100)
+        CastMember.objects.create(show=self.b, person=self.p, episode_count=10)
         [r] = similar_by_people(self.a)
-        self.assertAlmostEqual(r.score, 0.2)
+        self.assertAlmostEqual(r.score, 0.25 ** INVOLVEMENT_EXPONENT)
+        self.assertLess(r.score, 1.0)
+
+    def test_involvement_weight_is_superlinear_not_proportional(self):
+        # The whole point of ADR-04's amendment: a quarter-share is worth
+        # LESS than a quarter of a full share, so thin ties cannot accumulate
+        # their way past a real one. A linear weight would score exactly 0.25.
+        CastMember.objects.create(show=self.a, person=self.p, episode_count=100)
+        CastMember.objects.create(show=self.b, person=self.p, episode_count=10)
+        [r] = similar_by_people(self.a)
+        self.assertLess(r.score, 0.25)
 
     def test_person_counted_once_at_best_count_across_cast_and_crew(self):
-        CastMember.objects.create(show=self.a, person=self.p, episode_count=4)
+        # Cast says 20 of A, crew says all 100. The best count wins, so the
+        # source share is 1.0 and the edge is B's 0.25. Taking the cast count
+        # instead would score min(0.2, 0.25) = 0.2 and this would fail.
+        CastMember.objects.create(show=self.a, person=self.p, episode_count=20)
         CrewMember.objects.create(
-            show=self.a, person=self.p, job="Director", episode_count=10
+            show=self.a, person=self.p, job="Director", episode_count=100
         )
         CastMember.objects.create(show=self.b, person=self.p, episode_count=10)
         [r] = similar_by_people(self.a)
-        self.assertAlmostEqual(r.score, 1.0)
+        self.assertAlmostEqual(r.score, 0.25 ** INVOLVEMENT_EXPONENT)
         self.assertEqual(r.shared_people, 1)
 
     def test_null_episode_count_is_shared_but_weighs_zero(self):
         CastMember.objects.create(show=self.a, person=self.p, episode_count=None)
-        CastMember.objects.create(show=self.b, person=self.p, episode_count=10)
+        CastMember.objects.create(show=self.b, person=self.p, episode_count=40)
         [r] = similar_by_people(self.a)
         self.assertEqual((r.score, r.shared_people), (0.0, 1))
 
     def test_service_job_excluded_on_candidate_side(self):
         CrewMember.objects.create(
-            show=self.a, person=self.p, job="Writer", episode_count=10
+            show=self.a, person=self.p, job="Writer", episode_count=100
         )
         CrewMember.objects.create(
-            show=self.b, person=self.p, job="Casting", episode_count=10
+            show=self.b, person=self.p, job="Casting", episode_count=40
         )
         self.assertEqual(similar_by_people(self.a), [])
 
@@ -102,27 +135,57 @@ class SimilarByPeopleTests(TestCase):
         # The 2026-08-06 review found eight casting variants leaking past the
         # original list. Freeze one of them.
         CrewMember.objects.create(
-            show=self.a, person=self.p, job="Writer", episode_count=10
+            show=self.a, person=self.p, job="Writer", episode_count=100
         )
         CrewMember.objects.create(
-            show=self.b, person=self.p, job="Extras Casting", episode_count=10
+            show=self.b, person=self.p, job="Extras Casting", episode_count=40
         )
         self.assertEqual(similar_by_people(self.a), [])
+
+    def test_facility_job_excluded(self):
+        # ADR-01 amended 2026-08-26: the casting argument covers any credit
+        # that links a facility's slate rather than two shows. A colorist who
+        # graded the full run of both put Marvel's Daredevil first on
+        # Elementary; under the involvement exponent that one credit decides
+        # the ranking, so the widened list has to hold.
+        CrewMember.objects.create(
+            show=self.a, person=self.p, job="Writer", episode_count=100
+        )
+        CrewMember.objects.create(
+            show=self.b, person=self.p, job="Colorist", episode_count=40
+        )
+        self.assertEqual(similar_by_people(self.a), [])
+
+    def test_composing_is_not_a_facility_job(self):
+        # The counterpart to the test above, and the line the widened list
+        # draws: music SERVICE is excluded, composition is not. A score is
+        # authorial, and MARQUEE_JOBS already treats it as show-defining.
+        CrewMember.objects.create(
+            show=self.a, person=self.p, job="Original Music Composer",
+            episode_count=100,
+        )
+        CrewMember.objects.create(
+            show=self.b, person=self.p, job="Original Music Composer",
+            episode_count=40,
+        )
+        [r] = similar_by_people(self.a)
+        self.assertAlmostEqual(r.score, 1.0)
 
     def test_ratio_caps_at_one(self):
         # Credit rollups drift ahead of the episode total on returning series
         # (595 credited episodes of a 594-episode run). Nobody made more than
-        # all of a show.
-        CastMember.objects.create(show=self.a, person=self.p, episode_count=11)
-        CastMember.objects.create(show=self.b, person=self.p, episode_count=12)
+        # all of a show. Both sides overflow here, so both cap and the edge is
+        # a full 1.0 rather than something above it.
+        CastMember.objects.create(show=self.a, person=self.p, episode_count=105)
+        CastMember.objects.create(show=self.b, person=self.p, episode_count=44)
         [r] = similar_by_people(self.a)
         self.assertAlmostEqual(r.score, 1.0)
 
     def test_zero_number_of_episodes_yields_zero_score_not_crash(self):
         self.a.number_of_episodes = 0
         self.a.save()
-        CastMember.objects.create(show=self.a, person=self.p, episode_count=5)
-        CastMember.objects.create(show=self.b, person=self.p, episode_count=5)
+        CastMember.objects.create(show=self.a, person=self.p, episode_count=50)
+        CastMember.objects.create(show=self.b, person=self.p, episode_count=20)
         [r] = similar_by_people(self.a)
         self.assertEqual(r.score, 0.0)
 
@@ -131,11 +194,11 @@ class SimilarByPeopleTests(TestCase):
         # popular candidate whose only link is a series-level (null) credit.
         # Freezes both the zero-weight decision and the popularity tie-break.
         popular = Show.objects.create(
-            tmdb_id=3, name="Popular", number_of_episodes=10, popularity=99.0
+            tmdb_id=3, name="Popular", number_of_episodes=40, popularity=99.0
         )
         ghost = Person.objects.create(tmdb_id=2, name="Ghost")
-        CastMember.objects.create(show=self.a, person=self.p, episode_count=5)
-        CastMember.objects.create(show=self.b, person=self.p, episode_count=5)
+        CastMember.objects.create(show=self.a, person=self.p, episode_count=50)
+        CastMember.objects.create(show=self.b, person=self.p, episode_count=20)
         CastMember.objects.create(show=self.a, person=ghost, episode_count=None)
         CastMember.objects.create(show=popular, person=ghost, episode_count=None)
         results = similar_by_people(self.a)
@@ -171,6 +234,16 @@ class SimilarByPeopleTests(TestCase):
         results = similar_by_people(self.a)
         self.assertEqual([s.name for s in results], ["Lead", "Half", "Cameo"])
         self.assertEqual(results.mode, "estimated")
+        # The estimate carries the same involvement weight as the score
+        # (ADR-04, amended 2026-08-26). Both rungs rank by how much of a show
+        # a person is, so they have to mean the same thing by it; weighting
+        # only the top rung would leave the ladder disagreeing with itself.
+        # The exponent is monotonic, so it cannot change this order and only a
+        # value assertion can catch its absence here.
+        by_name = {s.name: s for s in results}
+        self.assertAlmostEqual(by_name["Half"].estimate, 0.5 ** INVOLVEMENT_EXPONENT)
+        self.assertAlmostEqual(by_name["Cameo"].estimate, 0.1 ** INVOLVEMENT_EXPONENT)
+        self.assertLess(by_name["Cameo"].estimate, 0.1)
 
     def test_estimate_ties_break_on_rating_then_votes(self):
         # Equal estimates fall to the rating tie-break: vote_average
@@ -234,6 +307,103 @@ class SimilarByPeopleTests(TestCase):
         results = similar_by_people(self.a)
         self.assertEqual([s.name for s in results], ["B", "Rated"])
         self.assertEqual(results.mode, "weighted")
+
+
+class InvolvementExponentTests(TestCase):
+    """The acceptance case for ADR-04's amendment: mass must not beat quality.
+
+    This is the entire reason Layer 1 was rescored on 2026-08-26, and nothing
+    in the suite checked it before. 217,622 of the catalog's 278,632 cast rows
+    carry episode_count = 1. Under the original linear sum, 300 of those guests
+    at 0.01 each totalled 3.0 and beat a genuine full-run co-lead at 1.0, so a
+    show you share one star with lost to a show you share a crowd of extras
+    with. Catalog-wide, 463 pairs in the stored top-12 lists were ordered that
+    way.
+
+    The exponent is chosen so this case is won with room, not won barely.
+    Break-even for 300 guests at one episode of a hundred is 1.24, so 1.25
+    would clear it by 1.05x and land the decision on a coin edge; 1.375 clears
+    it by 1.87x. Going higher is worse rather than safer: past about 1.4 the
+    score collapses toward whoever holds the single strongest tie and the
+    mid-strength tail stops carrying register, which at 1.5 makes Silent
+    Witness recommend Loki and costs The Pitt its edge to ER.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.seed = Show.objects.create(
+            tmdb_id=1, name="Seed", number_of_episodes=100
+        )
+        # One shared co-lead, the whole run of both shows.
+        cls.quality = Show.objects.create(
+            tmdb_id=2, name="Quality", number_of_episodes=100, popularity=1.0
+        )
+        colead = Person.objects.create(tmdb_id=1, name="Co-Lead")
+        CastMember.objects.create(
+            show=cls.seed, person=colead, episode_count=100
+        )
+        CastMember.objects.create(
+            show=cls.quality, person=colead, episode_count=100
+        )
+
+        # Three hundred shared guests, one episode each on both sides.
+        cls.crowd = Show.objects.create(
+            tmdb_id=3, name="Crowd", number_of_episodes=100, popularity=99.0
+        )
+        guests = Person.objects.bulk_create(
+            Person(tmdb_id=100 + i, name=f"Guest {i}") for i in range(300)
+        )
+        CastMember.objects.bulk_create(
+            [CastMember(show=cls.seed, person=g, episode_count=1) for g in guests]
+            + [CastMember(show=cls.crowd, person=g, episode_count=1) for g in guests]
+        )
+
+    def test_one_full_run_colead_outranks_three_hundred_one_episode_guests(self):
+        results = similar_by_people(self.seed)
+        self.assertEqual([s.name for s in results], ["Quality", "Crowd"])
+
+    def test_the_crowd_is_really_a_crowd(self):
+        # Guards the fixture rather than the rule: if these numbers drift, the
+        # test above stops demonstrating anything. 300 shared people at a
+        # linear 0.01 apiece is the 3.0 that used to beat the co-lead's 1.0.
+        crowd = next(s for s in similar_by_people(self.seed) if s.name == "Crowd")
+        self.assertEqual(crowd.shared_people, 300)
+        self.assertAlmostEqual(300 * 0.01, 3.0)
+
+    def test_acceptance_margin_is_at_least_one_point_eight(self):
+        # Measured 1.87x at INVOLVEMENT_EXPONENT = 1.375. Asserting the margin
+        # rather than the ordering is what makes a future exponent change fail
+        # loudly here: 1.25 would still pass the ordering test above, at 1.05x,
+        # which is not a margin.
+        by_name = {s.name: s for s in similar_by_people(self.seed)}
+        margin = by_name["Quality"].score / by_name["Crowd"].score
+        self.assertGreater(margin, 1.8)
+
+    def test_exponent_stays_inside_the_measured_plateau(self):
+        # Both bounds are measurements, not taste. Below 1.24 the acceptance
+        # case above is lost outright. Above roughly 1.4 the head-to-head goes
+        # the other way: of the 16 sources whose top pick differs between 1.375
+        # and 1.5, about ten are better at 1.375 and one is better at 1.5.
+        self.assertGreater(INVOLVEMENT_EXPONENT, 1.24)
+        self.assertLessEqual(INVOLVEMENT_EXPONENT, 1.4)
+
+    def test_a_thin_edge_is_shrunk_but_never_zeroed(self):
+        # ADR-04's rejected alternatives ruled out a hard cutoff because it
+        # "creates a cliff, throws away thin shows, and hurts short-form
+        # content". The exponent is a curve, not a cliff, and ADR-05 needs
+        # every real edge to stay real: an edge driven to exactly 0.0 would
+        # drop its source a rung, changing the candidate set and not just the
+        # order. Measured across all 37,950 candidate edges in the catalog,
+        # none reaches 0.0; the smallest is 9.6e-06.
+        thin = Show.objects.create(
+            tmdb_id=4, name="Thin", number_of_episodes=100
+        )
+        walk_on = Person.objects.create(tmdb_id=9000, name="Walk On")
+        CastMember.objects.create(show=self.seed, person=walk_on, episode_count=1)
+        CastMember.objects.create(show=thin, person=walk_on, episode_count=1)
+        edge = next(s for s in similar_by_people(self.seed) if s.name == "Thin")
+        self.assertGreater(edge.score, 0.0)
+        self.assertLess(edge.score, 0.01)
 
 
 class SlugTests(TestCase):
@@ -599,7 +769,11 @@ class StoredSimilarTests(TestCase):
         self.assertEqual([s.name for s in stored], ["Bshow", "Cshow"])
         self.assertEqual(stored.mode, "weighted")
         self.assertAlmostEqual(stored[0].score, 1.0)
-        self.assertAlmostEqual(stored[1].score, 0.2)
+        # Side played 2 of Cshow's 10, so the edge is a 0.2 share carrying the
+        # involvement weight (ADR-04, amended 2026-08-26). Asserted against the
+        # constant because what the store owes the live recommender is the same
+        # number, whatever that number is.
+        self.assertAlmostEqual(stored[1].score, 0.2 ** INVOLVEMENT_EXPONENT)
         self._assertMatchesLive(self.src)
 
     def test_stored_matches_live_for_a_second_source(self):
