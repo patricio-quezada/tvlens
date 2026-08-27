@@ -8,15 +8,13 @@ from django.contrib.auth.decorators import login_required
 from django.db.models import Count
 from django.http import HttpResponseBadRequest, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
-from django.urls import reverse
 from django.template.loader import render_to_string
+from django.urls import reverse
+from django.utils.text import slugify
 from django.views.decorators.http import require_POST
 
 from .forms import RegistrationForm
-from django.utils.text import slugify
-
 from .models import Genre, Rating, Show, ShowTag, Tag
-from .search import search as run_search
 from .personalization import (
     build_profile,
     genre_quality,
@@ -36,6 +34,7 @@ from .recommenders import (
     similar_by_crew,
     stored_similar,
 )
+from .search import search as run_search
 
 # The MovieLens half-star scale, 0.5 to 5.0 (the same scale ADR-08 assumes for
 # Layer 2, enforced by Rating's model validators). Every value the widget offers

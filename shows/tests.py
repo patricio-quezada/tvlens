@@ -12,10 +12,9 @@ from django.contrib.auth.models import AnonymousUser, User
 from django.core.management import call_command
 from django.db.models import Max
 from django.test import TestCase
-
-from .ingestion import Ingestor
 from django.urls import reverse
 
+from .ingestion import Ingestor
 from .models import (
     CastMember,
     CrewMember,
@@ -31,27 +30,22 @@ from .models import (
     Tag,
     WatchHistory,
 )
-from .search import ParsedQuery
-from .search import search as run_search
 from .personalization import (
     MIN_CONNECTION_TYPE_EDGES,
     MIN_CONNECTION_TYPE_LEAN,
-    PreferenceProfile,
-    TOP_PICK_FLOOR,
-    rated_shows,
     SIDE_QUEST_CENTRALITY_EXPONENT,
     SIDE_QUEST_HOP_DECAY,
     SIDE_QUEST_SEED_FLOOR,
-    WATCH_NEXT_SEED_FLOOR,
-    WATCH_NEXT_SEED_STEP,
+    TOP_PICK_FLOOR,
+    PreferenceProfile,
     build_profile,
+    rated_shows,
     rerank,
     side_quests,
     top_picks,
     watch_next,
     without_watched,
 )
-from .views import DETAIL_RECOMMENDATION_LIMIT
 from .recommenders import (
     INVOLVEMENT_EXPONENT,
     SQLITE_MAX_VARS_SAFE,
@@ -67,6 +61,9 @@ from .recommenders import (
     similar_by_people,
     stored_similar,
 )
+from .search import ParsedQuery
+from .search import search as run_search
+from .views import DETAIL_RECOMMENDATION_LIMIT
 
 
 class SimilarByPeopleTests(TestCase):
