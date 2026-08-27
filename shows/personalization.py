@@ -597,6 +597,106 @@ def top_picks(user, limit=12):
     return picks[:limit]
 
 
+# ── Watch Next (#24) ─────────────────────────────────────────────────────────
+
+# A seed is a show the user rated at least this highly. Deliberately the same
+# line as SIDE_QUEST_SEED_FLOOR and favorite_genre_ids_for: three features now
+# read "you like this" off a rating, and a reader should never have to hold two
+# different definitions of it in their head.
+WATCH_NEXT_SEED_FLOOR = 4.0
+
+# How much a seed's own rating amplifies the edges it contributes. The weight is
+# (score - floor) + step, so a 4.0 seed carries 1.0 and a 5.0 seed carries 2.0.
+#
+# Using the raw score instead would make a 5.0 worth 1.25x a 4.0, which flattens
+# the only taste signal a seed has: above the floor every seed is "liked", and
+# the distance from the floor is the whole difference between liked and loved.
+WATCH_NEXT_SEED_STEP = 1.0
+
+
+def watch_next(user, limit=12, exclude_ids=()):
+    """Unwatched shows reachable from what this user already likes (#24).
+
+    The home page's answer to "what should I watch next". Top Picks ranks shows
+    the user has ALREADY rated, so a reader who finishes a show and returns to
+    the home page is shown their own history back; measured on the real catalog,
+    ten of ten Top Picks were shows they had rated, while 75 unwatched shows one
+    hop from their seeds rendered nowhere. This row is those 75.
+
+    Every seed contributes its Layer 1 edges, each scaled by how much the user
+    liked that seed, and a candidate's score is the sum across seeds. Summing
+    rather than taking the best edge is the point: a show connected to three
+    shows you loved should beat one connected to a single show you liked, which
+    is exactly the judgement a reader makes for themselves.
+
+    This reads the materialized graph in one query rather than calling
+    similar_by_people per seed (ADR-07). Ordering is explicit because Show and
+    SimilarShow both default to -popularity, which ADR-05 forbids ranking by.
+
+    The result is filtered by without_watched and then reranked by Layer 2, in
+    that order, so a reader's genre and tag preferences reorder a list that
+    already contains nothing they have seen. Returns a RankedShows so the
+    template can caption it the same way every other row is captioned; empty for
+    anonymous readers and for anyone with no seed above the floor.
+    """
+    def empty(has_seeds=False):
+        # An empty row has two causes and they need different copy: a reader
+        # with no seed has to be asked to rate, and a reader whose seeds simply
+        # reached nothing must NOT be, because they already did.
+        blank = RankedShows([], mode="weighted")
+        blank.has_seeds = has_seeds
+        return blank
+
+    if user is None or not user.is_authenticated:
+        return empty()
+
+    seeds = rated_shows(user, min_score=WATCH_NEXT_SEED_FLOOR)
+    if not seeds:
+        return empty()
+
+    weight_by_seed = {
+        seed.id: (seed.user_score - WATCH_NEXT_SEED_FLOOR) + WATCH_NEXT_SEED_STEP
+        for seed in seeds
+    }
+    seed_ids = set(weight_by_seed)
+    blocked = seed_ids | set(exclude_ids)
+
+    totals = {}
+    for source_id, target_id, score in (
+        SimilarShow.objects.filter(source_id__in=sorted(seed_ids))
+        .order_by("-score", "target__name", "source__name")
+        .values_list("source_id", "target_id", "score")
+    ):
+        if target_id in blocked:
+            continue
+        totals[target_id] = totals.get(target_id, 0.0) + score * weight_by_seed[source_id]
+
+    if not totals:
+        return empty(has_seeds=True)
+
+    shows = {
+        show.id: show
+        for show in Show.objects.filter(id__in=sorted(totals)).prefetch_related("genres")
+    }
+    for show_id, total in totals.items():
+        shows[show_id].score = total
+
+    ranked = RankedShows(
+        sorted(shows.values(), key=lambda s: (-s.score, s.name)), mode="weighted"
+    )
+    ranked = without_watched(user, ranked)
+    if not ranked:
+        return empty(has_seeds=True)
+
+    reranked = rerank(user, ranked)
+    result = RankedShows(list(reranked)[:limit], mode=reranked.mode)
+    result.has_seeds = True
+    for carried in ("profile", "personalized"):
+        if hasattr(reranked, carried):
+            setattr(result, carried, getattr(reranked, carried))
+    return result
+
+
 # ── Side Quests (#10) ────────────────────────────────────────────────────────
 
 # A seed is a show the user rated at least this highly. 4.0 is the same "high"

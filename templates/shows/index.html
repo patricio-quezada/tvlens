@@ -6,7 +6,21 @@
     <p>Watch what fits you, not just what's popular.</p>
 </div>
 
+{% comment %}Watch Next (#24) is the answer to the page's own question, so it leads. Top
+   Picks below it is a mirror -- shows the reader has already rated -- and a
+   reader who finished a show and came back here used to find only that mirror.
+   Three states: cards, the unlock copy for a reader with no seed rated 4.0 or
+   higher, and nothing at all for an anonymous reader, who has told us nothing to
+   build on.{% endcomment %}
 {% if user.is_authenticated %}
+    {% if watch_next %}
+        {% include "shows/_row.html" with title="Watch next" subtitle="Unwatched shows that share people with what you rated highly." shows=watch_next favorite_genre_ids=favorite_genre_ids %}
+    {% elif watch_next.has_seeds %}
+        {% include "shows/_row_empty.html" with title="Watch next" subtitle="Unwatched shows that share people with what you rated highly." message="Nothing new to reach from your ratings yet. Rate more shows and the paths open up." cta_label=None cta_url=None %}
+    {% else %}
+        {% include "shows/_row_empty.html" with title="Watch next" subtitle="Unwatched shows that share people with what you rated highly." message="Rate a show 4 stars or higher and we'll build you a path from it." cta_label="Start rating" cta_url="#catalog" %}
+    {% endif %}
+
     {% if top_picks %}
         {% include "shows/_row.html" with title=top_picks_title subtitle="The shows you rated furthest above the crowd." shows=top_picks favorite_genre_ids=favorite_genre_ids %}
     {% else %}
