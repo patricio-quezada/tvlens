@@ -28,9 +28,8 @@ from difflib import SequenceMatcher, get_close_matches
 
 from django.db.models import Q
 
+from .models import Person, Show
 from .recommenders import SQLITE_MAX_VARS_SAFE
-
-from .models import Episode, Person, Show
 
 # Rank buckets. A show's score is the best bucket that matched it, so a title
 # hit outranks a show whose fourth-billed actor shares a name with the query.

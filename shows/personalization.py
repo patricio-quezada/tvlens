@@ -29,8 +29,8 @@ row ever ranks by popularity, no row ever shows a user what other users are
 watching, and neither row exists at all for a user who has rated nothing.
 """
 
-from collections import Counter
 import math
+from collections import Counter
 from itertools import batched
 
 from django.db.models import Avg, Count
