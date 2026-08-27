@@ -42,10 +42,13 @@ from .personalization import (
     SIDE_QUEST_CENTRALITY_EXPONENT,
     SIDE_QUEST_HOP_DECAY,
     SIDE_QUEST_SEED_FLOOR,
+    WATCH_NEXT_SEED_FLOOR,
+    WATCH_NEXT_SEED_STEP,
     build_profile,
     rerank,
     side_quests,
     top_picks,
+    watch_next,
     without_watched,
 )
 from .views import DETAIL_RECOMMENDATION_LIMIT
@@ -3906,3 +3909,122 @@ class CrewRoleCollapseTests(TestCase):
         text = self._text()
         self.assertIn("Storyboard artist Ana Reyes worked on both", text)
         self.assertIn("Ben Cole worked on it too", text)
+
+
+class WatchNextTests(TestCase):
+    """Watch Next (#24): unwatched shows reachable from what you already like.
+
+    Top Picks ranks shows the user has already rated, so a reader who finishes a
+    show and comes back to the home page is shown their own history. These
+    freeze the row that answers the question instead: seeds are ratings at or
+    above the floor, every seed's edges are scaled by how much the user liked it,
+    a candidate's score is the SUM across seeds, and nothing already watched can
+    appear. SimilarShow is written directly because that table is Layer 2's
+    input (ADR-07).
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        drama = Genre.objects.create(tmdb_id=1, name="Drama")
+
+        def show(tmdb_id, name):
+            s = Show.objects.create(
+                tmdb_id=tmdb_id, name=name, number_of_episodes=10, popularity=1.0
+            )
+            s.genres.set([drama])
+            return s
+
+        cls.loved = show(1, "Loved")
+        cls.liked = show(2, "Liked")
+        cls.meh = show(3, "Meh")
+
+        # Reached from both seeds, so its score sums. Reached from one seed
+        # only, at a higher single edge, so it must still lose.
+        cls.both = show(4, "ReachedByBoth")
+        cls.one = show(5, "ReachedByOne")
+        cls.from_meh = show(6, "ReachedFromMeh")
+        cls.already_seen = show(7, "AlreadySeen")
+
+        def edge(source, target, score, rank=1):
+            SimilarShow.objects.create(
+                source=source, target=target, rank=rank, score=score,
+                shared_people=1, mode="weighted",
+            )
+
+        edge(cls.loved, cls.both, 4.0)
+        edge(cls.liked, cls.both, 4.0, rank=2)
+        edge(cls.loved, cls.one, 5.0, rank=3)
+        edge(cls.meh, cls.from_meh, 9.0)
+        edge(cls.loved, cls.already_seen, 9.0, rank=4)
+
+        cls.user = User.objects.create_user("watcher", password="x")
+        Rating.objects.create(user=cls.user, show=cls.loved, score=5.0)
+        Rating.objects.create(user=cls.user, show=cls.liked, score=4.0)
+        Rating.objects.create(user=cls.user, show=cls.meh, score=2.0)
+        Rating.objects.create(user=cls.user, show=cls.already_seen, score=3.0)
+
+    def test_anonymous_reader_gets_nothing(self):
+        self.assertEqual(list(watch_next(AnonymousUser())), [])
+
+    def test_a_reader_with_no_seed_above_the_floor_gets_nothing(self):
+        cold = User.objects.create_user("cold", password="x")
+        Rating.objects.create(user=cold, show=self.loved, score=3.5)
+        self.assertEqual(list(watch_next(cold)), [])
+
+    def test_a_show_reached_from_two_seeds_beats_a_stronger_single_edge(self):
+        """The whole reason scores sum instead of taking the best edge.
+
+        ReachedByBoth has two weaker edges: 4.0 from a loved seed (weight 2.0)
+        plus 4.0 from a liked one (weight 1.0), so 12.0. ReachedByOne has one
+        stronger edge, 5.0 from the loved seed, so 10.0. Being connected to two
+        shows you like has to beat being connected harder to one, or the row
+        cannot claim to reason the way a reader does.
+        """
+        names = [s.name for s in watch_next(self.user)]
+        self.assertLess(names.index("ReachedByBoth"), names.index("ReachedByOne"))
+
+    def test_the_seed_rating_scales_its_edges(self):
+        by_name = {s.name: s.score for s in watch_next(self.user)}
+        # loved (5.0) weighs 2.0, liked (4.0) weighs 1.0.
+        self.assertAlmostEqual(by_name["ReachedByBoth"], 4.0 * 2.0 + 4.0 * 1.0)
+        self.assertAlmostEqual(by_name["ReachedByOne"], 5.0 * 2.0)
+
+    def test_a_show_below_the_seed_floor_contributes_nothing(self):
+        names = [s.name for s in watch_next(self.user)]
+        self.assertNotIn("ReachedFromMeh", names)
+
+    def test_a_watched_show_never_appears(self):
+        names = [s.name for s in watch_next(self.user)]
+        self.assertNotIn("AlreadySeen", names)
+
+    def test_the_seeds_themselves_never_appear(self):
+        names = [s.name for s in watch_next(self.user)]
+        for seed in ("Loved", "Liked"):
+            self.assertNotIn(seed, names)
+
+    def test_excluded_ids_are_honored(self):
+        names = [
+            s.name for s in watch_next(self.user, exclude_ids={self.one.pk})
+        ]
+        self.assertNotIn("ReachedByOne", names)
+        self.assertIn("ReachedByBoth", names)
+
+    def test_the_row_reports_it_was_personalized(self):
+        result = watch_next(self.user)
+        self.assertTrue(result.personalized)
+        self.assertEqual(result.mode, "weighted")
+
+    def test_an_empty_row_says_which_kind_of_empty_it_is(self):
+        """A reader with no seed is asked to rate. A reader whose seeds reached
+        nothing must not be, because they already did (#24)."""
+        cold = User.objects.create_user("nothingyet", password="x")
+        self.assertFalse(watch_next(cold).has_seeds)
+
+        stranded = User.objects.create_user("stranded", password="x")
+        alone = Show.objects.create(
+            tmdb_id=99, name="Alone", number_of_episodes=10, popularity=1.0
+        )
+        Rating.objects.create(user=stranded, show=alone, score=5.0)
+        result = watch_next(stranded)
+        self.assertEqual(list(result), [])
+        self.assertTrue(result.has_seeds)

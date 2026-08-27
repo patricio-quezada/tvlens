@@ -24,6 +24,7 @@ from .personalization import (
     rerank,
     side_quests,
     top_picks,
+    watch_next,
     without_watched,
 )
 from .recommenders import (
@@ -140,8 +141,24 @@ def index(request):
     # it handles the anonymous case itself, in one place.
     quests = side_quests(request.user, exclude_ids=pick_ids)
     quest_ids = {s.pk for s in quests}
+    # Watch Next is the page's answer to "what should I watch next" (#24). It
+    # RENDERS first, above Top Picks, because Top Picks is a mirror -- shows the
+    # reader has already seen -- and leading with a mirror is what left a reader
+    # who finished a show and came back here with nothing pointing forward.
+    #
+    # But it CLAIMS after Side Quests, which reverses the usual "more personal
+    # claims first" rule on purpose. Side Quests can only offer shows in genres
+    # the reader has never rated highly, so its pool is a handful; Watch Next's
+    # is 74 on the real catalog. The shows they compete over are exactly Side
+    # Quests' best ones, connected and novel at once. A row that can afford to
+    # lose a candidate yields to one that cannot.
+    #
+    # It handles the anonymous and no-seed cases itself, so it is called outside
+    # the is_authenticated block.
+    next_up = watch_next(request.user, exclude_ids=pick_ids | quest_ids)
+    next_ids = {s.pk for s in next_up}
     recently_added = (
-        base_qs.exclude(pk__in=pick_ids | quest_ids).order_by("-created_at")[:12]
+        base_qs.exclude(pk__in=pick_ids | next_ids | quest_ids).order_by("-created_at")[:12]
     )
     # Browse by genre, ordered by the same cold-start ladder the rest of the
     # recommender uses (ADR-05, ADR-08). A user with no ratings has told us
@@ -176,6 +193,7 @@ def index(request):
         request,
         "shows/index.html",
         {
+            "watch_next": next_up,
             "top_picks": picks,
             "top_picks_title": top_picks_title,
             "side_quests": quests,
