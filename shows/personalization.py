@@ -29,6 +29,7 @@ row ever ranks by popularity, no row ever shows a user what other users are
 watching, and neither row exists at all for a user who has rated nothing.
 """
 
+from collections import Counter
 import math
 from itertools import batched
 
@@ -739,6 +740,25 @@ SIDE_QUEST_HOP_DECAY = 0.5
 # should not disqualify.
 SIDE_QUEST_CENTRALITY_EXPONENT = 0.5
 
+# How hard genre familiarity bites, applied as novelty ** this.
+#
+# Familiarity is a share, not a flag: a genre carried by 1 of 10 seeds sits at
+# 0.1, one carried by 9 of 10 at 0.9. Before this, both disqualified outright,
+# so a single show tagged Western removed every Western in the catalog forever
+# with the same force as nine Drama seeds. Measured on the real catalog that
+# threw away 82 of 104 candidates, and what survived was ten comedies out of
+# twelve -- not because comedy suited the reader but because comedy was what
+# was left.
+#
+# Grading it pulls this row toward Watch Next, which is what the exponent is
+# for. Measured 2026-08-27 at 0.5 / 1.0 / 1.5 / 2.0 / 2.5 / 3.0 / 4.0. Below
+# 1.5 the surprise row fills with the recommendation row (7 of 12 shared at
+# 0.5). Above 2.0 it collapses back to the comedy list it started as. 1.5 sits
+# at 7 comedies of 12 against 2.0's 8, with the same genre spread, and it is
+# the point where a genre brushed once can reach the row again: Criminal Minds
+# and The Boroughs, both Mystery at 1 of 10 seeds, enter here.
+SIDE_QUEST_GENRE_EXPONENT = 1.5
+
 
 class SideQuests(list):
     """The Side Quests row: shows, plus the one fact the page needs about it.
@@ -848,9 +868,18 @@ def side_quests(user, limit=12, exclude_ids=()):
         return SideQuests(locked=True, seeds_have=len(seed_ids))
 
     genres_by_show = _genre_ids_by_show()
-    demonstrated = set()
+    # How much of this taste each genre actually accounts for, as a share of the
+    # seeds. A set would say only whether a genre has been touched, which is why
+    # one Western seed used to disqualify every Western as hard as nine Drama
+    # seeds disqualified Drama.
+    seed_genre_counts = Counter()
     for seed_id in seed_ids:
-        demonstrated |= genres_by_show.get(seed_id, set())
+        seed_genre_counts.update(genres_by_show.get(seed_id, set()))
+    familiarity = {
+        genre_id: count / len(seed_ids)
+        for genre_id, count in seed_genre_counts.items()
+    }
+    demonstrated = set(seed_genre_counts)
 
     # No quest you have already been on: watched covers rated (ADR-08).
     blocked = set(exclude_ids) | set(
@@ -925,10 +954,18 @@ def side_quests(user, limit=12, exclude_ids=()):
         # row.
         if not target_genres:
             continue
+        # Still computed, but only for display now: quest_new_genres is what a
+        # pick shows to say why it is there. It no longer gates anything.
         new_genre_ids = target_genres - demonstrated
-        if not new_genre_ids:
+        # A candidate every one of whose genres sits at full familiarity scores
+        # exactly 0.0 and can never be chosen, so the old hard drop survives as
+        # the limit case of this line rather than as a branch beside it.
+        novelty = (
+            sum(1.0 - familiarity.get(gid, 0.0) for gid in target_genres)
+            / len(target_genres)
+        ) ** SIDE_QUEST_GENRE_EXPONENT
+        if novelty <= 0.0:
             continue
-        novelty = len(new_genre_ids) / len(target_genres)
         found_by = len(reach[target_id])
         centrality = found_by ** -SIDE_QUEST_CENTRALITY_EXPONENT
         surprise = strength * novelty * centrality

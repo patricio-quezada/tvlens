@@ -275,3 +275,61 @@ percentage points is not a regression. It is written down here so the next perso
 constant knows part of the drift came from Layer 1 rather than from this row.
 
 `ADR-04` records the same measurement from the other side.
+
+## Amendment, 2026-08-27: the genre gate is graded, not binary
+
+`demonstrated` was a set, so one seed was enough to disqualify a genre forever.
+Measured against the live catalog with ten seeds:
+
+| Genre | Seeds carrying it | Disqualifying force |
+|---|---|---|
+| Drama | 9 of 10 | total |
+| Sci-Fi & Fantasy | 5 of 10 | total |
+| Crime | 3 of 10 | total |
+| Action & Adventure | 2 of 10 | total |
+| Mystery | 1 of 10 | total |
+| Western | 1 of 10 | total |
+
+One show tagged Western removed every Western in the catalog with the same force
+as nine Drama seeds. The cost was not marginal: **82 of 104 reachable candidates
+were dropped**, and what survived was ten comedies out of twelve, not because
+comedy suited the reader but because comedy was what was left. The rule also got
+worse with use, since every genre a reader demonstrated was removed permanently.
+
+Familiarity is now a share of the seeds rather than a membership test, and
+novelty is the mean of `1 - familiarity` across the candidate's genres, raised to
+`SIDE_QUEST_GENRE_EXPONENT`.
+
+**The hard drop is gone, but its behaviour is not.** A candidate whose every
+genre sits at familiarity 1.0 scores exactly 0.0 and can never be chosen, so the
+old cliff survives as the limit case of the formula rather than as a branch
+beside it.
+
+### Choosing the exponent
+
+Grading the gate pulls this row toward Watch Next, which is what the exponent
+exists to control. Measured across seven values on the real catalog:
+
+| Exponent | New entrants (of 12) | Shared with Watch Next |
+|---|---|---|
+| 0.5 | 9 | 7 |
+| 1.0 | 7 | 5 |
+| **1.5** | **5** | **3** |
+| 2.0 | 4 | 2 |
+| 3.0 | 4 | 1 |
+| 4.0 | 4 | 1 |
+
+Below 1.5 the surprise row fills with the recommendation row. Above 2.0 it
+collapses back to the comedy list it started as. **1.5** was chosen: 7 comedies
+of 12 against 2.0's 8, the same genre spread, and it is where a genre brushed
+once can reach the row again. Criminal Minds and The Boroughs, both Mystery at
+1 of 10 seeds, enter at this value and at no higher one.
+
+### Rejected the same day: removing the gate entirely
+
+Letting distance carry the row alone was measured and rejected. Without the
+genre term the top seven were MobLand, Lioness, Hawaii Five-0, Law & Order:
+Criminal Intent, Lanterns, Law & Order: SVU and Law & Order. Distance in this
+graph correlates with sharing people, and people cluster by genre, so walking
+further returns a different show rather than a different kind of show. Dropping
+the gate did not make the row surprising. It made it safe.
