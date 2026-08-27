@@ -1683,6 +1683,22 @@ class SideQuestsTests(TestCase):
             self.assertTrue(new, f"{pick.name} is all genres this user knows")
             self.assertEqual({g.name for g in pick.quest_new_genres}, new)
 
+    def test_a_genre_carried_by_one_seed_is_not_as_familiar_as_one_carried_by_all(self):
+        """The defect this grading exists to fix.
+
+        Every seed here is Crime and Drama, so both sit at familiarity 1.0.
+        Nothing carries a genre held by only some seeds, so this asserts the
+        shape directly: a show whose genres the user knows completely scores
+        zero novelty and cannot appear, while a partially familiar one still
+        can. Under the old set-membership rule the two were the same answer.
+        """
+        user = self._rater()
+        names = self._names(side_quests(user))
+        # Every genre known -> novelty exactly 0.0 -> never chosen.
+        self.assertNotIn("SameOnly", names)
+        # Two thirds known -> penalised, not deleted.
+        self.assertIn("StrongPartial", names)
+
     def test_the_graphs_strongest_edge_is_not_a_side_quest(self):
         # SameOnly is reached by the biggest edge in the catalog (5.0) from a
         # show this user loves, and it is the most popular show here. It is
@@ -1694,8 +1710,15 @@ class SideQuestsTests(TestCase):
         # StrongPartial is more of what this user already likes. Surprise is
         # strength TIMES distance: 0.8 x 1.00 beats 1.8 x 0.33.
         quests = side_quests(self._rater())
-        self.assertEqual(self._names(quests)[:2], ["FullyNew", "StrongPartial"])
-        self.assertGreater(quests[1].quest_score, quests[0].quest_score)
+        names = self._names(quests)
+        self.assertEqual(names[0], "FullyNew")
+        # The claim is FullyNew over StrongPartial, not FullyNew over the whole
+        # field. Which show takes second is a matter of how hard familiarity is
+        # graded (SIDE_QUEST_GENRE_EXPONENT), and pinning it here would freeze a
+        # constant this test is not about.
+        self.assertLess(names.index("FullyNew"), names.index("StrongPartial"))
+        strong = next(q for q in quests if q.name == "StrongPartial")
+        self.assertGreater(strong.quest_score, quests[0].quest_score)
 
     def test_distance_alone_does_not_win(self):
         # WeakNew is as far from this taste as a show can get, on an edge of
@@ -1748,8 +1771,12 @@ class SideQuestsTests(TestCase):
         )
 
     def test_limit_takes_the_most_surprising(self):
-        quests = side_quests(self._rater(), limit=2)
-        self.assertEqual(self._names(quests), ["FullyNew", "StrongPartial"])
+        """limit slices the top off the full ordering, it does not re-rank."""
+        user = self._rater()
+        self.assertEqual(
+            self._names(side_quests(user, limit=2)),
+            self._names(side_quests(user))[:2],
+        )
 
     # ── the row on the page ─────────────────────────────────────────────────
 
