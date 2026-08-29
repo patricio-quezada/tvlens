@@ -74,6 +74,26 @@ not, and it hides the graph inside a cache rather than making it a queryable tab
 layers and debugging can read directly. Precomputing everything up front is both simpler to
 reason about and uniformly fast to read.
 
+## Amendment, 2026-08-29: the cast/crew split rides on the edge
+
+Two columns join `score`, `shared_people`, and `mode`: `cast_contribution` and
+`crew_contribution`, the score split by what the shared people were doing on
+each side.
+
+They are here for exactly the reason the rest of the row is. Layer 2's
+connection-type preference (ADR-15) needs the split per edge, and computing it
+at request time meant a `role_indexes` pass over every show the reader had
+rated. Profiled on the real catalog that was **53% of the entire profile
+build**, spent re-deriving numbers that only change on ingest.
+
+Moving it to the edge cut a 249-rating profile from 579ms to 205ms, and a
+profile that has rated **every show in the catalog** now builds in 224ms with
+22 queries. It also removed the ceiling on how many edges Layer 2 may read,
+which is what made ADR-15's estimator work at all.
+
+The cost is two floats per edge, written by `rebuild_similar_shows` in the same
+pass that already computes the ranking, and one full rebuild to backfill.
+
 ## After Action Review
 The store holds the same graph the live recommender produced. Rebuilt against the real 100-show
 catalog it writes 1041 edges across 96 sources that have at least one similar show (4 shows

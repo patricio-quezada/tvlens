@@ -491,6 +491,14 @@ class SimilarShow(models.Model):
     row rather than kept in a second table: one table is the simplest thing that
     round-trips the RankedShows shape similar_by_people returns.
 
+    cast_contribution and crew_contribution split the score by what the shared
+    people were doing on each side, and they are here for the same reason score
+    is: reading them cost a role_indexes pass over every show a user had rated,
+    which measured at 53% of the whole profile build for a feature that reads
+    two numbers. They are a pure function of the catalog like everything else on
+    this row, so they are computed once at rebuild and never at request time.
+    Layer 2's connection-type preference is the only reader (ADR-15).
+
     See docs/adr/07-materialized-recommendations.md.
     """
 
@@ -499,6 +507,12 @@ class SimilarShow(models.Model):
     rank = models.PositiveIntegerField(help_text="0-based position in the source's ranked list.")
     score = models.FloatField()
     shared_people = models.PositiveIntegerField()
+    cast_contribution = models.FloatField(
+        default=0.0, help_text="Share of the score carried by shared cast (ADR-15)."
+    )
+    crew_contribution = models.FloatField(
+        default=0.0, help_text="Share of the score carried by shared crew (ADR-15)."
+    )
     mode = models.CharField(
         max_length=10,
         help_text="The source's ladder rung: weighted, estimated, or rating.",

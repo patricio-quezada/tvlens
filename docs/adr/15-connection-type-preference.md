@@ -149,6 +149,45 @@ its neighbours.
 different product question from a learned signal, and shipping the control first would have made
 the learned version unnecessary rather than informing it.
 
+## Amendment, 2026-08-29: the gate could never fire, and the cap was why
+
+The three gates shipped as `MIN_CONNECTION_TYPE_EDGES = 4`,
+`MIN_CONNECTION_TYPE_MASS = 1.0`, and `MIN_CONNECTION_TYPE_LEAN = 0.5`, read
+over at most `CONNECTION_TYPE_MAX_EDGES = 60` edges. Measured against the real
+464-show catalog, that combination could not fire honestly.
+
+Seven synthetic profiles were built to test it, from 2 ratings to 249, plus one
+constructed specifically to lean by rating cast-tied neighbours 5.0 and
+crew-tied ones 1.0. **None produced a lean.** The constructed one reached 0.358
+against a required 0.5.
+
+Twenty profiles of pure noise then showed why. At a 60-edge cap their leans ran
+from 0.03 to 0.864 with a median of 0.42, and **three of twenty already cleared
+the 0.5 threshold.** Signal sat below noise. No threshold separates a
+distribution from one of its own samples, so recalibrating the threshold could
+not have worked.
+
+The cause is that 53% of edges in this catalog are mixed, carrying both cast
+and crew. Both affinities then draw their signal from the same edges and differ
+only by contribution weight, so their gap is dominated by sampling noise, which
+shrinks as more edges are averaged while a real lean does not:
+
+| cap | signal (built) | noise ceiling |
+|---|---|---|
+| 60 | 0.358 | 0.864 |
+| 150 | 0.712 | 0.461 |
+| **400** | **0.809** | **0.339** |
+| 1000 | 0.847 | 0.307 |
+
+`CONNECTION_TYPE_MAX_EDGES` is now **400**, where the separation is 2.4x and
+the returns flatten. `MIN_CONNECTION_TYPE_LEAN` **stays at 0.5**: it was never
+the wrong number, it was being asked to judge an estimator built from too few
+samples.
+
+Raising the cap was only affordable because ADR-07 moved the cast/crew split
+onto the edge. On the same profiles afterwards, the constructed one fires at
+0.809 and every random profile stays silent.
+
 ## After Action Review
 It works, and on today's database it correctly declines to do anything. The ten-rating user gets
 no lean because they rated everything highly; the ratingless user gets no lean because they have
