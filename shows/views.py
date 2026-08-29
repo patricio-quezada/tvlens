@@ -77,11 +77,13 @@ def star_steps(user_rating):
     steps = []
     for n in range(10, 0, -1):
         value = n / 2
-        steps.append({
-            "value": value,
-            "css_class": "full" if n % 2 == 0 else "half",
-            "chosen": user_rating == value,
-        })
+        steps.append(
+            {
+                "value": value,
+                "css_class": "full" if n % 2 == 0 else "half",
+                "chosen": user_rating == value,
+            }
+        )
     return steps
 
 
@@ -156,9 +158,9 @@ def index(request):
     # the is_authenticated block.
     next_up = watch_next(request.user, exclude_ids=pick_ids | quest_ids)
     next_ids = {s.pk for s in next_up}
-    recently_added = (
-        base_qs.exclude(pk__in=pick_ids | next_ids | quest_ids).order_by("-created_at")[:12]
-    )
+    recently_added = base_qs.exclude(pk__in=pick_ids | next_ids | quest_ids).order_by(
+        "-created_at"
+    )[:12]
     # Browse by genre, ordered by the same cold-start ladder the rest of the
     # recommender uses (ADR-05, ADR-08). A user with no ratings has told us
     # nothing, so the row leads with the genres whose shows TMDb rates highest
@@ -231,9 +233,7 @@ def detail(request, slug):
     people who tie it back, cast and crew, ordered by their episode-share
     contribution, and hands the template the honest caption from the mode.
     """
-    show = get_object_or_404(
-        Show.objects.prefetch_related("genres", "networks"), slug=slug
-    )
+    show = get_object_or_404(Show.objects.prefetch_related("genres", "networks"), slug=slug)
     # Layer 1 order in, personalized order out. Anonymous and ratingless users
     # get the cold-start ordering (Layer 1 under a light quality prior).
     #
@@ -264,7 +264,7 @@ def detail(request, slug):
     # anything else falls back to the opening step.
     try:
         step = int(request.GET.get("show", ""))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         step = DETAIL_RECOMMENDATION_LIMIT
     if step not in RECOMMENDATION_STEPS:
         step = DETAIL_RECOMMENDATION_LIMIT
@@ -289,13 +289,9 @@ def detail(request, slug):
     profile = getattr(ranked, "profile", None)
     recommendations = []
     for candidate in shown:
-        connections = shared_connections(
-            show, source_index, candidate, indexes[candidate.id]
-        )
+        connections = shared_connections(show, source_index, candidate, indexes[candidate.id])
         named, others = name_connections(connections, profile=profile)
-        callout = compose_callout(
-            show, candidate, connections, named, others, profile=profile
-        )
+        callout = compose_callout(show, candidate, connections, named, others, profile=profile)
         recommendations.append({"show": candidate, "callout": callout})
 
     # The ladder climbs in place. ?show=N still works on its own, so the link
@@ -303,16 +299,18 @@ def detail(request, slug):
     # fetch branch only spares the reader a reload, exactly as the rating
     # widget does (ADR-10).
     if request.headers.get("X-Requested-With") == "fetch":
-        return JsonResponse({
-            "step": step,
-            "next_step": next_step,
-            "available": available,
-            "recs_html": render_to_string(
-                "shows/_recs_list.html",
-                {"recommendations": recommendations},
-                request=request,
-            ),
-        })
+        return JsonResponse(
+            {
+                "step": step,
+                "next_step": next_step,
+                "available": available,
+                "recs_html": render_to_string(
+                    "shows/_recs_list.html",
+                    {"recommendations": recommendations},
+                    request=request,
+                ),
+            }
+        )
 
     others_tagged, tag_suggestions = tag_suggestions_for(request.user, show)
 
@@ -333,8 +331,10 @@ def detail(request, slug):
             "rating_count": show.ratings.count(),
             "user_tags": (
                 ShowTag.objects.filter(user=request.user, show=show)
-                .select_related("tag").order_by("tag__name")
-                if request.user.is_authenticated else []
+                .select_related("tag")
+                .order_by("tag__name")
+                if request.user.is_authenticated
+                else []
             ),
             # Offer the vocabulary that already exists so a second reader does
             # not invent "slowburn" beside someone else's "slow burn".
@@ -342,7 +342,6 @@ def detail(request, slug):
             "tag_suggestions": tag_suggestions,
         },
     )
-
 
 
 def search(request):
@@ -424,11 +423,9 @@ def search(request):
     )
 
 
-
 # A tag is a handle, not an essay. Long enough for "slow burn", short enough
 # that nobody pastes a sentence into the catalog's shared vocabulary.
 TAG_MAX_LENGTH = 40
-
 
 
 # How many suggestions to offer. Long enough to cover a real vocabulary, short
@@ -453,9 +450,11 @@ def tag_suggestions_for(user, show):
     Tags the reader has already put on this show are excluded, because
     suggesting them offers a no-op.
     """
-    mine = set(
-        ShowTag.objects.filter(user=user, show=show).values_list("tag_id", flat=True)
-    ) if user.is_authenticated else set()
+    mine = (
+        set(ShowTag.objects.filter(user=user, show=show).values_list("tag_id", flat=True))
+        if user.is_authenticated
+        else set()
+    )
 
     on_this_show = list(
         Tag.objects.filter(show_tags__show=show)
@@ -469,11 +468,10 @@ def tag_suggestions_for(user, show):
         Tag.objects.exclude(id__in=seen)
         .annotate(uses=Count("show_tags"))
         .filter(uses__gt=0)
-        .order_by("-uses", "name")[:TAG_SUGGESTION_LIMIT - len(on_this_show)]
+        .order_by("-uses", "name")[: TAG_SUGGESTION_LIMIT - len(on_this_show)]
     )
 
     return on_this_show, on_this_show + in_general_use
-
 
 
 def _tag_panel(request, show):
@@ -485,19 +483,22 @@ def _tag_panel(request, show):
     an anchor and threw the page a third of the way down.
     """
     others_tagged, _ = tag_suggestions_for(request.user, show)
-    return JsonResponse({
-        "html": render_to_string(
-            "shows/_tags.html",
-            {
-                "show": show,
-                "user_tags": ShowTag.objects.filter(user=request.user, show=show)
-                .select_related("tag").order_by("tag__name"),
-                "others_tagged": others_tagged,
-                "user": request.user,
-            },
-            request=request,
-        )
-    })
+    return JsonResponse(
+        {
+            "html": render_to_string(
+                "shows/_tags.html",
+                {
+                    "show": show,
+                    "user_tags": ShowTag.objects.filter(user=request.user, show=show)
+                    .select_related("tag")
+                    .order_by("tag__name"),
+                    "others_tagged": others_tagged,
+                    "user": request.user,
+                },
+                request=request,
+            )
+        }
+    )
 
 
 @login_required
@@ -515,14 +516,20 @@ def add_tag(request, slug):
     name = " ".join(raw.split())
 
     if not name:
-        return _tag_panel(request, show) if request.headers.get(
-            "X-Requested-With") == "fetch" else redirect("shows:detail", slug=slug)
+        return (
+            _tag_panel(request, show)
+            if request.headers.get("X-Requested-With") == "fetch"
+            else redirect("shows:detail", slug=slug)
+        )
 
     key = slugify(name)
     if not key:
         # Nothing survived slugification, so there is no stable handle to store.
-        return _tag_panel(request, show) if request.headers.get(
-            "X-Requested-With") == "fetch" else redirect("shows:detail", slug=slug)
+        return (
+            _tag_panel(request, show)
+            if request.headers.get("X-Requested-With") == "fetch"
+            else redirect("shows:detail", slug=slug)
+        )
 
     # Match on the slug, not the name: "Slow Burn" and "slow burn" are the same
     # tag, and letting both exist splits the signal personalization reads.
@@ -607,9 +614,7 @@ def my_ratings(request):
         {
             "shows": shows,
             "rating_count": len(shows),
-            "average_score": (
-                sum(s.user_score for s in shows) / len(shows) if shows else None
-            ),
+            "average_score": (sum(s.user_score for s in shows) / len(shows) if shows else None),
             "tags": tags,
             "tagged_count": sum(t.uses for t in tags),
         },
@@ -649,15 +654,11 @@ def rate(request, slug):
     else:
         try:
             score = float(request.POST.get("score", ""))
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return HttpResponseBadRequest("Rating must be a number.")
         if score not in VALID_SCORES:
-            return HttpResponseBadRequest(
-                "Rating must be a half-star step between 0.5 and 5.0."
-            )
-        Rating.objects.update_or_create(
-            user=request.user, show=show, defaults={"score": score}
-        )
+            return HttpResponseBadRequest("Rating must be a half-star step between 0.5 and 5.0.")
+        Rating.objects.update_or_create(user=request.user, show=show, defaults={"score": score})
 
     # The widget asked to stay where it is (ADR-10). Answer with the score it
     # should light and the re-rendered average line, so the wording of that
@@ -669,17 +670,19 @@ def rate(request, slug):
     # either way: removing a rating moves the average exactly as adding one
     # does, and on the last rating it changes the sentence entirely.
     if request.headers.get("X-Requested-With") == "fetch":
-        return JsonResponse({
-            "score": score,
-            "meta_html": render_to_string(
-                "shows/_rate_meta.html",
-                {
-                    "average_rating": show.average_rating,
-                    "rating_count": show.ratings.count(),
-                },
-                request=request,
-            ),
-        })
+        return JsonResponse(
+            {
+                "score": score,
+                "meta_html": render_to_string(
+                    "shows/_rate_meta.html",
+                    {
+                        "average_rating": show.average_rating,
+                        "rating_count": show.ratings.count(),
+                    },
+                    request=request,
+                ),
+            }
+        )
 
     if score is None:
         messages.success(request, f"Cleared your rating for {show.name}.")

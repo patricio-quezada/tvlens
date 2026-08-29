@@ -98,7 +98,7 @@ class ParsedQuery:
 
     def __init__(self, raw):
         self.raw = (raw or "").strip()
-        self.fields = []      # [(branch, term)] - ANDed
+        self.fields = []  # [(branch, term)] - ANDed
         self.year = None
         self.year_to = None
         self.season = None
@@ -107,7 +107,7 @@ class ParsedQuery:
         self.min_score = None
         self.max_score = None
         self.min_votes = None
-        self.unknown = []     # operators nobody recognised, echoed back
+        self.unknown = []  # operators nobody recognised, echoed back
 
         rest = self._take_operators(self.raw)
 
@@ -191,18 +191,34 @@ class ParsedQuery:
         costs the most to find out. Refusing has to be distinguishable from an
         empty box, because the reader typed and deserves to be told why.
         """
-        return bool(self.text) and not self.searchable_text and not (
-            self.fields or self.year or self.season or self.language
-            or self.status or self.min_score is not None
-            or self.max_score is not None or self.min_votes is not None
+        return (
+            bool(self.text)
+            and not self.searchable_text
+            and not (
+                self.fields
+                or self.year
+                or self.season
+                or self.language
+                or self.status
+                or self.min_score is not None
+                or self.max_score is not None
+                or self.min_votes is not None
+            )
         )
 
     @property
     def is_empty(self):
-        return not (self.text or self.fields or self.year or self.season
-                    or self.language or self.status
-                    or self.min_score is not None or self.max_score is not None
-                    or self.min_votes is not None)
+        return not (
+            self.text
+            or self.fields
+            or self.year
+            or self.season
+            or self.language
+            or self.status
+            or self.min_score is not None
+            or self.max_score is not None
+            or self.min_votes is not None
+        )
 
     @property
     def searchable_text(self):
@@ -261,7 +277,7 @@ def _shows_via_people(term, relation, extra=None):
         return set()
     found = set()
     for start in range(0, len(person_ids), SQLITE_MAX_VARS_SAFE):
-        batch = person_ids[start:start + SQLITE_MAX_VARS_SAFE]
+        batch = person_ids[start : start + SQLITE_MAX_VARS_SAFE]
         queryset = Show.objects.filter(**{f"{relation}__person_id__in": batch}, **(extra or {}))
         found |= _ids(queryset)
     return found
@@ -278,24 +294,20 @@ def _branch(name, term, main_cast_only=False):
     """
     lead = {"cast__order__lt": 10} if main_cast_only else {}
     queries = {
-        "title": lambda: Show.objects.filter(
-            _word("name", term) | _word("original_name", term)),
+        "title": lambda: Show.objects.filter(_word("name", term) | _word("original_name", term)),
         "cast": lambda: _shows_via_people(term, "cast", lead),
         "crew": lambda: _shows_via_people(term, "crew"),
-        "character": lambda: Show.objects.filter(
-            _word("cast__character", term), **lead),
+        "character": lambda: Show.objects.filter(_word("cast__character", term), **lead),
         "genre": lambda: Show.objects.filter(_word("genres__name", term)),
         "network": lambda: Show.objects.filter(_word("networks__name", term)),
-        "blurb": lambda: Show.objects.filter(
-            _word("overview", term) | _word("tagline", term)),
+        "blurb": lambda: Show.objects.filter(_word("overview", term) | _word("tagline", term)),
         # Boilerplate season names stay searchable at Patricio's call, so
         # "Thousand-Year Blood War" finds Bleach. Ranked low because most of
         # the 141 distinct names read "Season 3".
         "season_name": lambda: Show.objects.filter(_word("seasons__name", term)),
         # The deepest branch. Synopsis only: episode titles were cut
         # deliberately, they are short, generic and mostly noise.
-        "episode": lambda: Show.objects.filter(
-            _word("seasons__episodes__overview", term)),
+        "episode": lambda: Show.objects.filter(_word("seasons__episodes__overview", term)),
         # A reader's own vocabulary, not TMDb's. Ranked with genre and network
         # because a tag is the same kind of claim about a show.
         "tag": lambda: Show.objects.filter(_word("user_tags__tag__name", term)),
@@ -346,16 +358,11 @@ def suggest(term):
     first = term[0]
     names = list(
         Show.objects.filter(_word("name", first)).values_list("name", flat=True)[:2000]
-    ) + list(
-        Person.objects.filter(_word("name", first)).values_list("name", flat=True)[:8000]
-    )
+    ) + list(Person.objects.filter(_word("name", first)).values_list("name", flat=True)[:8000])
 
     span = len(term)
     words = {
-        piece
-        for name in names
-        for piece in [name, *name.split()]
-        if abs(len(piece) - span) <= 4
+        piece for name in names for piece in [name, *name.split()] if abs(len(piece) - span) <= 4
     }
 
     close = get_close_matches(term, list(words), n=6, cutoff=FUZZY_FLOOR)
@@ -379,9 +386,17 @@ def suggest(term):
     )
 
 
-
-def search(raw_query, *, status="", min_score=None, min_votes=None,
-           language="", main_cast_only=False, limit=120, fuzzy=True):
+def search(
+    raw_query,
+    *,
+    status="",
+    min_score=None,
+    min_votes=None,
+    language="",
+    main_cast_only=False,
+    limit=120,
+    fuzzy=True,
+):
     """Run a catalog search and return (shows, parsed).
 
     Free text ORs across every branch and is ranked. Field operators AND
@@ -414,9 +429,14 @@ def search(raw_query, *, status="", min_score=None, min_votes=None,
                 if near and near.lower() != term.lower():
                     corrected = raw_query.replace(term, near)
                     shows, reparsed = search(
-                        corrected, status=status, min_score=min_score,
-                        min_votes=min_votes, language=language,
-                        main_cast_only=main_cast_only, limit=limit, fuzzy=False,
+                        corrected,
+                        status=status,
+                        min_score=min_score,
+                        min_votes=min_votes,
+                        language=language,
+                        main_cast_only=main_cast_only,
+                        limit=limit,
+                        fuzzy=False,
                     )
                     if shows:
                         reparsed.suggestion = near

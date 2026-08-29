@@ -96,7 +96,7 @@ class SimilarByPeopleTests(TestCase):
         CastMember.objects.create(show=self.a, person=self.p, episode_count=100)
         CastMember.objects.create(show=self.b, person=self.p, episode_count=10)
         [r] = similar_by_people(self.a)
-        self.assertAlmostEqual(r.score, 0.25 ** INVOLVEMENT_EXPONENT)
+        self.assertAlmostEqual(r.score, 0.25**INVOLVEMENT_EXPONENT)
         self.assertLess(r.score, 1.0)
 
     def test_involvement_weight_is_superlinear_not_proportional(self):
@@ -113,12 +113,10 @@ class SimilarByPeopleTests(TestCase):
         # source share is 1.0 and the edge is B's 0.25. Taking the cast count
         # instead would score min(0.2, 0.25) = 0.2 and this would fail.
         CastMember.objects.create(show=self.a, person=self.p, episode_count=20)
-        CrewMember.objects.create(
-            show=self.a, person=self.p, job="Director", episode_count=100
-        )
+        CrewMember.objects.create(show=self.a, person=self.p, job="Director", episode_count=100)
         CastMember.objects.create(show=self.b, person=self.p, episode_count=10)
         [r] = similar_by_people(self.a)
-        self.assertAlmostEqual(r.score, 0.25 ** INVOLVEMENT_EXPONENT)
+        self.assertAlmostEqual(r.score, 0.25**INVOLVEMENT_EXPONENT)
         self.assertEqual(r.shared_people, 1)
 
     def test_null_episode_count_is_shared_but_weighs_zero(self):
@@ -128,20 +126,14 @@ class SimilarByPeopleTests(TestCase):
         self.assertEqual((r.score, r.shared_people), (0.0, 1))
 
     def test_service_job_excluded_on_candidate_side(self):
-        CrewMember.objects.create(
-            show=self.a, person=self.p, job="Writer", episode_count=100
-        )
-        CrewMember.objects.create(
-            show=self.b, person=self.p, job="Casting", episode_count=40
-        )
+        CrewMember.objects.create(show=self.a, person=self.p, job="Writer", episode_count=100)
+        CrewMember.objects.create(show=self.b, person=self.p, job="Casting", episode_count=40)
         self.assertEqual(similar_by_people(self.a), [])
 
     def test_service_job_variant_excluded(self):
         # The 2026-08-06 review found eight casting variants leaking past the
         # original list. Freeze one of them.
-        CrewMember.objects.create(
-            show=self.a, person=self.p, job="Writer", episode_count=100
-        )
+        CrewMember.objects.create(show=self.a, person=self.p, job="Writer", episode_count=100)
         CrewMember.objects.create(
             show=self.b, person=self.p, job="Extras Casting", episode_count=40
         )
@@ -153,12 +145,8 @@ class SimilarByPeopleTests(TestCase):
         # graded the full run of both put Marvel's Daredevil first on
         # Elementary; under the involvement exponent that one credit decides
         # the ranking, so the widened list has to hold.
-        CrewMember.objects.create(
-            show=self.a, person=self.p, job="Writer", episode_count=100
-        )
-        CrewMember.objects.create(
-            show=self.b, person=self.p, job="Colorist", episode_count=40
-        )
+        CrewMember.objects.create(show=self.a, person=self.p, job="Writer", episode_count=100)
+        CrewMember.objects.create(show=self.b, person=self.p, job="Colorist", episode_count=40)
         self.assertEqual(similar_by_people(self.a), [])
 
     def test_composing_is_not_a_facility_job(self):
@@ -166,11 +154,15 @@ class SimilarByPeopleTests(TestCase):
         # draws: music SERVICE is excluded, composition is not. A score is
         # authorial, and MARQUEE_JOBS already treats it as show-defining.
         CrewMember.objects.create(
-            show=self.a, person=self.p, job="Original Music Composer",
+            show=self.a,
+            person=self.p,
+            job="Original Music Composer",
             episode_count=100,
         )
         CrewMember.objects.create(
-            show=self.b, person=self.p, job="Original Music Composer",
+            show=self.b,
+            person=self.p,
+            job="Original Music Composer",
             episode_count=40,
         )
         [r] = similar_by_people(self.a)
@@ -221,16 +213,28 @@ class SimilarByPeopleTests(TestCase):
         self.a.number_of_episodes = 0
         self.a.save()
         lead = Show.objects.create(
-            tmdb_id=3, name="Lead", number_of_episodes=10,
-            vote_average=6.0, vote_count=100, popularity=1.0,
+            tmdb_id=3,
+            name="Lead",
+            number_of_episodes=10,
+            vote_average=6.0,
+            vote_count=100,
+            popularity=1.0,
         )
         half = Show.objects.create(
-            tmdb_id=4, name="Half", number_of_episodes=10,
-            vote_average=7.0, vote_count=100, popularity=50.0,
+            tmdb_id=4,
+            name="Half",
+            number_of_episodes=10,
+            vote_average=7.0,
+            vote_count=100,
+            popularity=50.0,
         )
         cameo = Show.objects.create(
-            tmdb_id=5, name="Cameo", number_of_episodes=10,
-            vote_average=9.9, vote_count=9000, popularity=99.0,
+            tmdb_id=5,
+            name="Cameo",
+            number_of_episodes=10,
+            vote_average=9.9,
+            vote_count=9000,
+            popularity=99.0,
         )
         CastMember.objects.create(show=self.a, person=self.p, episode_count=5)
         CastMember.objects.create(show=lead, person=self.p, episode_count=10)
@@ -246,8 +250,8 @@ class SimilarByPeopleTests(TestCase):
         # The exponent is monotonic, so it cannot change this order and only a
         # value assertion can catch its absence here.
         by_name = {s.name: s for s in results}
-        self.assertAlmostEqual(by_name["Half"].estimate, 0.5 ** INVOLVEMENT_EXPONENT)
-        self.assertAlmostEqual(by_name["Cameo"].estimate, 0.1 ** INVOLVEMENT_EXPONENT)
+        self.assertAlmostEqual(by_name["Half"].estimate, 0.5**INVOLVEMENT_EXPONENT)
+        self.assertAlmostEqual(by_name["Cameo"].estimate, 0.1**INVOLVEMENT_EXPONENT)
         self.assertLess(by_name["Cameo"].estimate, 0.1)
 
     def test_estimate_ties_break_on_rating_then_votes(self):
@@ -258,16 +262,28 @@ class SimilarByPeopleTests(TestCase):
         self.a.number_of_episodes = 0
         self.a.save()
         grail = Show.objects.create(
-            tmdb_id=3, name="Grail", number_of_episodes=10,
-            vote_average=9.5, vote_count=9000, popularity=1.0,
+            tmdb_id=3,
+            name="Grail",
+            number_of_episodes=10,
+            vote_average=9.5,
+            vote_count=9000,
+            popularity=1.0,
         )
         ties = Show.objects.create(
-            tmdb_id=4, name="Ties", number_of_episodes=10,
-            vote_average=8.9, vote_count=10000, popularity=50.0,
+            tmdb_id=4,
+            name="Ties",
+            number_of_episodes=10,
+            vote_average=8.9,
+            vote_count=10000,
+            popularity=50.0,
         )
         loud = Show.objects.create(
-            tmdb_id=5, name="Loud", number_of_episodes=10,
-            vote_average=8.9, vote_count=3, popularity=99.0,
+            tmdb_id=5,
+            name="Loud",
+            number_of_episodes=10,
+            vote_average=8.9,
+            vote_count=3,
+            popularity=99.0,
         )
         CastMember.objects.create(show=self.a, person=self.p, episode_count=5)
         for other in (grail, ties, loud):
@@ -282,12 +298,20 @@ class SimilarByPeopleTests(TestCase):
         # rung ranks by TMDb rating, per the original ADR-05 decision.
         ghost = Person.objects.create(tmdb_id=2, name="Ghost")
         low = Show.objects.create(
-            tmdb_id=3, name="Low", number_of_episodes=10,
-            vote_average=6.0, vote_count=100, popularity=99.0,
+            tmdb_id=3,
+            name="Low",
+            number_of_episodes=10,
+            vote_average=6.0,
+            vote_count=100,
+            popularity=99.0,
         )
         high = Show.objects.create(
-            tmdb_id=4, name="High", number_of_episodes=10,
-            vote_average=9.0, vote_count=100, popularity=1.0,
+            tmdb_id=4,
+            name="High",
+            number_of_episodes=10,
+            vote_average=9.0,
+            vote_count=100,
+            popularity=1.0,
         )
         CastMember.objects.create(show=self.a, person=ghost, episode_count=None)
         CastMember.objects.create(show=low, person=ghost, episode_count=None)
@@ -301,8 +325,12 @@ class SimilarByPeopleTests(TestCase):
         # order is score then popularity, even when the zero-scored candidate
         # has the better rating.
         rated = Show.objects.create(
-            tmdb_id=3, name="Rated", number_of_episodes=10,
-            vote_average=9.9, vote_count=10000, popularity=99.0,
+            tmdb_id=3,
+            name="Rated",
+            number_of_episodes=10,
+            vote_average=9.9,
+            vote_count=10000,
+            popularity=99.0,
         )
         ghost = Person.objects.create(tmdb_id=2, name="Ghost")
         CastMember.objects.create(show=self.a, person=self.p, episode_count=5)
@@ -336,20 +364,14 @@ class InvolvementExponentTests(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.seed = Show.objects.create(
-            tmdb_id=1, name="Seed", number_of_episodes=100
-        )
+        cls.seed = Show.objects.create(tmdb_id=1, name="Seed", number_of_episodes=100)
         # One shared co-lead, the whole run of both shows.
         cls.quality = Show.objects.create(
             tmdb_id=2, name="Quality", number_of_episodes=100, popularity=1.0
         )
         colead = Person.objects.create(tmdb_id=1, name="Co-Lead")
-        CastMember.objects.create(
-            show=cls.seed, person=colead, episode_count=100
-        )
-        CastMember.objects.create(
-            show=cls.quality, person=colead, episode_count=100
-        )
+        CastMember.objects.create(show=cls.seed, person=colead, episode_count=100)
+        CastMember.objects.create(show=cls.quality, person=colead, episode_count=100)
 
         # Three hundred shared guests, one episode each on both sides.
         cls.crowd = Show.objects.create(
@@ -400,9 +422,7 @@ class InvolvementExponentTests(TestCase):
         # drop its source a rung, changing the candidate set and not just the
         # order. Measured across all 37,950 candidate edges in the catalog,
         # none reaches 0.0; the smallest is 9.6e-06.
-        thin = Show.objects.create(
-            tmdb_id=4, name="Thin", number_of_episodes=100
-        )
+        thin = Show.objects.create(tmdb_id=4, name="Thin", number_of_episodes=100)
         walk_on = Person.objects.create(tmdb_id=9000, name="Walk On")
         CastMember.objects.create(show=self.seed, person=walk_on, episode_count=1)
         CastMember.objects.create(show=thin, person=walk_on, episode_count=1)
@@ -423,8 +443,7 @@ class SlugTests(TestCase):
         a = Show.objects.create(tmdb_id=101, name="The Office")
         b = Show.objects.create(tmdb_id=102, name="The Office")
         c = Show.objects.create(tmdb_id=103, name="The Office")
-        self.assertEqual([a.slug, b.slug, c.slug],
-                         ["the-office", "the-office-2", "the-office-3"])
+        self.assertEqual([a.slug, b.slug, c.slug], ["the-office", "the-office-2", "the-office-3"])
 
     def test_slug_is_stable_when_name_changes(self):
         s = Show.objects.create(tmdb_id=104, name="Original Name")
@@ -448,20 +467,26 @@ class SharedConnectionsTests(TestCase):
 
     def _connections(self):
         return shared_connections(
-            self.source, role_index(self.source),
-            self.cand, role_index(self.cand),
+            self.source,
+            role_index(self.source),
+            self.cand,
+            role_index(self.cand),
         )
 
     def test_contribution_orders_edges_and_count_matches_recommender(self):
         # Lead is in all of both (1.0); the extra shares one episode (0.1).
-        CastMember.objects.create(show=self.source, person=self.lead, order=0,
-                                  character="Hero", episode_count=10)
-        CastMember.objects.create(show=self.cand, person=self.lead, order=0,
-                                  character="Hero", episode_count=10)
-        CastMember.objects.create(show=self.source, person=self.extra, order=600,
-                                  character="Waiter", episode_count=1)
-        CastMember.objects.create(show=self.cand, person=self.extra, order=600,
-                                  character="Waiter", episode_count=1)
+        CastMember.objects.create(
+            show=self.source, person=self.lead, order=0, character="Hero", episode_count=10
+        )
+        CastMember.objects.create(
+            show=self.cand, person=self.lead, order=0, character="Hero", episode_count=10
+        )
+        CastMember.objects.create(
+            show=self.source, person=self.extra, order=600, character="Waiter", episode_count=1
+        )
+        CastMember.objects.create(
+            show=self.cand, person=self.extra, order=600, character="Waiter", episode_count=1
+        )
         conns = self._connections()
         self.assertEqual([c.name for c in conns], ["Lead Actor", "Bit Player"])
         self.assertAlmostEqual(conns[0].contribution, 1.0)
@@ -470,18 +495,24 @@ class SharedConnectionsTests(TestCase):
         self.assertEqual(len(conns), ranked.shared_people)
 
     def test_named_leads_with_cast_names_marquee_and_counts_the_rest(self):
-        CastMember.objects.create(show=self.source, person=self.lead, order=0,
-                                  character="Hero", episode_count=10)
-        CastMember.objects.create(show=self.cand, person=self.lead, order=0,
-                                  character="Hero", episode_count=10)
-        CrewMember.objects.create(show=self.source, person=self.maker,
-                                  job="Creator", episode_count=10)
-        CrewMember.objects.create(show=self.cand, person=self.maker,
-                                  job="Creator", episode_count=10)
-        CastMember.objects.create(show=self.source, person=self.extra, order=600,
-                                  character="Waiter", episode_count=1)
-        CastMember.objects.create(show=self.cand, person=self.extra, order=600,
-                                  character="Waiter", episode_count=1)
+        CastMember.objects.create(
+            show=self.source, person=self.lead, order=0, character="Hero", episode_count=10
+        )
+        CastMember.objects.create(
+            show=self.cand, person=self.lead, order=0, character="Hero", episode_count=10
+        )
+        CrewMember.objects.create(
+            show=self.source, person=self.maker, job="Creator", episode_count=10
+        )
+        CrewMember.objects.create(
+            show=self.cand, person=self.maker, job="Creator", episode_count=10
+        )
+        CastMember.objects.create(
+            show=self.source, person=self.extra, order=600, character="Waiter", episode_count=1
+        )
+        CastMember.objects.create(
+            show=self.cand, person=self.extra, order=600, character="Waiter", episode_count=1
+        )
         named, others = name_connections(self._connections())
         # Recognizable actor first (by character), then the marquee creator.
         self.assertEqual([c.name for c in named], ["Lead Actor", "The Maker"])
@@ -494,22 +525,27 @@ class SharedConnectionsTests(TestCase):
     def test_recognizable_actor_named_by_character_even_when_also_crew(self):
         # A lead who also directed an episode is still named by their role,
         # not the directing credit (pitch by cast).
-        CastMember.objects.create(show=self.source, person=self.lead, order=0,
-                                  character="Hero", episode_count=10)
-        CrewMember.objects.create(show=self.source, person=self.lead,
-                                  job="Director", episode_count=2)
-        CastMember.objects.create(show=self.cand, person=self.lead, order=0,
-                                  character="Hero", episode_count=10)
+        CastMember.objects.create(
+            show=self.source, person=self.lead, order=0, character="Hero", episode_count=10
+        )
+        CrewMember.objects.create(
+            show=self.source, person=self.lead, job="Director", episode_count=2
+        )
+        CastMember.objects.create(
+            show=self.cand, person=self.lead, order=0, character="Hero", episode_count=10
+        )
         [c] = self._connections()
         self.assertEqual((c.kind, c.role), ("cast", "Hero"))
 
     def test_falls_back_to_strongest_edges_when_nothing_is_prominent(self):
         # Only a shared bit player: no recognizable cast, no marquee crew.
         # The callout still names someone rather than a bare count.
-        CastMember.objects.create(show=self.source, person=self.extra, order=600,
-                                  character="Waiter", episode_count=5)
-        CastMember.objects.create(show=self.cand, person=self.extra, order=600,
-                                  character="Waiter", episode_count=5)
+        CastMember.objects.create(
+            show=self.source, person=self.extra, order=600, character="Waiter", episode_count=5
+        )
+        CastMember.objects.create(
+            show=self.cand, person=self.extra, order=600, character="Waiter", episode_count=5
+        )
         named, others = name_connections(self._connections())
         self.assertEqual([c.name for c in named], ["Bit Player"])
         self.assertEqual(others, 0)
@@ -518,14 +554,18 @@ class SharedConnectionsTests(TestCase):
         # A composer on every episode of both (1.0) outscores a recognizable
         # lead who only guested (0.2). Name-by-score names the composer first,
         # cast and crew merged in one order, not the cast first by prominence.
-        CastMember.objects.create(show=self.source, person=self.lead, order=0,
-                                  character="Hero", episode_count=2)
-        CastMember.objects.create(show=self.cand, person=self.lead, order=0,
-                                  character="Hero", episode_count=2)
-        CrewMember.objects.create(show=self.source, person=self.maker,
-                                  job="Original Music Composer", episode_count=10)
-        CrewMember.objects.create(show=self.cand, person=self.maker,
-                                  job="Original Music Composer", episode_count=10)
+        CastMember.objects.create(
+            show=self.source, person=self.lead, order=0, character="Hero", episode_count=2
+        )
+        CastMember.objects.create(
+            show=self.cand, person=self.lead, order=0, character="Hero", episode_count=2
+        )
+        CrewMember.objects.create(
+            show=self.source, person=self.maker, job="Original Music Composer", episode_count=10
+        )
+        CrewMember.objects.create(
+            show=self.cand, person=self.maker, job="Original Music Composer", episode_count=10
+        )
         named, others = name_connections(self._connections())
         self.assertEqual([c.name for c in named], ["The Maker", "Lead Actor"])
         self.assertGreater(named[0].contribution, named[1].contribution)
@@ -538,10 +578,8 @@ class CalloutProseTests(TestCase):
 
     def setUp(self):
         # A short source and candidate so 'every episode' is easy to trigger.
-        self.source = Show.objects.create(tmdb_id=1, name="Source",
-                                          number_of_episodes=62)
-        self.cand = Show.objects.create(tmdb_id=2, name="Cand",
-                                        number_of_episodes=63)
+        self.source = Show.objects.create(tmdb_id=1, name="Source", number_of_episodes=62)
+        self.cand = Show.objects.create(tmdb_id=2, name="Cand", number_of_episodes=63)
         self._pid = 10
 
     def _person(self, name):
@@ -549,17 +587,19 @@ class CalloutProseTests(TestCase):
         return Person.objects.create(tmdb_id=self._pid, name=name)
 
     def _cast(self, show, person, order, character, eps):
-        CastMember.objects.create(show=show, person=person, order=order,
-                                  character=character, episode_count=eps)
+        CastMember.objects.create(
+            show=show, person=person, order=order, character=character, episode_count=eps
+        )
 
     def _crew(self, show, person, job, eps):
-        CrewMember.objects.create(show=show, person=person, job=job,
-                                  episode_count=eps)
+        CrewMember.objects.create(show=show, person=person, job=job, episode_count=eps)
 
     def _callout(self):
         conns = shared_connections(
-            self.source, role_index(self.source),
-            self.cand, role_index(self.cand),
+            self.source,
+            role_index(self.source),
+            self.cand,
+            role_index(self.cand),
         )
         named, others = name_connections(conns)
         return compose_callout(self.source, self.cand, conns, named, others)
@@ -580,8 +620,7 @@ class CalloutProseTests(TestCase):
         lead = self._person("Aaron Paul")
         self._cast(self.source, lead, 0, "Jesse Pinkman", 62)
         self._cast(self.cand, lead, 0, "Jesse Pinkman", 20)
-        self.assertIn("plays Jesse Pinkman in all 62 episodes",
-                      self._text(self._callout()))
+        self.assertIn("plays Jesse Pinkman in all 62 episodes", self._text(self._callout()))
 
     def test_composer_on_every_episode_of_both_is_named_so(self):
         p = self._person("Dave Porter")
@@ -602,7 +641,7 @@ class CalloutProseTests(TestCase):
     def test_no_lead_phrase_in_callout(self):
         # Editorial leads are gone (decided 2026-08-14): the callout carries no
         # 'lead' key and never prefixes a header, whatever the connection profile.
-        maker = self._person("The Creator")   # would once have led "Made by..."
+        maker = self._person("The Creator")  # would once have led "Made by..."
         self._crew(self.source, maker, "Creator", 62)
         self._crew(self.cand, maker, "Creator", 63)
         callout = self._callout()
@@ -672,16 +711,21 @@ class ShowDetailViewTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.source = Show.objects.create(
-            tmdb_id=1, name="Source Show", number_of_episodes=10,
-            tagline="A tagline.", vote_average=8.9, vote_count=1234,
+            tmdb_id=1,
+            name="Source Show",
+            number_of_episodes=10,
+            tagline="A tagline.",
+            vote_average=8.9,
+            vote_count=1234,
         )
-        cls.cand = Show.objects.create(tmdb_id=2, name="Candidate Show",
-                                       number_of_episodes=10)
+        cls.cand = Show.objects.create(tmdb_id=2, name="Candidate Show", number_of_episodes=10)
         lead = Person.objects.create(tmdb_id=1, name="Jane Star")
-        CastMember.objects.create(show=cls.source, person=lead, order=0,
-                                  character="The Detective", episode_count=10)
-        CastMember.objects.create(show=cls.cand, person=lead, order=0,
-                                  character="The Detective", episode_count=10)
+        CastMember.objects.create(
+            show=cls.source, person=lead, order=0, character="The Detective", episode_count=10
+        )
+        CastMember.objects.create(
+            show=cls.cand, person=lead, order=0, character="The Detective", episode_count=10
+        )
         # The detail view now serves the ranking from the materialized store
         # (ADR-07), so populate it before exercising the page.
         call_command("rebuild_similar_shows", stdout=StringIO())
@@ -702,9 +746,7 @@ class ShowDetailViewTests(TestCase):
         self.assertEqual(self.source.get_absolute_url(), "/shows/source-show/")
 
     def test_unknown_slug_returns_404(self):
-        self.assertEqual(
-            self.client.get(reverse("shows:detail", args=["nope"])).status_code, 404
-        )
+        self.assertEqual(self.client.get(reverse("shows:detail", args=["nope"])).status_code, 404)
 
 
 class StoredSimilarTests(TestCase):
@@ -720,40 +762,39 @@ class StoredSimilarTests(TestCase):
         # player with C, so Src has two ranked edges. Lonely shares its one
         # person with no one, so it has zero edges.
         cls.src = Show.objects.create(tmdb_id=1, name="Src", number_of_episodes=10)
-        cls.b = Show.objects.create(
-            tmdb_id=2, name="Bshow", number_of_episodes=10, popularity=5.0
-        )
-        cls.c = Show.objects.create(
-            tmdb_id=3, name="Cshow", number_of_episodes=10, popularity=1.0
-        )
-        cls.lonely = Show.objects.create(
-            tmdb_id=9, name="Lonely", number_of_episodes=10
-        )
+        cls.b = Show.objects.create(tmdb_id=2, name="Bshow", number_of_episodes=10, popularity=5.0)
+        cls.c = Show.objects.create(tmdb_id=3, name="Cshow", number_of_episodes=10, popularity=1.0)
+        cls.lonely = Show.objects.create(tmdb_id=9, name="Lonely", number_of_episodes=10)
         lead = Person.objects.create(tmdb_id=1, name="Lead Actor")
         side = Person.objects.create(tmdb_id=2, name="Side Player")
         hermit = Person.objects.create(tmdb_id=3, name="Hermit")
         # Lead: all of Src and all of B -> strong edge (1.0).
-        CastMember.objects.create(show=cls.src, person=lead, order=0,
-                                  character="Hero", episode_count=10)
-        CastMember.objects.create(show=cls.b, person=lead, order=0,
-                                  character="Hero", episode_count=10)
+        CastMember.objects.create(
+            show=cls.src, person=lead, order=0, character="Hero", episode_count=10
+        )
+        CastMember.objects.create(
+            show=cls.b, person=lead, order=0, character="Hero", episode_count=10
+        )
         # Side: all of Src, two episodes of C -> weaker edge (0.2).
-        CastMember.objects.create(show=cls.src, person=side, order=1,
-                                  character="Rival", episode_count=10)
-        CastMember.objects.create(show=cls.c, person=side, order=1,
-                                  character="Rival", episode_count=2)
-        CastMember.objects.create(show=cls.lonely, person=hermit, order=0,
-                                  character="Alone", episode_count=10)
+        CastMember.objects.create(
+            show=cls.src, person=side, order=1, character="Rival", episode_count=10
+        )
+        CastMember.objects.create(
+            show=cls.c, person=side, order=1, character="Rival", episode_count=2
+        )
+        CastMember.objects.create(
+            show=cls.lonely, person=hermit, order=0, character="Alone", episode_count=10
+        )
 
         # A zero-episode source ranks by the candidate side: mode "estimated".
-        cls.blank = Show.objects.create(
-            tmdb_id=4, name="Blank", number_of_episodes=0
-        )
+        cls.blank = Show.objects.create(tmdb_id=4, name="Blank", number_of_episodes=0)
         traveler = Person.objects.create(tmdb_id=4, name="Traveler")
-        CastMember.objects.create(show=cls.blank, person=traveler, order=0,
-                                  character="Wanderer", episode_count=5)
-        CastMember.objects.create(show=cls.b, person=traveler, order=2,
-                                  character="Wanderer", episode_count=5)
+        CastMember.objects.create(
+            show=cls.blank, person=traveler, order=0, character="Wanderer", episode_count=5
+        )
+        CastMember.objects.create(
+            show=cls.b, person=traveler, order=2, character="Wanderer", episode_count=5
+        )
 
         call_command("rebuild_similar_shows", stdout=StringIO())
 
@@ -778,7 +819,7 @@ class StoredSimilarTests(TestCase):
         # involvement weight (ADR-04, amended 2026-08-26). Asserted against the
         # constant because what the store owes the live recommender is the same
         # number, whatever that number is.
-        self.assertAlmostEqual(stored[1].score, 0.2 ** INVOLVEMENT_EXPONENT)
+        self.assertAlmostEqual(stored[1].score, 0.2**INVOLVEMENT_EXPONENT)
         self._assertMatchesLive(self.src)
 
     def test_stored_matches_live_for_a_second_source(self):
@@ -801,11 +842,7 @@ class StoredSimilarTests(TestCase):
         self.assertEqual(stored.mode, "estimated")
         self.assertEqual([s.pk for s in stored], [s.pk for s in live])
         # The denormalized mode is written onto every one of the source's edges.
-        modes = set(
-            SimilarShow.objects.filter(source=self.blank).values_list(
-                "mode", flat=True
-            )
-        )
+        modes = set(SimilarShow.objects.filter(source=self.blank).values_list("mode", flat=True))
         self.assertEqual(modes, {"estimated"})
 
     def test_detail_page_renders_from_the_stored_edges(self):
@@ -821,8 +858,12 @@ class StoredSimilarTests(TestCase):
     def test_rebuild_is_wholesale_replacing_stale_edges(self):
         # A stale edge left by a prior build must not survive the next rebuild.
         SimilarShow.objects.create(
-            source=self.lonely, target=self.src, rank=0, score=9.9,
-            shared_people=1, mode="weighted",
+            source=self.lonely,
+            target=self.src,
+            rank=0,
+            score=9.9,
+            shared_people=1,
+            mode="weighted",
         )
         call_command("rebuild_similar_shows", stdout=StringIO())
         self.assertEqual(SimilarShow.objects.filter(source=self.lonely).count(), 0)
@@ -840,15 +881,9 @@ class SqlVariableCeilingTests(TestCase):
         # Comfortably past two chunk boundaries so the people-side fold has to
         # merge across batches, and far past the old 999 SQLite floor.
         n = 2 * SQLITE_MAX_VARS_SAFE + 5
-        cls.src = Show.objects.create(
-            tmdb_id=1, name="Src", number_of_episodes=100
-        )
-        cls.cand = Show.objects.create(
-            tmdb_id=2, name="Cand", number_of_episodes=100
-        )
-        Person.objects.bulk_create(
-            [Person(tmdb_id=1000 + i, name=f"P{i}") for i in range(n)]
-        )
+        cls.src = Show.objects.create(tmdb_id=1, name="Src", number_of_episodes=100)
+        cls.cand = Show.objects.create(tmdb_id=2, name="Cand", number_of_episodes=100)
+        Person.objects.bulk_create([Person(tmdb_id=1000 + i, name=f"P{i}") for i in range(n)])
         people = list(Person.objects.all())
         CastMember.objects.bulk_create(
             [CastMember(show=cls.src, person=p, episode_count=100) for p in people]
@@ -857,16 +892,10 @@ class SqlVariableCeilingTests(TestCase):
             [CastMember(show=cls.cand, person=p, episode_count=100) for p in people]
         )
         CrewMember.objects.bulk_create(
-            [
-                CrewMember(show=cls.src, person=p, job="Writer", episode_count=100)
-                for p in people
-            ]
+            [CrewMember(show=cls.src, person=p, job="Writer", episode_count=100) for p in people]
         )
         CrewMember.objects.bulk_create(
-            [
-                CrewMember(show=cls.cand, person=p, job="Writer", episode_count=100)
-                for p in people
-            ]
+            [CrewMember(show=cls.cand, person=p, job="Writer", episode_count=100) for p in people]
         )
         cls.n = n
 
@@ -902,19 +931,13 @@ class RatingTests(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.show = Show.objects.create(
-            tmdb_id=1, name="Rated Show", number_of_episodes=10
-        )
-        cls.other = Show.objects.create(
-            tmdb_id=2, name="Other Show", number_of_episodes=10
-        )
+        cls.show = Show.objects.create(tmdb_id=1, name="Rated Show", number_of_episodes=10)
+        cls.other = Show.objects.create(tmdb_id=2, name="Other Show", number_of_episodes=10)
         cls.alice = User.objects.create_user("alice", password="pw-alice-123")
         cls.bob = User.objects.create_user("bob", password="pw-bob-123")
 
     def _rate(self, show, score):
-        return self.client.post(
-            reverse("shows:rate", args=[show.slug]), {"score": score}
-        )
+        return self.client.post(reverse("shows:rate", args=[show.slug]), {"score": score})
 
     def _rate_in_place(self, show, score):
         return self.client.post(
@@ -935,9 +958,7 @@ class RatingTests(TestCase):
         # its wording is never duplicated in JavaScript.
         self.assertIn("★ 4.0", payload["meta_html"])
         self.assertIn("1 rating on TVLens", payload["meta_html"])
-        self.assertEqual(
-            Rating.objects.get(user=self.alice, show=self.show).score, 4.0
-        )
+        self.assertEqual(Rating.objects.get(user=self.alice, show=self.show).score, 4.0)
 
     def test_rating_in_place_queues_no_flash_message(self):
         # Nothing navigates, so a queued message would have no page to land on
@@ -960,9 +981,7 @@ class RatingTests(TestCase):
         # Back to the widget, not the top of the page: the POST-redirect is a
         # fresh navigation, so without the fragment the stars land off-screen.
         self.assertTrue(resp["Location"].endswith("#rate"))
-        self.assertEqual(
-            Rating.objects.get(user=self.alice, show=self.show).score, 3.5
-        )
+        self.assertEqual(Rating.objects.get(user=self.alice, show=self.show).score, 3.5)
 
     def test_re_rating_updates_the_row_and_does_not_duplicate(self):
         self.client.force_login(self.alice)
@@ -1043,9 +1062,7 @@ class RatingDeselectionTests(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.show = Show.objects.create(
-            tmdb_id=1, name="Rated Show", number_of_episodes=10
-        )
+        cls.show = Show.objects.create(tmdb_id=1, name="Rated Show", number_of_episodes=10)
         cls.alice = User.objects.create_user("alice", password="pw-alice-123")
         cls.bob = User.objects.create_user("bob", password="pw-bob-123")
 
@@ -1082,9 +1099,7 @@ class RatingDeselectionTests(TestCase):
         Rating.objects.create(user=self.bob, show=self.show, score=2.0)
         self.client.force_login(self.alice)
         self._clear()
-        self.assertEqual(
-            Rating.objects.get(show=self.show).user_id, self.bob.id
-        )
+        self.assertEqual(Rating.objects.get(show=self.show).user_id, self.bob.id)
 
     def test_clearing_something_never_rated_is_harmless(self):
         # Nothing to delete is not an error. The widget can be in this state
@@ -1183,28 +1198,18 @@ class WatchedSignalTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.user = User.objects.create_user("viewer", password="pw-viewer-123")
-        cls.rated = Show.objects.create(
-            tmdb_id=1, name="Rated Only", number_of_episodes=10
-        )
-        cls.watched = Show.objects.create(
-            tmdb_id=2, name="Watched Only", number_of_episodes=10
-        )
-        cls.untouched = Show.objects.create(
-            tmdb_id=3, name="Untouched", number_of_episodes=10
-        )
+        cls.rated = Show.objects.create(tmdb_id=1, name="Rated Only", number_of_episodes=10)
+        cls.watched = Show.objects.create(tmdb_id=2, name="Watched Only", number_of_episodes=10)
+        cls.untouched = Show.objects.create(tmdb_id=3, name="Untouched", number_of_episodes=10)
 
         # Rated but never played: the rating alone implies watched.
         Rating.objects.create(user=cls.user, show=cls.rated, score=4.0)
 
         # Played but never rated, across two episodes so a missing distinct()
         # would surface the watched show twice in the bulk queryset.
-        season = Season.objects.create(
-            show=cls.watched, tmdb_id=100, season_number=1
-        )
+        season = Season.objects.create(show=cls.watched, tmdb_id=100, season_number=1)
         for i in (1, 2):
-            ep = Episode.objects.create(
-                season=season, tmdb_id=1000 + i, episode_number=i
-            )
+            ep = Episode.objects.create(season=season, tmdb_id=1000 + i, episode_number=i)
             WatchHistory.objects.create(user=cls.user, episode=ep)
 
     def test_rated_show_counts_as_watched_without_watch_history(self):
@@ -1217,9 +1222,7 @@ class WatchedSignalTests(TestCase):
         self.assertFalse(self.untouched.is_watched_by(self.user))
 
     def test_watched_by_returns_both_signals_once_each(self):
-        watched_pks = sorted(
-            Show.objects.watched_by(self.user).values_list("pk", flat=True)
-        )
+        watched_pks = sorted(Show.objects.watched_by(self.user).values_list("pk", flat=True))
         self.assertEqual(watched_pks, sorted([self.rated.pk, self.watched.pk]))
 
     def test_anonymous_user_has_watched_nothing(self):
@@ -1283,22 +1286,26 @@ class Layer2ColdStartTests(TestCase):
         # High quality but unpopular vs low quality but very popular. If the prior
         # leaned on popularity, Filler would win; it must not.
         g = Show.objects.create(
-            tmdb_id=1, name="G", number_of_episodes=10,
-            vote_average=9.0, popularity=1.0,
+            tmdb_id=1,
+            name="G",
+            number_of_episodes=10,
+            vote_average=9.0,
+            popularity=1.0,
         )
         g.genres.add(good)
         b = Show.objects.create(
-            tmdb_id=2, name="B", number_of_episodes=10,
-            vote_average=6.0, popularity=999.0,
+            tmdb_id=2,
+            name="B",
+            number_of_episodes=10,
+            vote_average=6.0,
+            popularity=999.0,
         )
         b.genres.add(weak)
         profile = build_profile(AnonymousUser())
         self.assertTrue(profile.is_cold_start)
         self.assertGreater(profile.genre_weights[good.id], 0)
         self.assertLess(profile.genre_weights[weak.id], 0)
-        self.assertGreater(
-            profile.genre_weights[good.id], profile.genre_weights[weak.id]
-        )
+        self.assertGreater(profile.genre_weights[good.id], profile.genre_weights[weak.id])
 
 
 class Layer2RerankTests(TestCase):
@@ -1313,18 +1320,27 @@ class Layer2RerankTests(TestCase):
         cls.comedy = Genre.objects.create(tmdb_id=1, name="Comedy")
         cls.drama = Genre.objects.create(tmdb_id=2, name="Drama")
         cls.a = Show.objects.create(
-            tmdb_id=1, name="Alpha", number_of_episodes=10,
-            vote_average=8.0, popularity=3.0,
+            tmdb_id=1,
+            name="Alpha",
+            number_of_episodes=10,
+            vote_average=8.0,
+            popularity=3.0,
         )
         cls.a.genres.add(cls.drama)
         cls.b = Show.objects.create(
-            tmdb_id=2, name="Bravo", number_of_episodes=10,
-            vote_average=8.0, popularity=2.0,
+            tmdb_id=2,
+            name="Bravo",
+            number_of_episodes=10,
+            vote_average=8.0,
+            popularity=2.0,
         )
         cls.b.genres.add(cls.comedy)
         cls.c = Show.objects.create(
-            tmdb_id=3, name="Charlie", number_of_episodes=10,
-            vote_average=8.0, popularity=1.0,
+            tmdb_id=3,
+            name="Charlie",
+            number_of_episodes=10,
+            vote_average=8.0,
+            popularity=1.0,
         )
         cls.c.genres.add(cls.comedy)
         cls.fave = Show.objects.create(
@@ -1407,13 +1423,19 @@ class Layer2DetailViewTests(TestCase):
         # Two candidates share the same lead with Source, so Layer 1 scores them
         # equally and breaks the tie on popularity: DramaPick first.
         cls.drama_pick = Show.objects.create(
-            tmdb_id=2, name="DramaPick", number_of_episodes=10,
-            vote_average=8.0, popularity=5.0,
+            tmdb_id=2,
+            name="DramaPick",
+            number_of_episodes=10,
+            vote_average=8.0,
+            popularity=5.0,
         )
         cls.drama_pick.genres.add(drama)
         cls.comedy_pick = Show.objects.create(
-            tmdb_id=3, name="ComedyPick", number_of_episodes=10,
-            vote_average=8.0, popularity=1.0,
+            tmdb_id=3,
+            name="ComedyPick",
+            number_of_episodes=10,
+            vote_average=8.0,
+            popularity=1.0,
         )
         cls.comedy_pick.genres.add(comedy)
         cls.fave = Show.objects.create(
@@ -1559,7 +1581,9 @@ class SideQuestsTests(TestCase):
 
         def show(tmdb_id, name, genres, popularity=1.0):
             s = Show.objects.create(
-                tmdb_id=tmdb_id, name=name, number_of_episodes=10,
+                tmdb_id=tmdb_id,
+                name=name,
+                number_of_episodes=10,
                 popularity=popularity,
             )
             s.genres.set(genres)
@@ -1584,17 +1608,21 @@ class SideQuestsTests(TestCase):
 
         def edge(source, target, rank, score):
             SimilarShow.objects.create(
-                source=source, target=target, rank=rank, score=score,
-                shared_people=1, mode="weighted",
+                source=source,
+                target=target,
+                rank=rank,
+                score=score,
+                shared_people=1,
+                mode="weighted",
             )
 
-        edge(cls.alpha, cls.strong_partial, 0, 1.8)   # big edge, one new genre
-        edge(cls.alpha, cls.fully_new, 1, 0.8)        # smaller edge, all new
-        edge(cls.alpha, cls.delta, 2, 0.3)            # new, until it is watched
-        edge(cls.bravo, cls.same_only, 0, 5.0)        # the graph's best edge
-        edge(cls.charlie, cls.weak_new, 4, 0.05)      # all new, barely an edge
-        edge(cls.charlie, cls.deep_new, 7, 2.0)       # all new, but rank 7
-        edge(cls.outsider, cls.bystander, 0, 9.0)     # nothing to do with us
+        edge(cls.alpha, cls.strong_partial, 0, 1.8)  # big edge, one new genre
+        edge(cls.alpha, cls.fully_new, 1, 0.8)  # smaller edge, all new
+        edge(cls.alpha, cls.delta, 2, 0.3)  # new, until it is watched
+        edge(cls.bravo, cls.same_only, 0, 5.0)  # the graph's best edge
+        edge(cls.charlie, cls.weak_new, 4, 0.05)  # all new, barely an edge
+        edge(cls.charlie, cls.deep_new, 7, 2.0)  # all new, but rank 7
+        edge(cls.outsider, cls.bystander, 0, 9.0)  # nothing to do with us
 
     def _user(self, name, *seeds, score=5.0):
         user = User.objects.create_user(name, password="x")
@@ -1639,7 +1667,10 @@ class SideQuestsTests(TestCase):
         # Three ratings, all watched and all above ADR-08's neutral 3.0, but
         # none of them is "rated highly", so none of them demonstrates a taste.
         user = self._user(
-            "lukewarm", self.alpha, self.bravo, self.charlie,
+            "lukewarm",
+            self.alpha,
+            self.bravo,
+            self.charlie,
             score=SIDE_QUEST_SEED_FLOOR - 0.5,
         )
         self.assertTrue(side_quests(user).locked)
@@ -1763,9 +1794,7 @@ class SideQuestsTests(TestCase):
         self.assertAlmostEqual(quest.quest_surprise, math.log1p(0.8))
         self.assertEqual(quest.quest_hops, 1)
         self.assertEqual(quest.quest_reach, 1)
-        self.assertEqual(
-            sorted(g.name for g in quest.quest_new_genres), ["SciFi", "Western"]
-        )
+        self.assertEqual(sorted(g.name for g in quest.quest_new_genres), ["SciFi", "Western"])
 
     def test_limit_takes_the_most_surprising(self):
         """limit slices the top off the full ordering, it does not re-rank."""
@@ -1826,9 +1855,7 @@ class SideQuestsRankingTests(TestCase):
         animation = Genre.objects.create(tmdb_id=5, name="Animation")
 
         def show(tmdb_id, name, genres):
-            s = Show.objects.create(
-                tmdb_id=tmdb_id, name=name, number_of_episodes=10
-            )
+            s = Show.objects.create(tmdb_id=tmdb_id, name=name, number_of_episodes=10)
             s.genres.set(genres)
             return s
 
@@ -1856,8 +1883,12 @@ class SideQuestsRankingTests(TestCase):
 
         def edge(source, target, rank, score):
             SimilarShow.objects.create(
-                source=source, target=target, rank=rank, score=score,
-                shared_people=1, mode="weighted",
+                source=source,
+                target=target,
+                rank=rank,
+                score=score,
+                shared_people=1,
+                mode="weighted",
             )
 
         edge(cls.seed_a, cls.blockbuster, 0, 5.0)
@@ -1894,18 +1925,14 @@ class SideQuestsRankingTests(TestCase):
         # 1.79 x 0.25 = 0.45 now loses to 0.59. This is the ordering that made
         # the row read as a recommendation list.
         quests = side_quests(self._rater("cmp"))
-        self.assertLess(
-            self._rank_of(quests, "Modest"), self._rank_of(quests, "Blockbuster")
-        )
+        self.assertLess(self._rank_of(quests, "Modest"), self._rank_of(quests, "Blockbuster"))
 
     def test_strength_still_counts_for_something(self):
         # Compression is not erasure: between two fully novel shows, the one on
         # the better edge still wins. NearNew (3.0) outranks Modest (0.8), and
         # both are 100% new.
         quests = side_quests(self._rater("still"))
-        self.assertLess(
-            self._rank_of(quests, "NearNew"), self._rank_of(quests, "Modest")
-        )
+        self.assertLess(self._rank_of(quests, "NearNew"), self._rank_of(quests, "Modest"))
 
     # ── the walk goes a second hop, at a discount ───────────────────────────
 
@@ -1923,9 +1950,7 @@ class SideQuestsRankingTests(TestCase):
         # edges of the same 3.0 strength. The only difference is that FarNew is
         # a hop further out, so distance has to be earned rather than assumed.
         quests = side_quests(self._rater("decay"))
-        self.assertLess(
-            self._rank_of(quests, "NearNew"), self._rank_of(quests, "FarNew")
-        )
+        self.assertLess(self._rank_of(quests, "NearNew"), self._rank_of(quests, "FarNew"))
 
     def test_a_watched_show_is_never_a_quest_but_still_carries_the_walk(self):
         # Bridge is all demonstrated genres AND is marked watched, so it can
@@ -1945,15 +1970,9 @@ class SideQuestsRankingTests(TestCase):
         # seeds, which makes it central to this taste rather than peripheral to
         # it, so it ranks below the show only one seed found.
         quests = side_quests(self._rater("central"))
-        self.assertEqual(
-            next(s for s in quests if s.name == "Everyone").quest_reach, 3
-        )
-        self.assertEqual(
-            next(s for s in quests if s.name == "OnlyOne").quest_reach, 1
-        )
-        self.assertLess(
-            self._rank_of(quests, "OnlyOne"), self._rank_of(quests, "Everyone")
-        )
+        self.assertEqual(next(s for s in quests if s.name == "Everyone").quest_reach, 3)
+        self.assertEqual(next(s for s in quests if s.name == "OnlyOne").quest_reach, 1)
+        self.assertLess(self._rank_of(quests, "OnlyOne"), self._rank_of(quests, "Everyone"))
 
     # ── the arithmetic, stated once ─────────────────────────────────────────
 
@@ -1961,7 +1980,7 @@ class SideQuestsRankingTests(TestCase):
         # One pick, spelled out, so the formula is readable in one place.
         quests = side_quests(self._rater("math"))
         pick = next(s for s in quests if s.name == "Everyone")
-        expected = math.log1p(2.0) * 1.0 * (3 ** -SIDE_QUEST_CENTRALITY_EXPONENT)
+        expected = math.log1p(2.0) * 1.0 * (3**-SIDE_QUEST_CENTRALITY_EXPONENT)
         self.assertAlmostEqual(pick.quest_surprise, expected)
         self.assertAlmostEqual(pick.quest_score, 2.0)
 
@@ -1987,16 +2006,25 @@ class StarScaleTests(TestCase):
     def setUpTestData(cls):
         cls.user = User.objects.create_user("viewer", password="pw-viewer-19")
         cls.rated = Show.objects.create(
-            tmdb_id=1, name="Rated Show", number_of_episodes=10,
-            vote_average=8.4, vote_count=1200,
+            tmdb_id=1,
+            name="Rated Show",
+            number_of_episodes=10,
+            vote_average=8.4,
+            vote_count=1200,
         )
         cls.unrated = Show.objects.create(
-            tmdb_id=2, name="Unrated Show", number_of_episodes=10,
-            vote_average=7.0, vote_count=500,
+            tmdb_id=2,
+            name="Unrated Show",
+            number_of_episodes=10,
+            vote_average=7.0,
+            vote_count=500,
         )
         cls.unvoted = Show.objects.create(
-            tmdb_id=3, name="Unvoted Show", number_of_episodes=10,
-            vote_average=0, vote_count=0,
+            tmdb_id=3,
+            name="Unvoted Show",
+            number_of_episodes=10,
+            vote_average=0,
+            vote_count=0,
         )
 
     def test_tmdb_score_is_halved_onto_the_tvlens_scale(self):
@@ -2046,16 +2074,25 @@ class MyRatingsTests(TestCase):
         cls.user = User.objects.create_user("viewer", password="pw-viewer-11")
         cls.other = User.objects.create_user("stranger", password="pw-strange-11")
         cls.loved = Show.objects.create(
-            tmdb_id=1, name="Loved Show", number_of_episodes=10,
-            vote_average=6.0, vote_count=500,
+            tmdb_id=1,
+            name="Loved Show",
+            number_of_episodes=10,
+            vote_average=6.0,
+            vote_count=500,
         )
         cls.hated = Show.objects.create(
-            tmdb_id=2, name="Hated Show", number_of_episodes=10,
-            vote_average=9.0, vote_count=500,
+            tmdb_id=2,
+            name="Hated Show",
+            number_of_episodes=10,
+            vote_average=9.0,
+            vote_count=500,
         )
         cls.theirs = Show.objects.create(
-            tmdb_id=3, name="Someone Elses Show", number_of_episodes=10,
-            vote_average=8.0, vote_count=500,
+            tmdb_id=3,
+            name="Someone Elses Show",
+            number_of_episodes=10,
+            vote_average=8.0,
+            vote_count=500,
         )
 
     def _url(self):
@@ -2097,9 +2134,7 @@ class MyRatingsTests(TestCase):
         Rating.objects.create(user=self.user, show=self.loved, score=4.0)
         Rating.objects.create(user=self.user, show=self.hated, score=2.0)
         self.client.force_login(self.user)
-        self.client.post(
-            reverse("shows:rate", args=[self.loved.slug]), {"score": "4.5"}
-        )
+        self.client.post(reverse("shows:rate", args=[self.loved.slug]), {"score": "4.5"})
         names = [s.name for s in self.client.get(self._url()).context["shows"]]
         self.assertEqual(names, ["Loved Show", "Hated Show"])
 
@@ -2172,8 +2207,11 @@ class MyRatingsCatalogTests(TestCase):
         # Rated 5.0 against a crowd baseline of 3.0, so the lift is exactly
         # +2.0 and the old markup would have printed it.
         cls.loved = Show.objects.create(
-            tmdb_id=1, name="Loved Show", number_of_episodes=10,
-            vote_average=6.0, vote_count=500,
+            tmdb_id=1,
+            name="Loved Show",
+            number_of_episodes=10,
+            vote_average=6.0,
+            vote_count=500,
         )
         cls.loved.genres.set([cls.drama])
 
@@ -2251,31 +2289,33 @@ class GenrePageTests(TestCase):
         cls.user = User.objects.create_user("viewer", password="pw-viewer-9")
         for i in range(3):
             s = Show.objects.create(
-                tmdb_id=10 + i, name=f"Drama {i}", number_of_episodes=10,
-                vote_average=8.0 - i, vote_count=100,
+                tmdb_id=10 + i,
+                name=f"Drama {i}",
+                number_of_episodes=10,
+                vote_average=8.0 - i,
+                vote_count=100,
             )
             s.genres.set([cls.drama])
             setattr(cls, f"drama{i}", s)
         c = Show.objects.create(
-            tmdb_id=20, name="A Comedy", number_of_episodes=10,
-            vote_average=7.0, vote_count=100,
+            tmdb_id=20,
+            name="A Comedy",
+            number_of_episodes=10,
+            vote_average=7.0,
+            vote_count=100,
         )
         c.genres.set([cls.comedy])
         cls.a_comedy = c
 
     def test_the_genre_page_is_a_grid_not_a_horizontal_scroller(self):
-        body = self.client.get(
-            reverse("shows:genre", args=[self.drama.id])
-        ).content.decode()
+        body = self.client.get(reverse("shows:genre", args=[self.drama.id])).content.decode()
         self.assertIn('class="grid"', body)
         # The element, not the word: base.html carries .row-scroller CSS on
         # every page, so a bare substring check would always match.
         self.assertNotIn('class="row-scroller"', body)
 
     def test_the_genre_page_shows_only_that_genre(self):
-        body = self.client.get(
-            reverse("shows:genre", args=[self.drama.id])
-        ).content.decode()
+        body = self.client.get(reverse("shows:genre", args=[self.drama.id])).content.decode()
         for i in range(3):
             self.assertIn(f"Drama {i}", body)
         self.assertNotIn("A Comedy", body)
@@ -2325,22 +2365,29 @@ class DemoPapercutTests(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.source = Show.objects.create(
-            tmdb_id=1, name="Source", number_of_episodes=10
-        )
+        cls.source = Show.objects.create(tmdb_id=1, name="Source", number_of_episodes=10)
         # One person shared with every candidate, so Layer 1 connects all of
         # them and the store fills past the display limit.
         person = Person.objects.create(tmdb_id=1, name="Shared Lead")
         CastMember.objects.create(
-            show=cls.source, person=person, order=0,
-            character="Lead", episode_count=10,
+            show=cls.source,
+            person=person,
+            order=0,
+            character="Lead",
+            episode_count=10,
         )
         for i in range(10):
             s = Show.objects.create(
-                tmdb_id=100 + i, name=f"Candidate {i}", number_of_episodes=10,
+                tmdb_id=100 + i,
+                name=f"Candidate {i}",
+                number_of_episodes=10,
             )
             CastMember.objects.create(
-                show=s, person=person, order=0, character="Lead", episode_count=10,
+                show=s,
+                person=person,
+                order=0,
+                character="Lead",
+                episode_count=10,
             )
         call_command("rebuild_similar_shows", stdout=StringIO())
 
@@ -2348,9 +2395,7 @@ class DemoPapercutTests(TestCase):
         # ADR-07 stores 12 edges per show; the page used to render every one of
         # them with its own prose callout (#16, item 6).
         resp = self.client.get(self.source.get_absolute_url())
-        self.assertEqual(
-            len(resp.context["recommendations"]), DETAIL_RECOMMENDATION_LIMIT
-        )
+        self.assertEqual(len(resp.context["recommendations"]), DETAIL_RECOMMENDATION_LIMIT)
         self.assertGreater(len(stored_similar(self.source)), DETAIL_RECOMMENDATION_LIMIT)
 
     def test_the_recommendations_kept_are_the_top_of_the_ranking(self):
@@ -2379,8 +2424,12 @@ class GenreOrderingTests(TestCase):
 
         def show(tmdb_id, name, genre, vote, popularity):
             s = Show.objects.create(
-                tmdb_id=tmdb_id, name=name, number_of_episodes=10,
-                vote_average=vote, vote_count=500, popularity=popularity,
+                tmdb_id=tmdb_id,
+                name=name,
+                number_of_episodes=10,
+                vote_average=vote,
+                vote_count=500,
+                popularity=popularity,
             )
             s.genres.set([genre])
             return s
@@ -2409,9 +2458,7 @@ class GenreOrderingTests(TestCase):
         # ranked by engagement would come out exactly backwards (ADR-05).
         order = self._order(self.client.get(reverse("shows:index")))
         by_popularity = [
-            g.name for g in Genre.objects.annotate(
-                p=Max("shows__popularity")
-            ).order_by("-p")
+            g.name for g in Genre.objects.annotate(p=Max("shows__popularity")).order_by("-p")
         ]
         self.assertEqual(by_popularity, ["Worst", "Middle", "Best"])
         self.assertNotEqual(order, by_popularity)
@@ -2453,9 +2500,7 @@ class RecommendationLadderTests(TestCase):
         second = Person.objects.create(tmdb_id=2, name="Second Lead")
 
         def show(tmdb_id, name):
-            return Show.objects.create(
-                tmdb_id=tmdb_id, name=name, number_of_episodes=10
-            )
+            return Show.objects.create(tmdb_id=tmdb_id, name=name, number_of_episodes=10)
 
         def cast(s, person):
             CastMember.objects.create(
@@ -2492,13 +2537,9 @@ class RecommendationLadderTests(TestCase):
 
     def test_each_rung_offers_the_next(self):
         for asked, expect_next in ((3, 5), (5, 7), (7, 9), (9, 12)):
-            resp = self.client.get(
-                self.source.get_absolute_url(), {"show": str(asked)}
-            )
+            resp = self.client.get(self.source.get_absolute_url(), {"show": str(asked)})
             self.assertEqual(self._count(resp), asked, asked)
-            self.assertEqual(
-                resp.context["next_recommendation_step"], expect_next, asked
-            )
+            self.assertEqual(resp.context["next_recommendation_step"], expect_next, asked)
             # The label stopped naming the number, so check the link climbs
             # to the right rung rather than checking the wording.
             self.assertContains(resp, "See more")
@@ -2535,7 +2576,7 @@ class RecommendationLadderTests(TestCase):
         """
         body = resp.content.decode()
         start = body.index("data-recs-steps")
-        return body[start:body.index("</span>", start)]
+        return body[start : body.index("</span>", start)]
 
     def test_a_show_with_nothing_to_show_offers_no_rung(self):
         resp = self.client.get(self.lonely.get_absolute_url())
@@ -2564,8 +2605,10 @@ class TrailerTests(TestCase):
     a ranking, not a first-match. The page links out and script upgrades it."""
 
     def test_prefers_official_trailer_over_teaser_and_fan_upload(self):
-        # Columns are aligned on purpose: the point of these rows is what
-        # differs between them, and that only reads down an aligned column.
+        # Columns are aligned on purpose and fmt is off for it: the point of
+        # these rows is what DIFFERS between them, and that only reads down an
+        # aligned column. One field per line hides the very thing being tested.
+        # fmt: off
         videos = {"results": [
             {"site": "YouTube", "type": "Teaser",     "official": True,  "key": "teaser", "published_at": "2020-01-01"},  # noqa: E501
             {"site": "YouTube", "type": "Trailer",    "official": False, "key": "fan",    "published_at": "2021-01-01"},  # noqa: E501
@@ -2573,19 +2616,24 @@ class TrailerTests(TestCase):
             {"site": "Vimeo",   "type": "Trailer",    "official": True,  "key": "vimeo",  "published_at": "2022-01-01"},  # noqa: E501
             {"site": "YouTube", "type": "Featurette", "official": True,  "key": "extra",  "published_at": "2023-01-01"},  # noqa: E501
         ]}
+        # fmt: on
         self.assertEqual(Ingestor._pick_trailer(videos), "wanted")
 
     def test_newest_wins_when_rank_ties(self):
+        # fmt: off
         videos = {"results": [
             {"site": "YouTube", "type": "Trailer", "official": True, "key": "old", "published_at": "2019-01-01"},  # noqa: E501
             {"site": "YouTube", "type": "Trailer", "official": True, "key": "new", "published_at": "2024-06-01"},  # noqa: E501
         ]}
+        # fmt: on
         self.assertEqual(Ingestor._pick_trailer(videos), "new")
 
     def test_no_usable_video_returns_empty(self):
         self.assertEqual(Ingestor._pick_trailer({}), "")
-        self.assertEqual(Ingestor._pick_trailer(
-            {"results": [{"site": "Vimeo", "type": "Trailer", "key": "v"}]}), "")
+        self.assertEqual(
+            Ingestor._pick_trailer({"results": [{"site": "Vimeo", "type": "Trailer", "key": "v"}]}),
+            "",
+        )
 
     def test_trailer_url_is_empty_without_a_key(self):
         show = Show.objects.create(tmdb_id=99001, name="No Trailer Here")
@@ -2663,37 +2711,61 @@ class SearchTests(TestCase):
         cls.hbo = Network.objects.create(tmdb_id=49, name="HBO")
 
         cls.titled = Show.objects.create(
-            tmdb_id=9001, name="Cranston Manor", slug="cranston-manor",
-            overview="A house.", first_air_date="2001-01-01",
-            last_air_date="2004-01-01", vote_average=8.0, vote_count=900,
-            original_language="en", status="Ended",
+            tmdb_id=9001,
+            name="Cranston Manor",
+            slug="cranston-manor",
+            overview="A house.",
+            first_air_date="2001-01-01",
+            last_air_date="2004-01-01",
+            vote_average=8.0,
+            vote_count=900,
+            original_language="en",
+            status="Ended",
         )
         cls.by_actor = Show.objects.create(
-            tmdb_id=9002, name="The Blue Hour", slug="the-blue-hour",
-            overview="Unrelated.", first_air_date="2008-01-01",
-            last_air_date="2012-01-01", vote_average=7.0, vote_count=800,
-            original_language="en", status="Ended",
+            tmdb_id=9002,
+            name="The Blue Hour",
+            slug="the-blue-hour",
+            overview="Unrelated.",
+            first_air_date="2008-01-01",
+            last_air_date="2012-01-01",
+            vote_average=7.0,
+            vote_count=800,
+            original_language="en",
+            status="Ended",
         )
         person = Person.objects.create(tmdb_id=8001, name="Bryan Cranston")
-        CastMember.objects.create(show=cls.by_actor, person=person,
-                                  character="Lead", order=0, episode_count=10)
+        CastMember.objects.create(
+            show=cls.by_actor, person=person, character="Lead", order=0, episode_count=10
+        )
 
         # The trap: "hbo" is a substring of "neighbour" and of "highborn".
         cls.decoy = Show.objects.create(
-            tmdb_id=9003, name="Quiet Street", slug="quiet-street",
+            tmdb_id=9003,
+            name="Quiet Street",
+            slug="quiet-street",
             overview="A story about a neighbour who is highborn.",
-            first_air_date="2015-01-01", vote_average=6.0, vote_count=100,
-            original_language="en", status="Returning Series",
+            first_air_date="2015-01-01",
+            vote_average=6.0,
+            vote_count=100,
+            original_language="en",
+            status="Returning Series",
         )
         decoy_person = Person.objects.create(tmdb_id=8002, name="Ann Neighbour")
-        CastMember.objects.create(show=cls.decoy, person=decoy_person,
-                                  character="A neighbour", order=1, episode_count=5)
+        CastMember.objects.create(
+            show=cls.decoy, person=decoy_person, character="A neighbour", order=1, episode_count=5
+        )
 
         cls.on_network = Show.objects.create(
-            tmdb_id=9004, name="Carrier Pigeon", slug="carrier-pigeon",
-            overview="Birds.", first_air_date="2019-01-01",
-            vote_average=9.0, vote_count=2000,
-            original_language="ja", status="Returning Series",
+            tmdb_id=9004,
+            name="Carrier Pigeon",
+            slug="carrier-pigeon",
+            overview="Birds.",
+            first_air_date="2019-01-01",
+            vote_average=9.0,
+            vote_count=2000,
+            original_language="ja",
+            status="Returning Series",
         )
         cls.on_network.networks.add(cls.hbo)
         cls.on_network.genres.add(cls.drama)
@@ -2791,14 +2863,21 @@ class SearchFuzzyTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.show = Show.objects.create(
-            tmdb_id=9101, name="Breaking Bad", slug="breaking-bad",
-            overview="Chemistry.", first_air_date="2008-01-20",
-            last_air_date="2013-09-29", vote_average=8.9, vote_count=12000,
-            original_language="en", status="Ended",
+            tmdb_id=9101,
+            name="Breaking Bad",
+            slug="breaking-bad",
+            overview="Chemistry.",
+            first_air_date="2008-01-20",
+            last_air_date="2013-09-29",
+            vote_average=8.9,
+            vote_count=12000,
+            original_language="en",
+            status="Ended",
         )
         person = Person.objects.create(tmdb_id=8101, name="Bryan Cranston")
-        CastMember.objects.create(show=cls.show, person=person,
-                                  character="Walter White", order=0, episode_count=62)
+        CastMember.objects.create(
+            show=cls.show, person=person, character="Walter White", order=0, episode_count=62
+        )
 
     def test_a_misspelled_title_still_finds_the_show(self):
         shows, parsed = run_search("breking bad")
@@ -2839,7 +2918,7 @@ class SearchTooShortTests(TestCase):
         self.assertFalse(ParsedQuery("").too_short)
 
     def test_a_short_word_beside_a_real_filter_is_not_refused(self):
-        """"a" is useless alone, but "a year:2005" has something to act on."""
+        """ "a" is useless alone, but "a year:2005" has something to act on."""
         self.assertFalse(ParsedQuery("a year:2005").too_short)
 
 
@@ -2850,15 +2929,23 @@ class SearchOperatorTests(TestCase):
         cls.comedy = Genre.objects.create(tmdb_id=35, name="Comedy")
         cls.hbo = Network.objects.create(tmdb_id=49, name="HBO")
         cls.show = Show.objects.create(
-            tmdb_id=9201, name="Corner Office", slug="corner-office",
-            overview="Work.", first_air_date="2004-01-01", last_air_date="2009-01-01",
-            vote_average=8.5, vote_count=4000, original_language="en", status="Ended",
+            tmdb_id=9201,
+            name="Corner Office",
+            slug="corner-office",
+            overview="Work.",
+            first_air_date="2004-01-01",
+            last_air_date="2009-01-01",
+            vote_average=8.5,
+            vote_count=4000,
+            original_language="en",
+            status="Ended",
         )
         cls.show.genres.add(cls.drama, cls.comedy)
         cls.show.networks.add(cls.hbo)
         person = Person.objects.create(tmdb_id=8201, name="Dana Reeve")
-        CastMember.objects.create(show=cls.show, person=person,
-                                  character="Dana", order=0, episode_count=40)
+        CastMember.objects.create(
+            show=cls.show, person=person, character="Dana", order=0, episode_count=40
+        )
 
     def test_an_operator_scopes_to_one_branch(self):
         """title: must not match a show that only matches in its overview."""
@@ -2915,14 +3002,24 @@ class TaggingTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.show = Show.objects.create(
-            tmdb_id=9301, name="Night Shift", slug="night-shift",
-            overview="Hospital.", first_air_date="2014-01-01",
-            vote_average=7.5, vote_count=900, original_language="en",
+            tmdb_id=9301,
+            name="Night Shift",
+            slug="night-shift",
+            overview="Hospital.",
+            first_air_date="2014-01-01",
+            vote_average=7.5,
+            vote_count=900,
+            original_language="en",
         )
         cls.other_show = Show.objects.create(
-            tmdb_id=9302, name="Day Shift", slug="day-shift",
-            overview="Also hospital.", first_air_date="2016-01-01",
-            vote_average=7.0, vote_count=400, original_language="en",
+            tmdb_id=9302,
+            name="Day Shift",
+            slug="day-shift",
+            overview="Also hospital.",
+            first_air_date="2016-01-01",
+            vote_average=7.0,
+            vote_count=400,
+            original_language="en",
         )
         cls.user = User.objects.create_user("tagger", password="pw")
         cls.other = User.objects.create_user("stranger", password="pw")
@@ -2939,7 +3036,7 @@ class TaggingTests(TestCase):
         self.assertEqual(link.tag.name, "Slow Burn")
 
     def test_casing_does_not_split_a_tag(self):
-        """"Slow Burn" and "slow burn" must be one tag, or the signal halves."""
+        """ "Slow Burn" and "slow burn" must be one tag, or the signal halves."""
         self.add("Slow Burn")
         self.client.post(reverse("shows:add_tag", args=["day-shift"]), {"tag": "slow burn"})
         self.assertEqual(Tag.objects.filter(slug="slow-burn").count(), 1)
@@ -2964,15 +3061,17 @@ class TaggingTests(TestCase):
 
     def test_a_tag_can_be_removed(self):
         self.add("comfort watch")
-        self.client.post(reverse("shows:remove_tag", args=["night-shift"]),
-                         {"tag": "comfort-watch"})
+        self.client.post(
+            reverse("shows:remove_tag", args=["night-shift"]), {"tag": "comfort-watch"}
+        )
         self.assertEqual(ShowTag.objects.filter(user=self.user).count(), 0)
 
     def test_one_reader_cannot_remove_another_readers_tag(self):
         self.add("comfort watch")
         self.client.login(username="stranger", password="pw")
-        self.client.post(reverse("shows:remove_tag", args=["night-shift"]),
-                         {"tag": "comfort-watch"})
+        self.client.post(
+            reverse("shows:remove_tag", args=["night-shift"]), {"tag": "comfort-watch"}
+        )
         self.assertEqual(ShowTag.objects.filter(user=self.user).count(), 1)
 
     def test_tagging_requires_a_login(self):
@@ -3030,14 +3129,24 @@ class TagSuggestionTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.show = Show.objects.create(
-            tmdb_id=9401, name="Cold Open", slug="cold-open",
-            overview="Sketch.", first_air_date="2011-01-01",
-            vote_average=7.0, vote_count=100, original_language="en",
+            tmdb_id=9401,
+            name="Cold Open",
+            slug="cold-open",
+            overview="Sketch.",
+            first_air_date="2011-01-01",
+            vote_average=7.0,
+            vote_count=100,
+            original_language="en",
         )
         cls.elsewhere = Show.objects.create(
-            tmdb_id=9402, name="Late Night", slug="late-night",
-            overview="Talk.", first_air_date="2012-01-01",
-            vote_average=6.5, vote_count=90, original_language="en",
+            tmdb_id=9402,
+            name="Late Night",
+            slug="late-night",
+            overview="Talk.",
+            first_air_date="2012-01-01",
+            vote_average=6.5,
+            vote_count=90,
+            original_language="en",
         )
         cls.me = User.objects.create_user("me", password="pw")
         cls.a = User.objects.create_user("a", password="pw")
@@ -3096,9 +3205,14 @@ class TagSavesInPlaceTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.show = Show.objects.create(
-            tmdb_id=9501, name="Open Water", slug="open-water",
-            overview="Sea.", first_air_date="2018-01-01",
-            vote_average=7.0, vote_count=50, original_language="en",
+            tmdb_id=9501,
+            name="Open Water",
+            slug="open-water",
+            overview="Sea.",
+            first_air_date="2018-01-01",
+            vote_average=7.0,
+            vote_count=50,
+            original_language="en",
         )
         User.objects.create_user("swimmer", password="pw")
 
@@ -3107,7 +3221,8 @@ class TagSavesInPlaceTests(TestCase):
 
     def fetch_post(self, name, payload):
         return self.client.post(
-            reverse(name, args=["open-water"]), payload,
+            reverse(name, args=["open-water"]),
+            payload,
             headers={"x-requested-with": "fetch"},
         )
 
@@ -3122,8 +3237,7 @@ class TagSavesInPlaceTests(TestCase):
         self.assertNotIn(">briny</a>", resp.json()["html"])
 
     def test_a_plain_post_still_redirects_so_it_works_without_script(self):
-        resp = self.client.post(reverse("shows:add_tag", args=["open-water"]),
-                                {"tag": "briny"})
+        resp = self.client.post(reverse("shows:add_tag", args=["open-water"]), {"tag": "briny"})
         self.assertEqual(resp.status_code, 302)
 
     def test_an_empty_fetch_add_still_returns_the_panel(self):
@@ -3141,12 +3255,22 @@ class MyRatingsTagsTests(TestCase):
     def setUpTestData(cls):
         cls.user = User.objects.create_user("keeper", password="pw")
         cls.a = Show.objects.create(
-            tmdb_id=9601, name="First", slug="first", overview="x",
-            first_air_date="2010-01-01", vote_average=7.0, vote_count=10,
+            tmdb_id=9601,
+            name="First",
+            slug="first",
+            overview="x",
+            first_air_date="2010-01-01",
+            vote_average=7.0,
+            vote_count=10,
         )
         cls.b = Show.objects.create(
-            tmdb_id=9602, name="Second", slug="second", overview="y",
-            first_air_date="2011-01-01", vote_average=7.0, vote_count=10,
+            tmdb_id=9602,
+            name="Second",
+            slug="second",
+            overview="y",
+            first_air_date="2011-01-01",
+            vote_average=7.0,
+            vote_count=10,
         )
         common = Tag.objects.create(name="used twice", slug="used-twice")
         once = Tag.objects.create(name="used once", slug="used-once")
@@ -3154,8 +3278,9 @@ class MyRatingsTagsTests(TestCase):
         ShowTag.objects.create(user=cls.user, show=cls.b, tag=common)
         ShowTag.objects.create(user=cls.user, show=cls.a, tag=once)
         stranger = User.objects.create_user("stranger2", password="pw")
-        ShowTag.objects.create(user=stranger, show=cls.a,
-                               tag=Tag.objects.create(name="theirs", slug="theirs"))
+        ShowTag.objects.create(
+            user=stranger, show=cls.a, tag=Tag.objects.create(name="theirs", slug="theirs")
+        )
 
     def setUp(self):
         self.client.login(username="keeper", password="pw")
@@ -3164,8 +3289,7 @@ class MyRatingsTagsTests(TestCase):
         return self.client.get(reverse("shows:my_ratings")).context
 
     def test_the_readers_tags_are_listed(self):
-        self.assertEqual({t.name for t in self.context()["tags"]},
-                         {"used twice", "used once"})
+        self.assertEqual({t.name for t in self.context()["tags"]}, {"used twice", "used once"})
 
     def test_the_most_used_tag_ranks_first(self):
         """A word applied to nine shows says more than one applied to one."""
@@ -3315,7 +3439,7 @@ class SqliteWalTests(TestCase):
 
 
 class AlreadyWatchedFilterTests(TestCase):
-    """"More shows like this" stopped recommending what the reader rated (#27).
+    """ "More shows like this" stopped recommending what the reader rated (#27).
 
     A rating says you have seen it, so recommending it back tells someone to
     watch what they just finished. The half that matters is the backfill: the
@@ -3326,26 +3450,33 @@ class AlreadyWatchedFilterTests(TestCase):
     def setUpTestData(cls):
         cls.user = User.objects.create_user("rater", password="pw-rater-123")
         cls.stranger = User.objects.create_user("stranger", password="pw-str-123")
-        cls.source = Show.objects.create(
-            tmdb_id=1, name="Source", number_of_episodes=10
-        )
+        cls.source = Show.objects.create(tmdb_id=1, name="Source", number_of_episodes=10)
         # One shared lead ties every candidate to the source, so Layer 1
         # connects all of them and the store fills past the opening rung.
         person = Person.objects.create(tmdb_id=1, name="Shared Lead")
         CastMember.objects.create(
-            show=cls.source, person=person, order=0, character="Lead",
+            show=cls.source,
+            person=person,
+            order=0,
+            character="Lead",
             episode_count=10,
         )
         cls.candidates = []
         for i in range(10):
             show = Show.objects.create(
-                tmdb_id=100 + i, name=f"Candidate {i}", number_of_episodes=10,
+                tmdb_id=100 + i,
+                name=f"Candidate {i}",
+                number_of_episodes=10,
                 # Descending vote_average keeps the Layer 1 order stable and
                 # readable, so "the next one down" is a nameable show.
-                vote_average=9.0 - i * 0.1, vote_count=100,
+                vote_average=9.0 - i * 0.1,
+                vote_count=100,
             )
             CastMember.objects.create(
-                show=show, person=person, order=0, character="Lead",
+                show=show,
+                person=person,
+                order=0,
+                character="Lead",
                 episode_count=10,
             )
             cls.candidates.append(show)
@@ -3398,7 +3529,8 @@ class AlreadyWatchedFilterTests(TestCase):
         names = {s.name for s in self.shown()}
         self.assertEqual(len(names), DETAIL_RECOMMENDATION_LIMIT)
         self.assertFalse(
-            names & {"Candidate 0", "Candidate 1", "Candidate 2"}
+            names
+            & {"Candidate 0", "Candidate 1", "Candidate 2"}
             & {s.name for s in Show.objects.watched_by(self.user)}
         )
 
@@ -3408,9 +3540,7 @@ class AlreadyWatchedFilterTests(TestCase):
         self.client.login(username="rater", password="pw-rater-123")
         target = self.shown()[0]
         season = Season.objects.create(show=target, tmdb_id=900, season_number=1)
-        episode = Episode.objects.create(
-            season=season, tmdb_id=9001, episode_number=1
-        )
+        episode = Episode.objects.create(season=season, tmdb_id=9001, episode_number=1)
         WatchHistory.objects.create(user=self.user, episode=episode)
         self.assertNotIn(target, self.shown())
 
@@ -3459,9 +3589,7 @@ class AlreadyWatchedFilterTests(TestCase):
             Rating.objects.create(user=self.user, show=show, score=4.5)
         resp = self.client.get(reverse("shows:index"))
         quest_pks = {s.pk for s in resp.context["side_quests"]}
-        watched_pks = set(
-            Show.objects.watched_by(self.user).values_list("pk", flat=True)
-        )
+        watched_pks = set(Show.objects.watched_by(self.user).values_list("pk", flat=True))
         self.assertFalse(quest_pks & watched_pks)
 
     def test_without_watched_keeps_the_ranked_shape(self):
@@ -3505,9 +3633,7 @@ class ConnectionTypePreferenceTests(TestCase):
                 show=s, person=cls.lead, order=0, character="Hero", episode_count=10
             )
         for s in (cls.crew_a, cls.crew_b):
-            CrewMember.objects.create(
-                show=s, person=cls.creator, job="Creator", episode_count=10
-            )
+            CrewMember.objects.create(show=s, person=cls.creator, job="Creator", episode_count=10)
         cls._edge(cls.cast_a, cls.cast_b)
         cls._edge(cls.cast_b, cls.cast_a)
         cls._edge(cls.crew_a, cls.crew_b)
@@ -3516,8 +3642,12 @@ class ConnectionTypePreferenceTests(TestCase):
     @classmethod
     def _edge(cls, source, target):
         SimilarShow.objects.create(
-            source=source, target=target, rank=0, score=1.0,
-            shared_people=1, mode="weighted",
+            source=source,
+            target=target,
+            rank=0,
+            score=1.0,
+            shared_people=1,
+            mode="weighted",
         )
 
     def _rate(self, cast_score, crew_score):
@@ -3592,8 +3722,10 @@ class ConnectionTypePreferenceTests(TestCase):
         # Layer 1 edges between them, so this is the common case, not the edge.
         for i in range(10):
             s = Show.objects.create(
-                tmdb_id=100 + i, name=f"Lonely {i}",
-                number_of_episodes=10, vote_average=8.0,
+                tmdb_id=100 + i,
+                name=f"Lonely {i}",
+                number_of_episodes=10,
+                vote_average=8.0,
             )
             Rating.objects.create(user=self.user, show=s, score=5.0 if i % 2 else 1.0)
         profile = build_profile(self.user)
@@ -3608,9 +3740,7 @@ class ConnectionTypePreferenceTests(TestCase):
             tmdb_id=200, name="Watched Only", number_of_episodes=10, vote_average=8.0
         )
         season = Season.objects.create(show=extra, tmdb_id=1, season_number=1)
-        episode = Episode.objects.create(
-            season=season, tmdb_id=1, episode_number=1, name="E1"
-        )
+        episode = Episode.objects.create(season=season, tmdb_id=1, episode_number=1, name="E1")
         WatchHistory.objects.create(user=self.user, episode=episode)
         self.assertAlmostEqual(build_profile(self.user).connection_type_lean, 1.5)
 
@@ -3638,9 +3768,7 @@ class ConnectionTypeNamingTests(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.source = Show.objects.create(
-            tmdb_id=1, name="Source", number_of_episodes=10
-        )
+        cls.source = Show.objects.create(tmdb_id=1, name="Source", number_of_episodes=10)
         cls.cand = Show.objects.create(tmdb_id=2, name="Cand", number_of_episodes=10)
         cls.lead = Person.objects.create(tmdb_id=1, name="Lead Actor")
         cls.maker = Person.objects.create(tmdb_id=2, name="The Maker")
@@ -3651,16 +3779,23 @@ class ConnectionTypeNamingTests(TestCase):
     def _connections(self, lead_episodes, maker_episodes):
         for show in (self.source, self.cand):
             CastMember.objects.create(
-                show=show, person=self.lead, order=0,
-                character="Hero", episode_count=lead_episodes,
+                show=show,
+                person=self.lead,
+                order=0,
+                character="Hero",
+                episode_count=lead_episodes,
             )
             CrewMember.objects.create(
-                show=show, person=self.maker, job="Creator",
+                show=show,
+                person=self.maker,
+                job="Creator",
                 episode_count=maker_episodes,
             )
         return shared_connections(
-            self.source, role_index(self.source),
-            self.cand, role_index(self.cand),
+            self.source,
+            role_index(self.source),
+            self.cand,
+            role_index(self.cand),
         )
 
     def test_no_profile_keeps_the_score_order(self):
@@ -3694,9 +3829,7 @@ class ConnectionTypeNamingTests(TestCase):
 
     def test_the_lean_can_drop_a_credit_out_of_the_named_few(self):
         conns = self._connections(lead_episodes=6, maker_episodes=10)
-        named, others = name_connections(
-            conns, max_named=1, profile=self._profile(2.0, 0.5)
-        )
+        named, others = name_connections(conns, max_named=1, profile=self._profile(2.0, 0.5))
         self.assertEqual([c.name for c in named], ["Lead Actor"])
         self.assertEqual(others, 1)
 
@@ -3730,13 +3863,12 @@ class RoleIndexesBulkTests(TestCase):
         lead = Person.objects.create(tmdb_id=1, name="Lead")
         maker = Person.objects.create(tmdb_id=2, name="Maker")
         caster = Person.objects.create(tmdb_id=3, name="Caster")
-        CastMember.objects.create(show=cls.a, person=lead, order=0,
-                                  character="Hero", episode_count=10)
-        CrewMember.objects.create(show=cls.b, person=maker, job="Creator",
-                                  episode_count=10)
+        CastMember.objects.create(
+            show=cls.a, person=lead, order=0, character="Hero", episode_count=10
+        )
+        CrewMember.objects.create(show=cls.b, person=maker, job="Creator", episode_count=10)
         # Service jobs stay excluded through the bulk path too (ADR-01).
-        CrewMember.objects.create(show=cls.b, person=caster, job="Casting",
-                                  episode_count=10)
+        CrewMember.objects.create(show=cls.b, person=caster, job="Casting", episode_count=10)
 
     def test_bulk_matches_the_one_show_form(self):
         shows = [self.a, self.b, self.empty]
@@ -3765,32 +3897,28 @@ class CalloutOrderingTests(TestCase):
     """
 
     def setUp(self):
-        self.source = Show.objects.create(
-            tmdb_id=1, name="Source", number_of_episodes=10
-        )
-        self.cand = Show.objects.create(
-            tmdb_id=2, name="Cand", number_of_episodes=10
-        )
+        self.source = Show.objects.create(tmdb_id=1, name="Source", number_of_episodes=10)
+        self.cand = Show.objects.create(tmdb_id=2, name="Cand", number_of_episodes=10)
         lead = Person.objects.create(tmdb_id=1, name="Lead Actor")
         maker = Person.objects.create(tmdb_id=2, name="The Maker")
         for show in (self.source, self.cand):
-            CastMember.objects.create(show=show, person=lead, order=0,
-                                      character="Hero", episode_count=10)
-            CrewMember.objects.create(show=show, person=maker, job="Creator",
-                                      episode_count=10)
+            CastMember.objects.create(
+                show=show, person=lead, order=0, character="Hero", episode_count=10
+            )
+            CrewMember.objects.create(show=show, person=maker, job="Creator", episode_count=10)
 
     def _profile(self, cast, crew):
         return PreferenceProfile({}, {}, {}, {}, 4, {"cast": cast, "crew": crew})
 
     def _text(self, profile=None):
         conns = shared_connections(
-            self.source, role_index(self.source),
-            self.cand, role_index(self.cand),
+            self.source,
+            role_index(self.source),
+            self.cand,
+            role_index(self.cand),
         )
         named, others = name_connections(conns, profile=profile)
-        callout = compose_callout(
-            self.source, self.cand, conns, named, others, profile=profile
-        )
+        callout = compose_callout(self.source, self.cand, conns, named, others, profile=profile)
         return "".join(seg["v"] for seg in callout["segments"])
 
     def test_no_profile_opens_on_cast(self):
@@ -3809,9 +3937,7 @@ class CalloutOrderingTests(TestCase):
             self.assertEqual(self._text(profile=profile), default)
 
     def test_a_cast_leaning_reader_opens_on_cast(self):
-        self.assertTrue(
-            self._text(profile=self._profile(2.0, 0.5)).startswith("Lead Actor")
-        )
+        self.assertTrue(self._text(profile=self._profile(2.0, 0.5)).startswith("Lead Actor"))
 
     def test_a_crew_leaning_reader_opens_on_crew(self):
         text = self._text(profile=self._profile(0.5, 2.0))
@@ -3835,8 +3961,9 @@ class CalloutOrderingTests(TestCase):
         for i in range(4):
             extra = Person.objects.create(tmdb_id=50 + i, name=f"Extra {i}")
             for show in (self.source, self.cand):
-                CastMember.objects.create(show=show, person=extra, order=600,
-                                          character="Waiter", episode_count=1)
+                CastMember.objects.create(
+                    show=show, person=extra, order=600, character="Waiter", episode_count=1
+                )
         self.assertIn("with 4 others", self._text())
         self.assertIn("with 4 others", self._text(profile=self._profile(0.5, 2.0)))
 
@@ -3851,26 +3978,24 @@ class CrewRoleCollapseTests(TestCase):
     """
 
     def setUp(self):
-        self.source = Show.objects.create(
-            tmdb_id=1, name="Source", number_of_episodes=20
-        )
-        self.cand = Show.objects.create(
-            tmdb_id=2, name="Cand", number_of_episodes=20
-        )
+        self.source = Show.objects.create(tmdb_id=1, name="Source", number_of_episodes=20)
+        self.cand = Show.objects.create(tmdb_id=2, name="Cand", number_of_episodes=20)
         self._pid = 0
 
     def _shared_crew(self, name, job, src_eps, cand_eps=None):
         self._pid += 1
         person = Person.objects.create(tmdb_id=self._pid, name=name)
-        CrewMember.objects.create(show=self.source, person=person, job=job,
-                                  episode_count=src_eps)
-        CrewMember.objects.create(show=self.cand, person=person, job=job,
-                                  episode_count=cand_eps or src_eps)
+        CrewMember.objects.create(show=self.source, person=person, job=job, episode_count=src_eps)
+        CrewMember.objects.create(
+            show=self.cand, person=person, job=job, episode_count=cand_eps or src_eps
+        )
 
     def _text(self):
         conns = shared_connections(
-            self.source, role_index(self.source),
-            self.cand, role_index(self.cand),
+            self.source,
+            role_index(self.source),
+            self.cand,
+            role_index(self.cand),
         )
         named, others = name_connections(conns)
         callout = compose_callout(self.source, self.cand, conns, named, others)
@@ -3892,9 +4017,7 @@ class CrewRoleCollapseTests(TestCase):
         self.assertLess(text.index("Ana Reyes"), text.index("Ben Cole"))
 
     def test_four_directors_collapse_into_one_clause(self):
-        for name, eps in (
-            ("Ana Reyes", 12), ("Ben Cole", 8), ("Cara Diaz", 4), ("Dev Okafor", 2)
-        ):
+        for name, eps in (("Ana Reyes", 12), ("Ben Cole", 8), ("Cara Diaz", 4), ("Dev Okafor", 2)):
             self._shared_crew(name, "Director", eps)
         text = self._text()
         self.assertEqual(text.lower().count("director"), 1, text)
@@ -3973,8 +4096,12 @@ class WatchNextTests(TestCase):
 
         def edge(source, target, score, rank=1):
             SimilarShow.objects.create(
-                source=source, target=target, rank=rank, score=score,
-                shared_people=1, mode="weighted",
+                source=source,
+                target=target,
+                rank=rank,
+                score=score,
+                shared_people=1,
+                mode="weighted",
             )
 
         edge(cls.loved, cls.both, 4.0)
@@ -4029,9 +4156,7 @@ class WatchNextTests(TestCase):
             self.assertNotIn(seed, names)
 
     def test_excluded_ids_are_honored(self):
-        names = [
-            s.name for s in watch_next(self.user, exclude_ids={self.one.pk})
-        ]
+        names = [s.name for s in watch_next(self.user, exclude_ids={self.one.pk})]
         self.assertNotIn("ReachedByOne", names)
         self.assertIn("ReachedByBoth", names)
 
@@ -4047,9 +4172,7 @@ class WatchNextTests(TestCase):
         self.assertFalse(watch_next(cold).has_seeds)
 
         stranded = User.objects.create_user("stranded", password="x")
-        alone = Show.objects.create(
-            tmdb_id=99, name="Alone", number_of_episodes=10, popularity=1.0
-        )
+        alone = Show.objects.create(tmdb_id=99, name="Alone", number_of_episodes=10, popularity=1.0)
         Rating.objects.create(user=stranded, show=alone, score=5.0)
         result = watch_next(stranded)
         self.assertEqual(list(result), [])

@@ -158,9 +158,7 @@ class Ingestor:
         """
         agg = self.client.get_tv_aggregate_credits(show.tmdb_id)
         if not agg:
-            logger.warning(
-                "No aggregate credits for %s (tmdb_id=%s)", show.name, show.tmdb_id
-            )
+            logger.warning("No aggregate credits for %s (tmdb_id=%s)", show.name, show.tmdb_id)
             return 0, 0
 
         cast_rows = self._upsert_aggregate_cast(show, agg.get("cast", []))
