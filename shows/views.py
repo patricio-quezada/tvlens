@@ -399,14 +399,27 @@ def search(request):
             "hide_nav_search": True,
             "shows": shows,
             "elapsed_ms": elapsed_ms,
-            "statuses": Show.objects.exclude(status="").values_list("status", flat=True).distinct().order_by("status"),
+            "statuses": (
+                Show.objects.exclude(status="")
+                .values_list("status", flat=True)
+                .distinct()
+                .order_by("status")
+            ),
             "languages": languages,
             "f_status": status,
             "f_language": language,
             "f_min_score": request.GET.get("min_score", ""),
             "f_min_votes": request.GET.get("min_votes", ""),
             "f_main_cast": main_cast_only,
-            "advanced_open": any([status, language, request.GET.get("min_score"), request.GET.get("min_votes"), main_cast_only]),
+            "advanced_open": any(
+                [
+                    status,
+                    language,
+                    request.GET.get("min_score"),
+                    request.GET.get("min_votes"),
+                    main_cast_only,
+                ]
+            ),
         },
     )
 

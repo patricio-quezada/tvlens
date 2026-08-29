@@ -2564,19 +2564,21 @@ class TrailerTests(TestCase):
     a ranking, not a first-match. The page links out and script upgrades it."""
 
     def test_prefers_official_trailer_over_teaser_and_fan_upload(self):
+        # Columns are aligned on purpose: the point of these rows is what
+        # differs between them, and that only reads down an aligned column.
         videos = {"results": [
-            {"site": "YouTube", "type": "Teaser",     "official": True,  "key": "teaser", "published_at": "2020-01-01"},
-            {"site": "YouTube", "type": "Trailer",    "official": False, "key": "fan",    "published_at": "2021-01-01"},
-            {"site": "YouTube", "type": "Trailer",    "official": True,  "key": "wanted", "published_at": "2019-01-01"},
-            {"site": "Vimeo",   "type": "Trailer",    "official": True,  "key": "vimeo",  "published_at": "2022-01-01"},
-            {"site": "YouTube", "type": "Featurette", "official": True,  "key": "extra",  "published_at": "2023-01-01"},
+            {"site": "YouTube", "type": "Teaser",     "official": True,  "key": "teaser", "published_at": "2020-01-01"},  # noqa: E501
+            {"site": "YouTube", "type": "Trailer",    "official": False, "key": "fan",    "published_at": "2021-01-01"},  # noqa: E501
+            {"site": "YouTube", "type": "Trailer",    "official": True,  "key": "wanted", "published_at": "2019-01-01"},  # noqa: E501
+            {"site": "Vimeo",   "type": "Trailer",    "official": True,  "key": "vimeo",  "published_at": "2022-01-01"},  # noqa: E501
+            {"site": "YouTube", "type": "Featurette", "official": True,  "key": "extra",  "published_at": "2023-01-01"},  # noqa: E501
         ]}
         self.assertEqual(Ingestor._pick_trailer(videos), "wanted")
 
     def test_newest_wins_when_rank_ties(self):
         videos = {"results": [
-            {"site": "YouTube", "type": "Trailer", "official": True, "key": "old", "published_at": "2019-01-01"},
-            {"site": "YouTube", "type": "Trailer", "official": True, "key": "new", "published_at": "2024-06-01"},
+            {"site": "YouTube", "type": "Trailer", "official": True, "key": "old", "published_at": "2019-01-01"},  # noqa: E501
+            {"site": "YouTube", "type": "Trailer", "official": True, "key": "new", "published_at": "2024-06-01"},  # noqa: E501
         ]}
         self.assertEqual(Ingestor._pick_trailer(videos), "new")
 

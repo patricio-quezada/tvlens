@@ -3,6 +3,11 @@
 # hand-tuned recommender code.
 target-version = "py314"
 
+# 100, not the default 88. The offenders were 89-129 characters and almost all
+# of them were hand-tuned recommender lines the comment above says not to churn.
+# Breaking fifty readable lines to satisfy a style rule is the churn, not the fix.
+line-length = 100
+
 exclude = ["migrations", "venv"]
 
 [lint]

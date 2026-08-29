@@ -373,7 +373,10 @@ def suggest(term):
     # get_close_matches ranks by ratio alone, which lets a rare short name beat
     # the obvious one: "gilligen" scores Gillien above Gilligan. A longer shared
     # prefix breaks that tie, because a typist gets the start of a word right.
-    return max(close, key=lambda c: (shared_prefix(c), SequenceMatcher(None, term.lower(), c.lower()).ratio()))
+    return max(
+        close,
+        key=lambda c: (shared_prefix(c), SequenceMatcher(None, term.lower(), c.lower()).ratio()),
+    )
 
 
 

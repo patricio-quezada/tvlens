@@ -313,7 +313,11 @@ class CrewMember(models.Model):
 # ── 9. Rating ─────────────────────────────────────────────────────────────────
 
 class Rating(models.Model):
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="ratings")
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="ratings",
+    )
     show = models.ForeignKey(Show, on_delete=models.CASCADE, related_name="ratings")
     score = models.FloatField(validators=[MinValueValidator(0.5), MaxValueValidator(5.0)])
     created_at = models.DateTimeField(auto_now_add=True)
@@ -330,7 +334,11 @@ class Rating(models.Model):
 # ── 10. Review ────────────────────────────────────────────────────────────────
 
 class Review(models.Model):
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="reviews")
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="reviews",
+    )
     show = models.ForeignKey(Show, on_delete=models.CASCADE, related_name="reviews")
     title = models.CharField(max_length=300)
     body = models.TextField()
@@ -355,7 +363,11 @@ class Watchlist(models.Model):
         MEDIUM = "medium", "Medium"
         HIGH = "high", "High"
 
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="watchlist")
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="watchlist",
+    )
     show = models.ForeignKey(Show, on_delete=models.CASCADE, related_name="watchlisted_by")
     priority = models.CharField(max_length=10, choices=Priority.choices, default=Priority.MEDIUM)
     added_at = models.DateTimeField(auto_now_add=True)
@@ -371,7 +383,11 @@ class Watchlist(models.Model):
 # ── 12. WatchHistory ──────────────────────────────────────────────────────────
 
 class WatchHistory(models.Model):
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="watch_history")
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="watch_history",
+    )
     episode = models.ForeignKey(Episode, on_delete=models.CASCADE, related_name="watched_by")
     watched_at = models.DateTimeField(auto_now_add=True)
     completed = models.BooleanField(default=True)
@@ -402,7 +418,11 @@ class Tag(models.Model):
 
 class ShowTag(models.Model):
     """User-applied tags on shows, inspired by MovieLens genome tags."""
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="show_tags")
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="show_tags",
+    )
     show = models.ForeignKey(Show, on_delete=models.CASCADE, related_name="user_tags")
     tag = models.ForeignKey(Tag, on_delete=models.CASCADE, related_name="show_tags")
     relevance = models.FloatField(
