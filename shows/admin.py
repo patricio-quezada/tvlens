@@ -22,6 +22,7 @@ from .models import (
 
 # ── Inlines ───────────────────────────────────────────────────────────────────
 
+
 class SeasonInline(admin.TabularInline):
     model = Season
     extra = 0
@@ -48,6 +49,7 @@ class EpisodeInline(admin.TabularInline):
 
 
 # ── Model Admins ──────────────────────────────────────────────────────────────
+
 
 @admin.register(Genre)
 class GenreAdmin(admin.ModelAdmin):

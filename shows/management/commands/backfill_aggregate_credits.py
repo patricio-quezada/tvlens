@@ -45,9 +45,7 @@ class Command(BaseCommand):
         if options["show"]:
             shows = shows.filter(tmdb_id=options["show"])
             if not shows.exists():
-                self.stdout.write(
-                    self.style.ERROR(f"No show with TMDB ID {options['show']}")
-                )
+                self.stdout.write(self.style.ERROR(f"No show with TMDB ID {options['show']}"))
                 return
         if options["limit"]:
             shows = shows[: options["limit"]]
@@ -84,9 +82,7 @@ class Command(BaseCommand):
         )
         if empty:
             self.stdout.write(
-                self.style.WARNING(
-                    f"{len(empty)} returned nothing: {', '.join(empty)}"
-                )
+                self.style.WARNING(f"{len(empty)} returned nothing: {', '.join(empty)}")
             )
 
         # Backfilled episode counts change every weighted score, so refresh the

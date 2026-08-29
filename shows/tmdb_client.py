@@ -43,7 +43,7 @@ class TMDBClient:
             except requests.RequestException as exc:
                 logger.error("TMDB request failed (attempt %d): %s", attempt + 1, exc)
                 if attempt < retries - 1:
-                    time.sleep(2 ** attempt)
+                    time.sleep(2**attempt)
         return None
 
     # ── public API ────────────────────────────────────────────────────────

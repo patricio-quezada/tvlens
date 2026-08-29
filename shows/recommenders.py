@@ -78,7 +78,6 @@ SERVICE_JOBS = [
     "Extras Casting Assistant",
     "Extras Casting Coordinator",
     "Location Casting",
-
     # Widened 2026-08-26 for the involvement exponent (ADR-01 amended, ADR-04
     # amended). The exponent below makes a single full-run credit decisive, and
     # that surfaced a class of credit ADR-01's argument already covered but its
@@ -137,7 +136,6 @@ SERVICE_JOBS = [
     "ADR Coordinator",
     "ADR & Dubbing",
     "Additional Soundtrack",
-
     # Music SERVICE, never composition. A music supervisor licenses tracks
     # across a slate; a music house produces for whoever books it. Composing is
     # deliberately absent: a score is authorial, MARQUEE_JOBS already treats it
@@ -153,7 +151,6 @@ SERVICE_JOBS = [
     "Music Editor",
     "Supervising Music Editor",
     "Music Consultant",
-
     # Picture finishing: the post house that finishes the picture, booked per
     # production. A colorist working the full run of both put Marvel's
     # Daredevil first on Elementary.
@@ -172,7 +169,6 @@ SERVICE_JOBS = [
     "Post Production Producer",
     "Finishing Producer",
     "Executive In Charge Of Post Production",
-
     # Vendors and on-set services hired by the production, not part of the
     # show. A marine coordinator credited on all 110 episodes of Miami Vice and
     # a writer credited on all 740 of Real Time with Bill Maher made Bill Maher
@@ -227,9 +223,7 @@ SQLITE_MAX_VARS_SAFE = 900
 # mirroring similar_by_people) and to name them (role/kind/cast_order). role is
 # resolved once per person so a creator reads as a creator and an actor by their
 # character. kind is "marquee" (a MARQUEE_JOBS crew role), "cast", or "crew".
-RoleInfo = namedtuple(
-    "RoleInfo", "name best_count cast_order role kind marquee_rank"
-)
+RoleInfo = namedtuple("RoleInfo", "name best_count cast_order role kind marquee_rank")
 
 # One shared person tying a candidate back to the source show. contribution is
 # the same min(source share, candidate share) the score is built from, so the
@@ -359,7 +353,7 @@ def similar_by_people(show, limit=12):
     person_ids = list(own_best)
     best_by_show = {}
     for start in range(0, len(person_ids), SQLITE_MAX_VARS_SAFE):
-        batch = person_ids[start:start + SQLITE_MAX_VARS_SAFE]
+        batch = person_ids[start : start + SQLITE_MAX_VARS_SAFE]
         for show_id, person_id, count in (
             CastMember.objects.filter(person_id__in=batch)
             .exclude(show=show)
@@ -388,8 +382,8 @@ def similar_by_people(show, limit=12):
             # Zero-guarded because 0.0 ** x is fine but the branch keeps a
             # null-count credit at exactly 0.0 rather than trusting float pow.
             pair = min(own_ratio, other_ratio)
-            score += pair ** INVOLVEMENT_EXPONENT if pair else 0.0
-            estimate += other_ratio ** INVOLVEMENT_EXPONENT if other_ratio else 0.0
+            score += pair**INVOLVEMENT_EXPONENT if pair else 0.0
+            estimate += other_ratio**INVOLVEMENT_EXPONENT if other_ratio else 0.0
         other.score = score
         other.estimate = estimate
         other.shared_people = len(best_by_show[other.pk])
@@ -476,19 +470,23 @@ def role_indexes(shows):
     show_ids = [s.id for s in shows]
     known = {s.id for s in shows}
 
-    best_count = {}      # (show_id, person_id) -> best episode_count
+    best_count = {}  # (show_id, person_id) -> best episode_count
     name = {}
     cast_order = {}
-    character = {}       # -> (episode_count, character) of biggest role
-    best_marquee = {}    # -> (rank, job)
-    plain_crew = {}      # -> a non-marquee crew job, as a fallback
+    character = {}  # -> (episode_count, character) of biggest role
+    best_marquee = {}  # -> (rank, job)
+    plain_crew = {}  # -> a non-marquee crew job, as a fallback
     marquee_rank = {job: i for i, job in enumerate(MARQUEE_JOBS)}
 
     for batch in batched(show_ids, SQLITE_MAX_VARS_SAFE):
         for sid, pid, pname, char, order, count in CastMember.objects.filter(
             show_id__in=batch
         ).values_list(
-            "show_id", "person_id", "person__name", "character", "order",
+            "show_id",
+            "person_id",
+            "person__name",
+            "character",
+            "order",
             "episode_count",
         ):
             key = (sid, pid)
@@ -506,8 +504,7 @@ def role_indexes(shows):
         for sid, pid, pname, job, count in (
             CrewMember.objects.filter(show_id__in=batch)
             .exclude(job__in=SERVICE_JOBS)
-            .values_list("show_id", "person_id", "person__name", "job",
-                         "episode_count")
+            .values_list("show_id", "person_id", "person__name", "job", "episode_count")
         ):
             key = (sid, pid)
             c = count or 0
@@ -547,7 +544,6 @@ def role_indexes(shows):
             marquee_rank=mrank,
         )
     return indexes
-
 
 
 def shared_connections(source, source_index, candidate, candidate_index):
@@ -667,9 +663,9 @@ def name_connections(connections, max_named=5, profile=None):
     # (-contribution, cast_order, name), so this filter preserves highest-score
     # first without re-sorting; cast and crew compete in the one order.
     eligible = [
-        c for c in connections
-        if c.kind == "marquee"
-        or (c.kind == "cast" and c.cast_order < RECOGNIZABLE_BILLING)
+        c
+        for c in connections
+        if c.kind == "marquee" or (c.kind == "cast" and c.cast_order < RECOGNIZABLE_BILLING)
     ]
 
     lean = getattr(profile, "connection_type_lean", 0.0) or 0.0
@@ -723,7 +719,9 @@ ROLE_PROSE = {
     "Composer": ("composer", "scored both", "scored too"),
     "Music": ("composer", "scored both", "scored too"),
     "Music Supervisor": (
-        "music supervisor", "supervised the music on both", "supervised too",
+        "music supervisor",
+        "supervised the music on both",
+        "supervised too",
     ),
     "Director": ("director", "DIRECTED", "directed too"),
     "Director of Photography": ("cinematographer", "SHOT", "shot too"),
@@ -742,8 +740,16 @@ DEFAULT_ROLE_PROSE = ("crew", "worked on both", "worked on it too")
 UPGRADABLE_TO_EVERY = {"produced both", "scored both", "edited both"}
 
 _NUMBER_WORDS = [
-    "zero", "one", "two", "three", "four", "five",
-    "six", "seven", "eight", "nine",
+    "zero",
+    "one",
+    "two",
+    "three",
+    "four",
+    "five",
+    "six",
+    "seven",
+    "eight",
+    "nine",
 ]
 
 
@@ -903,9 +909,9 @@ def compose_callout(source, candidate, connections, named, others, profile=None)
             cast_clauses.append(_secondary_cast_clause(cast[1:]))
 
     lean = getattr(profile, "connection_type_lean", 0.0) or 0.0
-    blocks = [_crew_clauses(crew), cast_clauses] if lean < 0 else [
-        cast_clauses, _crew_clauses(crew)
-    ]
+    blocks = (
+        [_crew_clauses(crew), cast_clauses] if lean < 0 else [cast_clauses, _crew_clauses(crew)]
+    )
     clauses = [clause for block in blocks for clause in block]
     if not clauses:  # neither cast nor crew named: fall back to bare names
         clauses.append(_join_names([c.name for c in named]))
@@ -945,9 +951,7 @@ def similar_by_cast(show, limit=12):
     # See docs/adr/06-sql-variable-ceiling.md.
     return (
         Show.objects.filter(
-            cast__person_id__in=CastMember.objects.filter(show=show).values(
-                "person_id"
-            )
+            cast__person_id__in=CastMember.objects.filter(show=show).values("person_id")
         )
         .exclude(pk=show.pk)
         .annotate(shared_cast=Count("cast__person_id", distinct=True))
@@ -972,9 +976,7 @@ def similar_by_crew(show, limit=12):
     # yields no rows, so the no-crew case still returns an empty queryset.
     # See docs/adr/06-sql-variable-ceiling.md.
     source_person_ids = (
-        CrewMember.objects.filter(show=show)
-        .exclude(job__in=SERVICE_JOBS)
-        .values("person_id")
+        CrewMember.objects.filter(show=show).exclude(job__in=SERVICE_JOBS).values("person_id")
     )
 
     # Both conditions sit in one filter() call so they apply to the same join.

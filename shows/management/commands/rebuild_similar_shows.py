@@ -58,9 +58,7 @@ class Command(BaseCommand):
                     )
 
             if dry_run:
-                self.stdout.write(
-                    f"Would replace {existing} edges with {len(edges)}."
-                )
+                self.stdout.write(f"Would replace {existing} edges with {len(edges)}.")
                 # Nothing is committed on a dry run.
                 transaction.set_rollback(True)
                 return
@@ -69,7 +67,6 @@ class Command(BaseCommand):
 
         self.stdout.write(
             self.style.SUCCESS(
-                f"Rebuilt SimilarShow: {len(edges)} edges across "
-                f"{Show.objects.count()} shows."
+                f"Rebuilt SimilarShow: {len(edges)} edges across {Show.objects.count()} shows."
             )
         )

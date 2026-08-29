@@ -138,9 +138,7 @@ def _catalog_quality_prior():
     """
     catalog_mean = Show.objects.aggregate(a=Avg("vote_average"))["a"] or 0.0
     prior = {}
-    for gid, gavg in (
-        Genre.objects.annotate(a=Avg("shows__vote_average")).values_list("id", "a")
-    ):
+    for gid, gavg in Genre.objects.annotate(a=Avg("shows__vote_average")).values_list("id", "a"):
         if gavg is not None:
             prior[gid] = gavg - catalog_mean
     return prior
@@ -201,7 +199,7 @@ class PreferenceProfile:
 
     @property
     def leans_toward(self):
-        """"cast", "crew", or None: the readable form of connection_type_lean."""
+        """ "cast", "crew", or None: the readable form of connection_type_lean."""
         lean = self.connection_type_lean
         if not lean:
             return None
@@ -232,13 +230,9 @@ class PreferenceProfile:
         if not self.learned_genre_weights:
             return []
         names = dict(
-            Genre.objects.filter(id__in=self.learned_genre_weights).values_list(
-                "id", "name"
-            )
+            Genre.objects.filter(id__in=self.learned_genre_weights).values_list("id", "name")
         )
-        ranked = sorted(
-            self.learned_genre_weights.items(), key=lambda kv: -abs(kv[1])
-        )
+        ranked = sorted(self.learned_genre_weights.items(), key=lambda kv: -abs(kv[1]))
         return [(names.get(gid, ""), weight) for gid, weight in ranked[:limit]]
 
 
@@ -305,8 +299,10 @@ def _connection_type_weights(signal_by_show):
     for source_id, target_id, _ in edges:
         signal = (signal_by_show[source_id] + signal_by_show[target_id]) / 2
         for connection in shared_connections(
-            shows[source_id], indexes[source_id],
-            shows[target_id], indexes[target_id],
+            shows[source_id],
+            indexes[source_id],
+            shows[target_id],
+            indexes[target_id],
         ):
             group = connection_type(connection.kind)
             mass[group] += connection.contribution
@@ -317,13 +313,10 @@ def _connection_type_weights(signal_by_show):
     if min(mass.values()) < MIN_CONNECTION_TYPE_MASS:
         return {}
 
-    weights = {
-        group: signal_mass[group] / mass[group] for group in mass
-    }
+    weights = {group: signal_mass[group] / mass[group] for group in mass}
     if abs(weights["cast"] - weights["crew"]) < MIN_CONNECTION_TYPE_LEAN:
         return {}
     return weights
-
 
 
 def build_profile(user):
@@ -346,17 +339,13 @@ def build_profile(user):
     rating_count = 0
 
     if user is not None and user.is_authenticated:
-        rated = dict(
-            Rating.objects.filter(user=user).values_list("show_id", "score")
-        )
+        rated = dict(Rating.objects.filter(user=user).values_list("show_id", "score"))
         rating_count = len(rated)
 
         # Watched-but-unrated shows: a weak, unsigned positive. watched_by (ADR-08)
         # already counts a rated show as watched, so subtract the rated set to
         # avoid stacking a second, weaker signal on top of the real rating.
-        watched_only = set(
-            Show.objects.watched_by(user).values_list("id", flat=True)
-        ) - set(rated)
+        watched_only = set(Show.objects.watched_by(user).values_list("id", flat=True)) - set(rated)
 
         signal_by_show = {sid: score - NEUTRAL_SCORE for sid, score in rated.items()}
         for sid in watched_only:
@@ -365,10 +354,9 @@ def build_profile(user):
         if signal_by_show:
             show_ids = list(signal_by_show)
             g_sum, g_count = {}, {}
-            for show_id, genre_id in (
-                Show.genres.through.objects.filter(show_id__in=show_ids)
-                .values_list("show_id", "genre_id")
-            ):
+            for show_id, genre_id in Show.genres.through.objects.filter(
+                show_id__in=show_ids
+            ).values_list("show_id", "genre_id"):
                 signal = signal_by_show[show_id]
                 g_sum[genre_id] = g_sum.get(genre_id, 0.0) + signal
                 g_count[genre_id] = g_count.get(genre_id, 0) + 1
@@ -377,17 +365,13 @@ def build_profile(user):
             # Tags weight their signal by relevance; the affinity is the
             # relevance-weighted mean, again bounded to about one rating's worth.
             t_sum, t_relsum = {}, {}
-            for show_id, tag_id, relevance in (
-                ShowTag.objects.filter(show_id__in=show_ids).values_list(
-                    "show_id", "tag_id", "relevance"
-                )
-            ):
+            for show_id, tag_id, relevance in ShowTag.objects.filter(
+                show_id__in=show_ids
+            ).values_list("show_id", "tag_id", "relevance"):
                 signal = signal_by_show[show_id]
                 t_sum[tag_id] = t_sum.get(tag_id, 0.0) + signal * relevance
                 t_relsum[tag_id] = t_relsum.get(tag_id, 0.0) + relevance
-            learned_tag = {
-                tid: t_sum[tid] / t_relsum[tid] for tid in t_sum if t_relsum[tid]
-            }
+            learned_tag = {tid: t_sum[tid] / t_relsum[tid] for tid in t_sum if t_relsum[tid]}
 
             # The connection-type dimension reads only RATED shows: a watched
             # show carries no verdict, and WATCHED_SIGNAL is a constant, so
@@ -447,9 +431,7 @@ def without_watched(user, ranked):
     if not seen:
         return ranked
 
-    result = RankedShows(
-        [show for show in ranked if show.id not in seen], mode=ranked.mode
-    )
+    result = RankedShows([show for show in ranked if show.id not in seen], mode=ranked.mode)
     for carried in ("profile", "personalized"):
         if hasattr(ranked, carried):
             setattr(result, carried, getattr(ranked, carried))
@@ -476,18 +458,14 @@ def rerank(user, ranked):
 
     tags_by_show = {}
     if n:
-        for show_id, tag_id, relevance in (
-            ShowTag.objects.filter(show_id__in=[s.id for s in ranked]).values_list(
-                "show_id", "tag_id", "relevance"
-            )
-        ):
+        for show_id, tag_id, relevance in ShowTag.objects.filter(
+            show_id__in=[s.id for s in ranked]
+        ).values_list("show_id", "tag_id", "relevance"):
             tags_by_show.setdefault(show_id, []).append((tag_id, relevance))
 
     for position, show in enumerate(ranked):
         gravity = (n - position) * RANK_STEP + (show.score or 0.0)
-        show.preference = PREFERENCE_WEIGHT * profile.score_for(
-            show, tags_by_show.get(show.id)
-        )
+        show.preference = PREFERENCE_WEIGHT * profile.score_for(show, tags_by_show.get(show.id))
         show.layer2_score = gravity + show.preference
 
     reordered = sorted(ranked, key=lambda s: -s.layer2_score)
@@ -640,6 +618,7 @@ def watch_next(user, limit=12, exclude_ids=()):
     template can caption it the same way every other row is captioned; empty for
     anonymous readers and for anyone with no seed above the floor.
     """
+
     def empty(has_seeds=False):
         # An empty row has two causes and they need different copy: a reader
         # with no seed has to be asked to rate, and a reader whose seeds simply
@@ -656,8 +635,7 @@ def watch_next(user, limit=12, exclude_ids=()):
         return empty()
 
     weight_by_seed = {
-        seed.id: (seed.user_score - WATCH_NEXT_SEED_FLOOR) + WATCH_NEXT_SEED_STEP
-        for seed in seeds
+        seed.id: (seed.user_score - WATCH_NEXT_SEED_FLOOR) + WATCH_NEXT_SEED_STEP for seed in seeds
     }
     seed_ids = set(weight_by_seed)
     blocked = seed_ids | set(exclude_ids)
@@ -682,9 +660,7 @@ def watch_next(user, limit=12, exclude_ids=()):
     for show_id, total in totals.items():
         shows[show_id].score = total
 
-    ranked = RankedShows(
-        sorted(shows.values(), key=lambda s: (-s.score, s.name)), mode="weighted"
-    )
+    ranked = RankedShows(sorted(shows.values(), key=lambda s: (-s.score, s.name)), mode="weighted")
     ranked = without_watched(user, ranked)
     if not ranked:
         return empty(has_seeds=True)
@@ -786,10 +762,8 @@ class SideQuests(list):
 def _genre_ids_by_show():
     """{show_id: set of genre_id}, in one query over the m2m through table."""
     by_show = {}
-    for show_id, genre_id in (
-        Show.genres.through.objects.order_by("show_id").values_list(
-            "show_id", "genre_id"
-        )
+    for show_id, genre_id in Show.genres.through.objects.order_by("show_id").values_list(
+        "show_id", "genre_id"
     ):
         by_show.setdefault(show_id, set()).add(genre_id)
     return by_show
@@ -875,10 +849,7 @@ def side_quests(user, limit=12, exclude_ids=()):
     seed_genre_counts = Counter()
     for seed_id in seed_ids:
         seed_genre_counts.update(genres_by_show.get(seed_id, set()))
-    familiarity = {
-        genre_id: count / len(seed_ids)
-        for genre_id, count in seed_genre_counts.items()
-    }
+    familiarity = {genre_id: count / len(seed_ids) for genre_id, count in seed_genre_counts.items()}
     demonstrated = set(seed_genre_counts)
 
     # No quest you have already been on: watched covers rated (ADR-08).
@@ -907,9 +878,7 @@ def side_quests(user, limit=12, exclude_ids=()):
     # connection, so it stays in `bridges` and can carry the walk further out.
     bridges = {}
     for source_id, target_id, score in (
-        SimilarShow.objects.filter(
-            source_id__in=seed_ids, rank__lte=SIDE_QUEST_MAX_RANK
-        )
+        SimilarShow.objects.filter(source_id__in=seed_ids, rank__lte=SIDE_QUEST_MAX_RANK)
         .order_by("-score", "target__name", "source__name")
         .values_list("source_id", "target_id", "score")
     ):
@@ -928,11 +897,9 @@ def side_quests(user, limit=12, exclude_ids=()):
     if SIDE_QUEST_MAX_HOPS >= 2 and bridges:
         bridge_ids = sorted(bridges)
         for start in range(0, len(bridge_ids), SQLITE_MAX_VARS_SAFE):
-            batch = bridge_ids[start:start + SQLITE_MAX_VARS_SAFE]
+            batch = bridge_ids[start : start + SQLITE_MAX_VARS_SAFE]
             for bridge_id, target_id, score in (
-                SimilarShow.objects.filter(
-                    source_id__in=batch, rank__lte=SIDE_QUEST_MAX_RANK
-                )
+                SimilarShow.objects.filter(source_id__in=batch, rank__lte=SIDE_QUEST_MAX_RANK)
                 .order_by("-score", "target__name", "source__name")
                 .values_list("source_id", "target_id", "score")
             ):
@@ -961,17 +928,14 @@ def side_quests(user, limit=12, exclude_ids=()):
         # exactly 0.0 and can never be chosen, so the old hard drop survives as
         # the limit case of this line rather than as a branch beside it.
         novelty = (
-            sum(1.0 - familiarity.get(gid, 0.0) for gid in target_genres)
-            / len(target_genres)
+            sum(1.0 - familiarity.get(gid, 0.0) for gid in target_genres) / len(target_genres)
         ) ** SIDE_QUEST_GENRE_EXPONENT
         if novelty <= 0.0:
             continue
         found_by = len(reach[target_id])
-        centrality = found_by ** -SIDE_QUEST_CENTRALITY_EXPONENT
+        centrality = found_by**-SIDE_QUEST_CENTRALITY_EXPONENT
         surprise = strength * novelty * centrality
-        candidates.append(
-            (surprise, target_id, seed_id, raw_score, new_genre_ids, hops, found_by)
-        )
+        candidates.append((surprise, target_id, seed_id, raw_score, new_genre_ids, hops, found_by))
 
     # Ties break on the show id so the row is stable for a given database
     # regardless of the order paths happened to be discovered in.
@@ -986,9 +950,7 @@ def side_quests(user, limit=12, exclude_ids=()):
     wanted = {c[1] for c in chosen} | {c[2] for c in chosen}
     by_id = {
         show.id: show
-        for show in Show.objects.filter(pk__in=wanted)
-        .prefetch_related("genres")
-        .order_by("pk")
+        for show in Show.objects.filter(pk__in=wanted).prefetch_related("genres").order_by("pk")
     }
 
     quests = []
@@ -999,8 +961,6 @@ def side_quests(user, limit=12, exclude_ids=()):
         show.quest_surprise = surprise
         show.quest_hops = hops
         show.quest_reach = found_by
-        show.quest_new_genres = [
-            g for g in show.genres.all() if g.id in new_genre_ids
-        ]
+        show.quest_new_genres = [g for g in show.genres.all() if g.id in new_genre_ids]
         quests.append(show)
     return SideQuests(quests, seeds_have=len(seed_ids))

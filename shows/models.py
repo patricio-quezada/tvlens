@@ -20,6 +20,7 @@ from django.dispatch import receiver
 
 # ── 1. Genre ──────────────────────────────────────────────────────────────────
 
+
 class Genre(models.Model):
     tmdb_id = models.IntegerField(unique=True)
     name = models.CharField(max_length=100)
@@ -32,6 +33,7 @@ class Genre(models.Model):
 
 
 # ── 2. Network ────────────────────────────────────────────────────────────────
+
 
 class Network(models.Model):
     tmdb_id = models.IntegerField(unique=True)
@@ -47,6 +49,7 @@ class Network(models.Model):
 
 
 # ── 3. Show ───────────────────────────────────────────────────────────────────
+
 
 class ShowQuerySet(models.QuerySet):
     def watched_by(self, user):
@@ -66,8 +69,7 @@ class ShowQuerySet(models.QuerySet):
         if not user.is_authenticated:
             return self.none()
         return self.filter(
-            models.Q(ratings__user=user)
-            | models.Q(seasons__episodes__watched_by__user=user)
+            models.Q(ratings__user=user) | models.Q(seasons__episodes__watched_by__user=user)
         ).distinct()
 
 
@@ -208,6 +210,7 @@ class Show(models.Model):
 
 # ── 4. Season ─────────────────────────────────────────────────────────────────
 
+
 class Season(models.Model):
     show = models.ForeignKey(Show, on_delete=models.CASCADE, related_name="seasons")
     tmdb_id = models.IntegerField(unique=True)
@@ -227,6 +230,7 @@ class Season(models.Model):
 
 
 # ── 5. Episode ────────────────────────────────────────────────────────────────
+
 
 class Episode(models.Model):
     season = models.ForeignKey(Season, on_delete=models.CASCADE, related_name="episodes")
@@ -250,6 +254,7 @@ class Episode(models.Model):
 
 # ── 6. Person ─────────────────────────────────────────────────────────────────
 
+
 class Person(models.Model):
     tmdb_id = models.IntegerField(unique=True)
     name = models.CharField(max_length=300)
@@ -269,6 +274,7 @@ class Person(models.Model):
 
 # ── 7. CastMember ─────────────────────────────────────────────────────────────
 
+
 class CastMember(models.Model):
     show = models.ForeignKey(Show, on_delete=models.CASCADE, related_name="cast")
     person = models.ForeignKey(Person, on_delete=models.CASCADE, related_name="cast_roles")
@@ -278,7 +284,7 @@ class CastMember(models.Model):
         null=True,
         blank=True,
         help_text="Episodes this person appeared in. Null means a series-level "
-                  "credit with no episode rollup.",
+        "credit with no episode rollup.",
     )
 
     class Meta:
@@ -291,6 +297,7 @@ class CastMember(models.Model):
 
 # ── 8. CrewMember ─────────────────────────────────────────────────────────────
 
+
 class CrewMember(models.Model):
     show = models.ForeignKey(Show, on_delete=models.CASCADE, related_name="crew")
     person = models.ForeignKey(Person, on_delete=models.CASCADE, related_name="crew_roles")
@@ -300,7 +307,7 @@ class CrewMember(models.Model):
         null=True,
         blank=True,
         help_text="Episodes this person worked on. Null means a series-level "
-                  "credit with no episode rollup.",
+        "credit with no episode rollup.",
     )
 
     class Meta:
@@ -311,6 +318,7 @@ class CrewMember(models.Model):
 
 
 # ── 9. Rating ─────────────────────────────────────────────────────────────────
+
 
 class Rating(models.Model):
     user = models.ForeignKey(
@@ -332,6 +340,7 @@ class Rating(models.Model):
 
 
 # ── 10. Review ────────────────────────────────────────────────────────────────
+
 
 class Review(models.Model):
     user = models.ForeignKey(
@@ -356,6 +365,7 @@ class Review(models.Model):
 
 
 # ── 11. Watchlist ─────────────────────────────────────────────────────────────
+
 
 class Watchlist(models.Model):
     class Priority(models.TextChoices):
@@ -382,6 +392,7 @@ class Watchlist(models.Model):
 
 # ── 12. WatchHistory ──────────────────────────────────────────────────────────
 
+
 class WatchHistory(models.Model):
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -403,6 +414,7 @@ class WatchHistory(models.Model):
 
 # ── 13. Tag ───────────────────────────────────────────────────────────────────
 
+
 class Tag(models.Model):
     name = models.CharField(max_length=100, unique=True)
     slug = models.SlugField(max_length=100, unique=True)
@@ -416,8 +428,10 @@ class Tag(models.Model):
 
 # ── 14. ShowTag ───────────────────────────────────────────────────────────────
 
+
 class ShowTag(models.Model):
     """User-applied tags on shows, inspired by MovieLens genome tags."""
+
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -441,6 +455,7 @@ class ShowTag(models.Model):
 
 # ── 16. UserProfile ──────────────────────────────────────────────────────────
 
+
 class UserProfile(models.Model):
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
@@ -461,6 +476,7 @@ def create_user_profile(sender, instance, created, **kwargs):
 
 # ── 17. SimilarShow ───────────────────────────────────────────────────────────
 
+
 class SimilarShow(models.Model):
     """One precomputed Layer 1 edge: source -> target, at a fixed rank.
 
@@ -478,15 +494,9 @@ class SimilarShow(models.Model):
     See docs/adr/07-materialized-recommendations.md.
     """
 
-    source = models.ForeignKey(
-        Show, on_delete=models.CASCADE, related_name="similar_edges"
-    )
-    target = models.ForeignKey(
-        Show, on_delete=models.CASCADE, related_name="similar_edges_in"
-    )
-    rank = models.PositiveIntegerField(
-        help_text="0-based position in the source's ranked list."
-    )
+    source = models.ForeignKey(Show, on_delete=models.CASCADE, related_name="similar_edges")
+    target = models.ForeignKey(Show, on_delete=models.CASCADE, related_name="similar_edges_in")
+    rank = models.PositiveIntegerField(help_text="0-based position in the source's ranked list.")
     score = models.FloatField()
     shared_people = models.PositiveIntegerField()
     mode = models.CharField(
