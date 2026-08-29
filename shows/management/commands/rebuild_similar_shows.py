@@ -16,7 +16,12 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 
 from shows.models import Show, SimilarShow
-from shows.recommenders import similar_by_people
+from shows.recommenders import (
+    connection_type,
+    role_indexes,
+    shared_connections,
+    similar_by_people,
+)
 
 
 class Command(BaseCommand):
@@ -42,10 +47,25 @@ class Command(BaseCommand):
             if not dry_run:
                 SimilarShow.objects.all().delete()
 
+            # The cast/crew split is computed here, once, for the same reason
+            # the score is: Layer 2 needs it per edge and recomputing it at
+            # request time cost a role_indexes pass over every rated show
+            # (ADR-15). One index over the whole catalog serves every edge.
+            all_shows = list(Show.objects.all())
+            indexes = role_indexes(all_shows)
+            by_id = {s.id: s for s in all_shows}
+
             edges = []
-            for show in Show.objects.all():
+            for show in all_shows:
                 ranked = similar_by_people(show)
                 for rank, target in enumerate(ranked):
+                    mass = {"cast": 0.0, "crew": 0.0}
+                    other = by_id.get(target.id)
+                    if other is not None:
+                        for c in shared_connections(
+                            show, indexes[show.id], other, indexes[other.id]
+                        ):
+                            mass[connection_type(c.kind)] += c.contribution
                     edges.append(
                         SimilarShow(
                             source=show,
@@ -53,6 +73,8 @@ class Command(BaseCommand):
                             rank=rank,
                             score=target.score,
                             shared_people=target.shared_people,
+                            cast_contribution=mass["cast"],
+                            crew_contribution=mass["crew"],
                             mode=ranked.mode,
                         )
                     )

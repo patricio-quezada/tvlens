@@ -3641,12 +3641,21 @@ class ConnectionTypePreferenceTests(TestCase):
 
     @classmethod
     def _edge(cls, source, target):
+        # The cast/crew split is written at rebuild time on a real edge
+        # (ADR-07), so the fixture computes it the same way rather than
+        # leaving it at zero, which would be an edge no rebuild could produce.
+        indexes = role_indexes([source, target])
+        mass = {"cast": 0.0, "crew": 0.0}
+        for c in shared_connections(source, indexes[source.id], target, indexes[target.id]):
+            mass[connection_type(c.kind)] += c.contribution
         SimilarShow.objects.create(
             source=source,
             target=target,
             rank=0,
             score=1.0,
             shared_people=1,
+            cast_contribution=mass["cast"],
+            crew_contribution=mass["crew"],
             mode="weighted",
         )
 

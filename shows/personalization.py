@@ -39,9 +39,6 @@ from .models import Genre, Rating, Show, ShowTag, SimilarShow
 from .recommenders import (
     SQLITE_MAX_VARS_SAFE,
     RankedShows,
-    connection_type,
-    role_indexes,
-    shared_connections,
 )
 
 # A rating at NEUTRAL_SCORE says nothing about taste; above it is a positive
@@ -110,12 +107,28 @@ MIN_CONNECTION_TYPE_MASS = 1.0
 # the reader has no preference to honour.
 MIN_CONNECTION_TYPE_LEAN = 0.5
 
-# Ceiling on how many of the user's own edges are read for this. The affinities
-# are weighted means, which settle long before the tail of a large rated set is
-# reached, and the strongest edges are both the most informative and the ones
-# the reader actually saw. Bounds the work at a user who has rated most of the
-# catalog: on this catalog, all 464 shows rated is 4,014 inner edges.
-CONNECTION_TYPE_MAX_EDGES = 60
+# Ceiling on how many of the user's own edges are read for this, and the number
+# that decides whether the estimator works at all.
+#
+# It was 60, and at 60 the affinities had not settled: measured on the real
+# 464-show catalog, twenty profiles of PURE NOISE produced leans with a median
+# of 0.42 and a maximum of 0.86, while a profile built deliberately to lean
+# reached only 0.36. Signal sat below noise, so no threshold could separate
+# them and the gate could never fire honestly.
+#
+# Raising the cap fixes it, because both affinities are weighted means and
+# their difference shrinks as samples accumulate while a real lean does not:
+#
+#     cap    signal (built)    noise ceiling
+#      60         0.358            0.864
+#     150         0.712            0.461
+#     400         0.809            0.339
+#    1000         0.847            0.307
+#
+# 400 buys a 2.4x separation and the returns flatten after it. The cost that
+# forced the old ceiling is gone: the cast/crew split now rides on the edge
+# (ADR-07), so more edges is more rows read, not more graph walked.
+CONNECTION_TYPE_MAX_EDGES = 400
 
 
 def genre_quality():
@@ -251,9 +264,9 @@ def _connection_type_weights(signal_by_show):
     has both judged is the only place we can see a connection and a verdict on
     it at the same time.
 
-    For each such edge, shared_connections gives the same episode-share
-    contributions that ranked the show, split into cast and crew by
-    connection_type. The edge carries the mean of its two ends' signals. Each
+    For each such edge, the stored cast_contribution and crew_contribution give
+    the same episode-share split that ranked the show, written once at rebuild.
+    The edge carries the mean of its two ends' signals. Each
     type's affinity is then the contribution-weighted mean of those signals,
     the same shape ShowTag relevance already uses above: "the average rating
     signal a cast connection earned from you". Two shows tied by one whole-run
@@ -274,39 +287,34 @@ def _connection_type_weights(signal_by_show):
     # under the SQLite variable ceiling for a user who has rated the catalog
     # (ADR-06). At twelve stored edges per source the rows are cheap.
     rated = set(show_ids)
+    # The cast/crew split rides on the edge, written at rebuild (ADR-07). It
+    # used to be recomputed here, which meant a role_indexes pass over every
+    # show the user had rated: 53% of the whole profile build, to read two
+    # numbers that never change between ingests.
     edges = [
         edge
         for batch in batched(show_ids, SQLITE_MAX_VARS_SAFE)
         for edge in SimilarShow.objects.filter(source_id__in=batch).values_list(
-            "source_id", "target_id", "score"
+            "source_id", "target_id", "score", "cast_contribution", "crew_contribution"
         )
         if edge[1] in rated
     ]
     if len(edges) < MIN_CONNECTION_TYPE_EDGES:
         return {}
 
-    # Strongest first, then capped: the weighted mean has long settled, and the
-    # strongest edges are the connections the reader actually saw named.
+    # Strongest first, then capped. The cap is what makes this estimator work:
+    # at 60 edges the noise floor sat above the signal, so nothing could ever
+    # fire honestly. See MIN_CONNECTION_TYPE_LEAN.
     edges.sort(key=lambda e: -e[2])
     edges = edges[:CONNECTION_TYPE_MAX_EDGES]
 
-    touched = {sid for sid, _, _ in edges} | {tid for _, tid, _ in edges}
-    shows = {s.id: s for s in Show.objects.filter(id__in=touched)}
-    indexes = role_indexes(shows.values())
-
     signal_mass = {"cast": 0.0, "crew": 0.0}
     mass = {"cast": 0.0, "crew": 0.0}
-    for source_id, target_id, _ in edges:
+    for source_id, target_id, _, cast_share, crew_share in edges:
         signal = (signal_by_show[source_id] + signal_by_show[target_id]) / 2
-        for connection in shared_connections(
-            shows[source_id],
-            indexes[source_id],
-            shows[target_id],
-            indexes[target_id],
-        ):
-            group = connection_type(connection.kind)
-            mass[group] += connection.contribution
-            signal_mass[group] += signal * connection.contribution
+        for group, share in (("cast", cast_share), ("crew", crew_share)):
+            mass[group] += share
+            signal_mass[group] += signal * share
 
     # Both types need real evidence: with only one of them measured there is no
     # comparison to make, only a number to over-read.
