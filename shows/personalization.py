@@ -933,7 +933,7 @@ def side_quests(user, limit=12, exclude_ids=()):
         if novelty <= 0.0:
             continue
         found_by = len(reach[target_id])
-        centrality = found_by**-SIDE_QUEST_CENTRALITY_EXPONENT
+        centrality = found_by ** -SIDE_QUEST_CENTRALITY_EXPONENT  # fmt: skip
         surprise = strength * novelty * centrality
         candidates.append((surprise, target_id, seed_id, raw_score, new_genre_ids, hops, found_by))
 
