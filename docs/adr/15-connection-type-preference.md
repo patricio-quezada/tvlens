@@ -1,7 +1,7 @@
 ---
 adr: 15
 title: "Learn whether a reader is tied to shows by cast or by crew, and name accordingly"
-status: draft
+status: accepted
 date: 2026-08-26
 tags:
   - adr
@@ -19,7 +19,7 @@ that fall inside that reader's own rated set. It orders the people a callout nam
 that. It never scores a show, and it stays silent unless three gates say the ratings have
 actually earned it.**
 
-> Draft. Not accepted. Patricio approves ADRs.
+> Accepted 2026-08-29. Shipped in #7 before approval; the record caught up after.
 
 ## Context
 Layer 1 scores every shared person the same way whatever they did on the show
