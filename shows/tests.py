@@ -96,7 +96,7 @@ class SimilarByPeopleTests(TestCase):
         CastMember.objects.create(show=self.a, person=self.p, episode_count=100)
         CastMember.objects.create(show=self.b, person=self.p, episode_count=10)
         [r] = similar_by_people(self.a)
-        self.assertAlmostEqual(r.score, 0.25**INVOLVEMENT_EXPONENT)
+        self.assertAlmostEqual(r.score, 0.25 ** INVOLVEMENT_EXPONENT)  # fmt: skip
         self.assertLess(r.score, 1.0)
 
     def test_involvement_weight_is_superlinear_not_proportional(self):
@@ -116,7 +116,7 @@ class SimilarByPeopleTests(TestCase):
         CrewMember.objects.create(show=self.a, person=self.p, job="Director", episode_count=100)
         CastMember.objects.create(show=self.b, person=self.p, episode_count=10)
         [r] = similar_by_people(self.a)
-        self.assertAlmostEqual(r.score, 0.25**INVOLVEMENT_EXPONENT)
+        self.assertAlmostEqual(r.score, 0.25 ** INVOLVEMENT_EXPONENT)  # fmt: skip
         self.assertEqual(r.shared_people, 1)
 
     def test_null_episode_count_is_shared_but_weighs_zero(self):
@@ -250,8 +250,8 @@ class SimilarByPeopleTests(TestCase):
         # The exponent is monotonic, so it cannot change this order and only a
         # value assertion can catch its absence here.
         by_name = {s.name: s for s in results}
-        self.assertAlmostEqual(by_name["Half"].estimate, 0.5**INVOLVEMENT_EXPONENT)
-        self.assertAlmostEqual(by_name["Cameo"].estimate, 0.1**INVOLVEMENT_EXPONENT)
+        self.assertAlmostEqual(by_name["Half"].estimate, 0.5 ** INVOLVEMENT_EXPONENT)  # fmt: skip
+        self.assertAlmostEqual(by_name["Cameo"].estimate, 0.1 ** INVOLVEMENT_EXPONENT)  # fmt: skip
         self.assertLess(by_name["Cameo"].estimate, 0.1)
 
     def test_estimate_ties_break_on_rating_then_votes(self):
@@ -819,7 +819,7 @@ class StoredSimilarTests(TestCase):
         # involvement weight (ADR-04, amended 2026-08-26). Asserted against the
         # constant because what the store owes the live recommender is the same
         # number, whatever that number is.
-        self.assertAlmostEqual(stored[1].score, 0.2**INVOLVEMENT_EXPONENT)
+        self.assertAlmostEqual(stored[1].score, 0.2 ** INVOLVEMENT_EXPONENT)  # fmt: skip
         self._assertMatchesLive(self.src)
 
     def test_stored_matches_live_for_a_second_source(self):
@@ -1980,7 +1980,7 @@ class SideQuestsRankingTests(TestCase):
         # One pick, spelled out, so the formula is readable in one place.
         quests = side_quests(self._rater("math"))
         pick = next(s for s in quests if s.name == "Everyone")
-        expected = math.log1p(2.0) * 1.0 * (3**-SIDE_QUEST_CENTRALITY_EXPONENT)
+        expected = math.log1p(2.0) * 1.0 * (3 ** -SIDE_QUEST_CENTRALITY_EXPONENT)  # fmt: skip
         self.assertAlmostEqual(pick.quest_surprise, expected)
         self.assertAlmostEqual(pick.quest_score, 2.0)
 

@@ -382,8 +382,8 @@ def similar_by_people(show, limit=12):
             # Zero-guarded because 0.0 ** x is fine but the branch keeps a
             # null-count credit at exactly 0.0 rather than trusting float pow.
             pair = min(own_ratio, other_ratio)
-            score += pair**INVOLVEMENT_EXPONENT if pair else 0.0
-            estimate += other_ratio**INVOLVEMENT_EXPONENT if other_ratio else 0.0
+            score += pair ** INVOLVEMENT_EXPONENT if pair else 0.0  # fmt: skip
+            estimate += other_ratio ** INVOLVEMENT_EXPONENT if other_ratio else 0.0  # fmt: skip
         other.score = score
         other.estimate = estimate
         other.shared_people = len(best_by_show[other.pk])
