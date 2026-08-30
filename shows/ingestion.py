@@ -102,9 +102,17 @@ class Ingestor:
             logger.warning("No data for show %s", tmdb_id)
             return None
 
+        # id IS the tmdb_id, deliberately. A BigAutoField records the order
+        # rows happened to be inserted on one machine; tmdb_id is the same
+        # number on every machine, forever. Setting it explicitly is what keeps
+        # a catalog shipped into a database that already holds ratings from
+        # silently re-pointing those ratings at other shows. Without this line
+        # an autofield hands out a low integer that collides with a real
+        # tmdb_id. See match_show_ids and docs/adr/03-identifiers.md.
         show, _ = Show.objects.update_or_create(
             tmdb_id=tmdb_id,
             defaults={
+                "id": tmdb_id,
                 "name": data.get("name", ""),
                 "original_name": data.get("original_name", ""),
                 "overview": data.get("overview", ""),
