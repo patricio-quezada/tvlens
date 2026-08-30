@@ -2600,6 +2600,38 @@ class RecommendationLadderTests(TestCase):
         )
 
 
+class ShowIdentityTests(TestCase):
+    """Show.id is the tmdb_id, and stays that way (ADR-03).
+
+    A BigAutoField records the order rows were inserted on one machine.
+    tmdb_id is the same number on every machine, forever. Keeping them equal is
+    what stops a catalog shipped into a database that already holds ratings
+    from silently re-pointing those ratings at other shows, which is the only
+    failure in TVLens that destroys something a user cannot regenerate.
+    """
+
+    def test_ingested_shows_carry_their_tmdb_id_as_the_primary_key(self):
+        mismatched = [s.name for s in Show.objects.all() if s.id != s.tmdb_id]
+        self.assertEqual(mismatched, [])
+
+    def test_a_rating_survives_its_show_being_re_ingested(self):
+        show = Show.objects.create(
+            id=9001, tmdb_id=9001, name="Re-ingested", number_of_episodes=10, vote_average=8.0
+        )
+        user = User.objects.create_user("identity", password="pw-identity-4k")
+        Rating.objects.create(user=user, show=show, score=5.0)
+
+        # What update_or_create does on a second ingest of the same show.
+        Show.objects.update_or_create(
+            tmdb_id=9001, defaults={"id": 9001, "name": "Re-ingested, renamed"}
+        )
+
+        rating = Rating.objects.select_related("show").get(user=user)
+        self.assertEqual(rating.show.tmdb_id, 9001)
+        self.assertEqual(rating.show.name, "Re-ingested, renamed")
+        self.assertEqual(rating.score, 5.0)
+
+
 class TrailerTests(TestCase):
     """#14. TMDb returns clips and bloopers beside trailers, so the pick is
     a ranking, not a first-match. The page links out and script upgrades it."""
