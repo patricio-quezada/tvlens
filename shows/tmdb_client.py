@@ -58,10 +58,6 @@ class TMDBClient:
         params = {"page": page, "sort_by": sort_by, **filters}
         return self._get("/discover/tv", params=params)
 
-    def search_tv(self, query, page=1):
-        """Search TV shows by name."""
-        return self._get("/search/tv", params={"query": query, "page": page})
-
     def get_tv_details(self, tv_id, append_to_response="credits,videos"):
         """Full details for a single show including credits."""
         return self._get(
@@ -82,14 +78,10 @@ class TMDBClient:
         """Season details with episode list."""
         return self._get(f"/tv/{tv_id}/season/{season_number}")
 
-    def get_person(self, person_id):
-        """Person bio details."""
-        return self._get(f"/person/{person_id}")
-
-    def get_tv_recommendations(self, tv_id, page=1):
-        """TMDB-generated recommendations for a show."""
-        return self._get(f"/tv/{tv_id}/recommendations", params={"page": page})
-
-    def get_trending_tv(self, time_window="week"):
-        """Trending TV shows (day or week)."""
-        return self._get(f"/trending/tv/{time_window}")
+# Four endpoints were removed on 2026-08-30, all unused and two of them
+# contrary to decisions already made: /tv/{id}/recommendations returns TMDb's
+# own recommendations, which is the thing TVLens exists not to serve, and
+# /trending returns popularity, which ADR-05 forbids as a ranking. /search/tv
+# went because ADR-12 builds catalog search locally, and /person because
+# nothing asks for a bio. An unused client method next to a rule it breaks is
+# an invitation; add them back deliberately if a decision ever calls for them.
