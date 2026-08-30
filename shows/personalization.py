@@ -30,6 +30,7 @@ watching, and neither row exists at all for a user who has rated nothing.
 """
 
 import math
+import random
 from collections import Counter
 from itertools import batched
 
@@ -105,7 +106,21 @@ MIN_CONNECTION_TYPE_MASS = 1.0
 # embarrassment: "the shows you rate highly are held together by shared actors
 # rather than shared crew". Below it, the two types earned the same ratings and
 # the reader has no preference to honour.
-MIN_CONNECTION_TYPE_LEAN = 0.5
+# The old fixed floor on the lean, kept only as the sanity bound below which a
+# difference is not worth testing however confident the shuffles are. A quarter
+# of a star of separation is arithmetic, not an opinion.
+MIN_CONNECTION_TYPE_LEAN = 0.25
+
+# How many times the rating signals are reshuffled across the user's own edges
+# to see whether the observed lean is better than chance, and how often it must
+# win. 200 shuffles resolves a 0.95 bar finely enough, and costs one pass over
+# at most CONNECTION_TYPE_MAX_EDGES rows with no queries behind it.
+CONNECTION_TYPE_SHUFFLES = 200
+CONNECTION_TYPE_CONFIDENCE = 0.95
+
+# Fixed so a profile's lean does not flicker between two page loads on the same
+# ratings. The seed is arbitrary; only its constancy matters.
+CONNECTION_TYPE_SHUFFLE_SEED = 20260830
 
 # Ceiling on how many of the user's own edges are read for this, and the number
 # that decides whether the estimator works at all.
@@ -322,7 +337,47 @@ def _connection_type_weights(signal_by_show):
         return {}
 
     weights = {group: signal_mass[group] / mass[group] for group in mass}
-    if abs(weights["cast"] - weights["crew"]) < MIN_CONNECTION_TYPE_LEAN:
+    observed = abs(weights["cast"] - weights["crew"])
+    if observed < MIN_CONNECTION_TYPE_LEAN:
+        return {}
+
+    # A permutation test, not a fixed threshold. The user's own ratings are
+    # reassigned to different shows and the lean recomputed; if the real one
+    # rarely beats its own shuffles, it is arithmetic rather than an opinion.
+    #
+    # A constant cannot do this job, because the noise depends on how many
+    # edges a user happens to have. Measured on the 248-show catalog, a random
+    # profile with ~20 inner edges produced a false lean 27% of the time at a
+    # 0.5 threshold while one with 400 produced none. The bar has to move with
+    # the sample, and shuffling is how it finds where the bar is.
+    #
+    # The shuffle is over SHOWS, not edges. An edge's signal is the mean of its
+    # two ends, so edges sharing a show share signal; permuting edge signals
+    # directly breaks that correlation, makes the null too tight, and lets
+    # noise through 22-40% of the time. Permuting the ratings across shows
+    # keeps the graph intact and asks the question actually worth asking: would
+    # these same ratings, spread differently over this same graph, look like a
+    # preference?
+    #
+    # Cheap because the masses do not move: each shuffle is one pass over the
+    # edges, no queries and no graph work.
+    ids = list(signal_by_show)
+    values = [signal_by_show[i] for i in ids]
+    rng = random.Random(CONNECTION_TYPE_SHUFFLE_SEED)
+    beaten = 0
+    for _ in range(CONNECTION_TYPE_SHUFFLES):
+        rng.shuffle(values)
+        permuted = dict(zip(ids, values))
+        sm = {"cast": 0.0, "crew": 0.0}
+        for source_id, target_id, _, cast_share, crew_share in edges:
+            signal = (permuted[source_id] + permuted[target_id]) / 2
+            sm["cast"] += signal * cast_share
+            sm["crew"] += signal * crew_share
+        null = abs(sm["cast"] / mass["cast"] - sm["crew"] / mass["crew"])
+        if observed > null:
+            beaten += 1
+
+    if beaten / CONNECTION_TYPE_SHUFFLES < CONNECTION_TYPE_CONFIDENCE:
         return {}
     return weights
 
