@@ -4,6 +4,7 @@ Django settings for TVLens project.
 MovieLens-inspired TV show recommendation platform.
 """
 
+import importlib.util
 import os
 from pathlib import Path
 
@@ -29,11 +30,16 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "django.contrib.humanize",
-    # Third-party
-    "django_extensions",
     # Local
     "shows",
 ]
+
+# django-extensions is a development convenience (shell_plus, graph_models) and
+# nothing in the app imports it. Added only when it is actually installed, so
+# production can ship without it rather than carrying a dev tool it never calls.
+# See requirements-dev.txt.
+if importlib.util.find_spec("django_extensions"):
+    INSTALLED_APPS.insert(-1, "django_extensions")
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",

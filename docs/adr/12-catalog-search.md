@@ -78,12 +78,34 @@ reader cannot see is a filter they cannot undo.
 
 ## Consequences
 
-Search costs about 90 ms for free text across 464 shows and 486,829 episodes, and 11 to 15 ms for a
-scoped operator query. The two heaviest branches are cast at 57 ms before the two-step rewrite, now
-9 ms, and episode synopsis at 49 ms, which is an irreducible scan of 486,829 text fields.
+**Re-measured 2026-08-30**, on 248 shows and 164,176 episodes after the catalog was filtered and
+pruned. The original figure here was a single number for free text, which turned out to hide the
+only thing that matters.
 
-**Cost scales with cast size, not show count.** The catalog grew 4.6x and the cast table grew 2.2x,
-but free-text search only doubled. A catalog an order of magnitude larger should revisit FTS5.
+Scoped operator queries are **6 to 10 ms**. Free text is **48 to 235 ms**, and the spread is not
+noise: it is one branch, and it tracks how common the word is rather than how big the catalog is.
+
+| branch | "the" | "murder" | "zeppelin" |
+|---|---|---|---|
+| title | 0 ms | 0 ms | 0 ms |
+| show overview | 1 | 0 | 0 |
+| season name | 1 | 0 | 0 |
+| **episode synopsis** | **176** | **35** | **18** |
+| episode rows surviving LIKE | 76,882 | 4,024 | 4 |
+
+Every branch except episode synopsis is free at any term. The synopsis branch pays a floor of
+about 18 ms to scan, then roughly 2 microseconds for each row the `LIKE` lets through and the
+word-boundary regex has to re-test. A common word defeats the prefilter, so the regex runs on
+half the table.
+
+**The waste is worst where the result is least useful.** Searching "the" costs 235 ms to return
+the 120-show cap, which is not an answer to anything. A term matching half the corpus has no
+power to discriminate, so the branch could be skipped on exactly the terms that make it slow.
+That is a behaviour change and belongs in a proposal, not here.
+
+**Cost scales with term frequency, not catalog size.** The catalog since shrank by 46% and the
+worst case got worse, because the pruned shows were low-signal ones whose synopses matched
+nothing. FTS5 remains the real answer whenever this stops being tolerable.
 
 The branch weights are a ranking decision with no evidence behind them yet. A title hit outranking a
 fourth-billed actor is obviously right; whether an episode synopsis should outrank a season name is

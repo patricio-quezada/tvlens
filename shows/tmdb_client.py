@@ -78,6 +78,7 @@ class TMDBClient:
         """Season details with episode list."""
         return self._get(f"/tv/{tv_id}/season/{season_number}")
 
+
 # Four endpoints were removed on 2026-08-30, all unused and two of them
 # contrary to decisions already made: /tv/{id}/recommendations returns TMDb's
 # own recommendations, which is the thing TVLens exists not to serve, and
