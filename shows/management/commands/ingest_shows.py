@@ -5,12 +5,16 @@ Usage:
     python manage.py ingest_shows                # 5 pages (default)
     python manage.py ingest_shows --pages 20     # 20 pages (~400 shows)
     python manage.py ingest_shows --show 1396    # single show by TMDB ID
+    python manage.py ingest_shows --min-votes 0  # no vote floor (the old behaviour)
+
+Discover is filtered to vote_count >= MIN_VOTE_COUNT by default. --show is not:
+naming a show is explicit intent and overrides the floor.
 """
 
 from django.core.management import call_command
 from django.core.management.base import BaseCommand
 
-from shows.ingestion import Ingestor
+from shows.ingestion import MIN_VOTE_COUNT, Ingestor
 
 
 class Command(BaseCommand):
@@ -22,6 +26,15 @@ class Command(BaseCommand):
             type=int,
             default=5,
             help="Number of Discover pages to pull (20 shows per page)",
+        )
+        parser.add_argument(
+            "--min-votes",
+            type=int,
+            default=None,
+            help=(
+                f"Skip Discover results below this vote_count "
+                f"(default {MIN_VOTE_COUNT}; 0 disables the filter)"
+            ),
         )
         parser.add_argument(
             "--show",
@@ -53,8 +66,12 @@ class Command(BaseCommand):
 
         pages = options["pages"]
         sort_by = options["sort_by"]
-        self.stdout.write(f"Ingesting {pages} pages (sort: {sort_by}) ...")
-        ingestor.ingest_discover(pages=pages, sort_by=sort_by)
+        min_votes = options["min_votes"]
+        if min_votes is None:
+            min_votes = MIN_VOTE_COUNT
+        floor = f"vote_count >= {min_votes}" if min_votes else "no vote floor"
+        self.stdout.write(f"Ingesting {pages} pages (sort: {sort_by}, {floor}) ...")
+        ingestor.ingest_discover(pages=pages, sort_by=sort_by, min_votes=min_votes)
         self.stdout.write(self.style.SUCCESS("Ingestion complete."))
         # Rebuild the Layer 1 store once, after the whole batch, so reads always
         # serve the fresh graph (ADR-07).
