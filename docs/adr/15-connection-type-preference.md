@@ -149,28 +149,24 @@ its neighbours.
 different product question from a learned signal, and shipping the control first would have made
 the learned version unnecessary rather than informing it.
 
-## Amendment, 2026-08-29: the gate could never fire, and the cap was why
+## Amendment, 2026-08-30: the gate is a permutation test, not a threshold
 
-The three gates shipped as `MIN_CONNECTION_TYPE_EDGES = 4`,
-`MIN_CONNECTION_TYPE_MASS = 1.0`, and `MIN_CONNECTION_TYPE_LEAN = 0.5`, read
-over at most `CONNECTION_TYPE_MAX_EDGES = 60` edges. Measured against the real
-464-show catalog, that combination could not fire honestly.
+Shipped with three gates: `MIN_CONNECTION_TYPE_EDGES = 4`,
+`MIN_CONNECTION_TYPE_MASS = 1.0`, `MIN_CONNECTION_TYPE_LEAN = 0.5`, read over at
+most `CONNECTION_TYPE_MAX_EDGES = 60` edges. **It never fired, and then it fired
+on noise.** Both failures had the same cause and neither was the threshold.
 
-Seven synthetic profiles were built to test it, from 2 ratings to 249, plus one
-constructed specifically to lean by rating cast-tied neighbours 5.0 and
-crew-tied ones 1.0. **None produced a lean.** The constructed one reached 0.358
-against a required 0.5.
+### The cap was starving the estimator
 
-Twenty profiles of pure noise then showed why. At a 60-edge cap their leans ran
-from 0.03 to 0.864 with a median of 0.42, and **three of twenty already cleared
-the 0.5 threshold.** Signal sat below noise. No threshold separates a
-distribution from one of its own samples, so recalibrating the threshold could
-not have worked.
+Seven synthetic profiles from 2 to 249 ratings produced no lean at all, including
+one built to lean by rating cast-tied neighbours 5.0 and crew-tied ones 1.0. It
+reached 0.358 against a required 0.5.
 
-The cause is that 53% of edges in this catalog are mixed, carrying both cast
-and crew. Both affinities then draw their signal from the same edges and differ
-only by contribution weight, so their gap is dominated by sampling noise, which
-shrinks as more edges are averaged while a real lean does not:
+Twenty pure-noise profiles showed why: at a 60-edge cap their leans ran to 0.864
+with a median of 0.42, and three of twenty already cleared 0.5. **Signal sat
+below noise.** 53% of edges in this catalog are mixed, carrying both cast and
+crew, so both affinities draw on the same edges and differ mostly by sampling
+noise, which averages out with more edges while a real lean does not:
 
 | cap | signal (built) | noise ceiling |
 |---|---|---|
@@ -179,102 +175,79 @@ shrinks as more edges are averaged while a real lean does not:
 | **400** | **0.809** | **0.339** |
 | 1000 | 0.847 | 0.307 |
 
-`CONNECTION_TYPE_MAX_EDGES` is now **400**, where the separation is 2.4x and
-the returns flatten. `MIN_CONNECTION_TYPE_LEAN` **stays at 0.5**: it was never
-the wrong number, it was being asked to judge an estimator built from too few
-samples.
+`CONNECTION_TYPE_MAX_EDGES` is now **400**. Affordable only because ADR-07 moved
+the cast/crew split onto the edge; before that, more edges meant more graph
+walked.
 
-Raising the cap was only affordable because ADR-07 moved the cast/crew split
-onto the edge. On the same profiles afterwards, the constructed one fires at
-0.809 and every random profile stays silent.
+### But no constant could have worked
 
-## Amendment, 2026-08-30: the gate is a permutation test, not a threshold
+Raising the cap made the gate fire correctly, for a day. Then the catalog was
+pruned from 464 shows to 248 and a random 60-rating profile started firing at
+0.607. The constant had been fitted to a catalog that no longer existed.
 
-Pruning the catalog broke the calibration set the day before, which is the
-useful part of the story. `synthetic-broad`, a purely random 60-rating profile,
-started firing at 0.607 against a 0.5 floor. The constant had been fitted to a
-464-show catalog and the catalog had become 248 shows.
-
-Measuring again showed the fixed threshold was never going to hold, because the
-noise depends on how many edges a user happens to have and no single number can
-track that:
+The deeper problem is that noise depends on how many edges a user happens to
+have, and no single number tracks that:
 
 | ratings | inner edges | false leans at 0.5 |
 |---|---|---|
 | 20 | 20 | **27%** |
 | 40 | 72 | **27%** |
 | 60 | 164 | 3% |
-| 100 | 400 | 0% |
-| 248 | 400 | 0% |
+| 100+ | 400 | 0% |
 
-So the bar is now computed per profile. The user's own ratings are reassigned
-across their own rated shows two hundred times and the lean recomputed each
-time; the lean is reported only if it beats 95% of those shuffles. A user with
-twenty edges faces a high bar automatically, one with four hundred a low one,
-and a catalog change cannot invalidate it.
+So the bar is computed per profile. The user's own ratings are reassigned across
+their own rated shows 200 times and the lean recomputed; it is reported only if
+it beats 95% of those shuffles. Twenty edges earns a high bar automatically, four
+hundred a low one, and a catalog change cannot invalidate it.
 
-**The shuffle must happen over shows, not over edges.** An edge's signal is the
-mean of its two ends, so edges sharing a show share signal. Permuting edge
-signals directly breaks that correlation, makes the null distribution too
-tight, and lets noise through 22% to 40% of the time, which is worse than the
-constant it replaced. Permuting ratings across shows keeps the graph intact and
-asks the question worth asking: would these same ratings, spread differently
-over this same graph, still look like a preference?
+**The shuffle must be over shows, not edges.** An edge's signal is the mean of
+its two ends, so edges sharing a show share signal. Permuting edge signals breaks
+that correlation, tightens the null, and lets noise through 22% to 40% of the
+time, worse than the constant it replaced. That version was written and measured
+before this one. Permuting ratings across shows keeps the graph intact and asks
+the question worth asking: would these same ratings, spread differently over this
+same graph, still look like a preference?
 
-Measured after the correction, on pure noise:
+Measured on pure noise after the correction:
 
 | ratings | 20 | 40 | 60 | 100 | 150 | 248 |
 |---|---|---|---|---|---|---|
 | false leans | 2% | 5% | 8% | 0% | 5% | 5% |
 
-Flat, and at the 5% a 95% bar should produce. The profile built to lean still
-fires, at 1.047.
+Flat, and at the 5% a 95% bar should produce. The profile built to lean fires at
+1.047.
 
-`MIN_CONNECTION_TYPE_LEAN` drops from 0.5 to **0.25** and changes job. It is no
-longer the test; it is the separate judgment that a difference smaller than a
-quarter of a star is not worth reporting however statistically real it is.
-`CONNECTION_TYPE_MAX_EDGES` stays at 400.
+`MIN_CONNECTION_TYPE_LEAN` drops to **0.25** and changes job: no longer the test,
+only the judgment that a difference under a quarter-star is not worth reporting
+however statistically real it is.
 
-The unit fixture grew from two rated pairs to five a side. With four shows
-there are six ways to split them, so the most extreme possible result carries
-p = 0.167 and could never clear a 95% bar. Ten shows give 252 arrangements and
-a perfect split lands at p = 0.004. The fixture was asserting a preference read
-off four shows, which was never evidence.
+The unit fixture grew from two rated pairs to five a side. Four shows split six
+ways, so its most extreme possible result was p = 0.167 and could never clear a
+95% bar. It was asserting a preference read off four shows.
 
 ## After Action Review
-It works, and on today's database it correctly declines to do anything. The ten-rating user gets
-no lean because they rated everything highly; the ratingless user gets no lean because they have
-no ratings. Both are the honest answer. A synthetic fifty-rating user with genuinely split
-opinions clears all three gates and produces cast 0.662 against crew 0.141.
+It works, and on the live database it correctly declines to do anything. The
+ten-rating user gets no lean because they rated everything highly; the ratingless
+user gets none because they have no ratings. Both are the honest answer. Of seven
+synthetic profiles only the one built to lean fires, at 1.047, and it survives a
+catalog prune that invalidated every hand-fitted constant.
 
-Cost is bounded rather than proportional. Reading a reader's edges is capped at the strongest 60,
-so the work stops growing after that: four queries, 174ms for a reader who has rated the entire
-464-show catalog. Along the way `role_index` grew a bulk form, `role_indexes`, which cut the show
-detail page from 26 queries to 2 for the same work. That bulk form was verified against the
-per-show original across all 464 shows and all 280,229 person-show entries, with zero
-differences.
+Cost is bounded rather than proportional. The split rides on the edge (ADR-07),
+so reading a reader's edges is 400 rows and no graph work, and 200 shuffles is
+200 passes over those rows with no queries behind them. A reader who has rated
+**every show in the catalog** builds their whole home page in 49ms across 22
+queries, down from 579ms when this record was first written.
 
-Tested in `ConnectionTypePreferenceTests` and `ConnectionTypeNamingTests`: cold start, anonymous,
-a cast-leaning reader, a crew-leaning reader, a low rating signing the lean negative, and each of
-the three gates refusing separately. `CalloutOrderingTests` freezes which block opens the
-sentence, including that an unearned lean produces the byte-identical default sentence.
-`CrewRoleCollapseTests` freezes the role collapse. `RoleIndexesBulkTests` freezes the bulk
-equivalence and the query count. The suite went from 248 to 286.
+Tested in `ConnectionTypePreferenceTests` and `ConnectionTypeNamingTests`: cold
+start, anonymous, a cast-leaning reader, a crew-leaning reader, a low rating
+signing the lean negative, and each gate refusing separately.
+`CalloutOrderingTests` freezes which block opens the sentence, including that an
+unearned lean produces the byte-identical default. `RoleIndexesBulkTests` freezes
+the bulk equivalence and the query count. The suite is at 307.
 
-Both open items from the first cut are closed.
-
-Ordering the prose blocks was the first, and it is done, above. The second was that a crew lean
-made issue #4's director repetition worse by naming more directors: a callout could read
-"director Bryan Spicer directed 12 episodes, director Kevin Hooks directed four episodes,
-director Dwight H. Little directed two episodes and director Milan Cheylov directed 18 episodes".
-Now only the strongest holder of a role keeps the full clause and the rest collapse behind it,
-which is what the cast side has always done with "and Leslie Hope and Carlos Bernard appear too".
-Grouping is by prose noun rather than raw TMDb job, so "Original Music Composer" and "Composer"
-collapse together instead of saying "composer" twice. Across all 4,014 edges, zero callouts now
-repeat a role noun. The cost is the episode counts of the collapsed members, which are the least
-interesting numbers in the sentence.
-
-**The thresholds are first estimates, not measurements.** Four edges, 1.0 of mass, half a star.
-Each is argued from what the number means rather than fitted to observed behaviour, because with
-two users there is nothing to fit against. They should be revisited once more than one person has
-rated enough connected shows to clear them.
+**What this record cost, and the lesson in it.** Three passes to get one gate
+right: a cap too small to measure with, a constant that could not survive a
+catalog change, and a permutation test permuting the wrong thing. Every one was
+caught by measurement rather than review, and none by the 305 tests, which pass
+in all four versions. A gate that decides whether to say something is not
+something unit tests can validate; it needs a null distribution.

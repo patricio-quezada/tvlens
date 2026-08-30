@@ -155,7 +155,7 @@ differs between 1.375 and 1.5, about ten are better at 1.375 and one is better a
 
 ### What it moved
 
-On the 464-show catalog, together with the widened `SERVICE_JOBS`
+On the 464-show catalog of the time, since pruned to 248 (see MIN_VOTE_COUNT), together with the widened `SERVICE_JOBS`
 ([ADR-01](01-exclude-casting-roles.md), amended the same day): 4,014 edges become 4,013 across
 the same 409 sources, 304 of those sources reorder, and 76 change their top pick. The
 distribution goes from min 0.0001, max 33.376, mean 0.8388, median 0.4572 to min 0.0000039,
