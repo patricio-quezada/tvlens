@@ -1,4 +1,4 @@
-Django>=5.1,<6.0
-django-extensions>=3.2
+# Runtime. Everything the app needs to serve a request.
+Django>=5.2,<6.0
 python-dotenv>=1.0
 requests>=2.31

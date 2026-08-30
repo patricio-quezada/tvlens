@@ -1,3 +1,8 @@
-# Development-only tools, not needed to run TVLens. Install with:
-#   pip install -r requirements.txt -r requirements-dev.txt
+# Development only. Nothing here is imported by the app.
+#
+# django-extensions provides shell_plus and graph_models. settings.py adds it to
+# INSTALLED_APPS only when it is installed, so production runs without it.
+# ruff is the linter and formatter; its rules live in ruff.toml.
+-r requirements.txt
+django-extensions>=3.2
 ruff>=0.16
