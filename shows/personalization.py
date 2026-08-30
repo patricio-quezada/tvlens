@@ -621,12 +621,8 @@ def top_picks(user, limit=12):
     the top, while a 4.0 on a show the whole world rates 4.5 sinks. The
     baseline is a yardstick only; it is never displayed front-and-center.
 
-    The baseline per show is the TVLens all-user average EXCLUDING this user,
-    but only once at least MIN_OTHER_RATERS other people have rated it;
-    thinner than that, it falls back to TMDb vote_average / 2 (TMDb rates on
-    0-10, TVLens on 0.5-5). With a single user in the database, every show
-    takes the TMDb fallback, which is what makes the demo meaningful today:
-    lift reads as "how much more I liked this than the world did".
+    `rated_shows` computes the baseline and documents how it falls back; this
+    function only orders by the lift that comes out of it.
 
     Only shows the user scored >= TOP_PICK_FLOOR qualify; ties break on the
     user's score, then name, so equal lifts order deterministically. Returns

@@ -183,45 +183,26 @@ one row. The priority is by how *personal* a row is, and it deliberately does no
 order: Side Quests sits below Recently added on the page but claims its shows before it. A
 show only ever falls down that chain.
 
-### What the numbers say
-**These figures predate the second amendment.** They measured the one-hop walk ordered by
-`score x novelty`, and they remain here because what they establish still holds: the row is
-personal rather than global, it is not a chart, and it is honestly short at 100 shows. Row
-sizes and specific orderings will have moved. Re-running the samplers against the current rule
-belongs with [#20](https://github.com/patricio-quezada/tvlens/issues/20).
+### What the numbers established, and what has since moved
+Measured in August 2026 against 4000 synthetic three-seed users on a 100-show catalog, before
+the genre gate was graded and before the catalog was filtered and pruned to 248. **The figures
+are gone; three findings from them still hold and are the reason this row exists:**
 
-There is one rating in the development database, so I measured the row against 4000 synthetic
-three-seed users per sampler: **uniform**, three shows drawn at random, and **coherent**, three
-shows drawn from a single genre, which is the harder and more realistic case because a real
-taste is not random.
+- **It is personal, not global.** Two random users' rows overlapped by a mean Jaccard of 0.08,
+  median 0.00. Under the withdrawn cold-start path that number was 100% by construction.
+- **It is not a chart.** Mean Spearman correlation between a row's order and its members'
+  popularity rank was 0.156, and 0.028 against vote_average. Both noise.
+- **It is honestly short.** Median 6 picks of a possible 12, and it filled completely for 3%
+  of users. A half strip is the truthful answer when the catalog is small.
 
-Row size, coherent seeds: median 6 picks, mean 5.7, empty for 3 percent of users, at least 3
-picks for 76 percent, at least 5 for 60 percent. Uniform seeds run a little fuller: median 7,
-empty 3 percent. **The row is usually half a strip rather than a full one, and that is the
-honest answer at 100 shows.** It fills to all 12 for only 3 percent of coherent users.
+Re-measuring against the current rule and the current catalog is worth doing before the demo.
 
-The picks are strong edges, not tail scrapings: median Layer 1 score 0.580 against a store
-median of 0.439, with 20 percent below the store's bottom quartile (0.176). Median novelty is
-0.50, meaning the typical pick is half made of genres this user has never rated highly, and 8
-percent of picks are entirely so.
-
-It is not one list. Across coherent users the row reaches 79 of the 100 shows and 59 different
-shows appear in the lead position. Two random users' rows overlap by a mean Jaccard of 0.08,
-median 0.00, and are identical 2.8 percent of the time (those are users whose sampled seed
-triples happened to coincide). Under the withdrawn cold-start path that number was 100
-percent by construction.
-
-It is not a chart. Mean Spearman correlation between a row's order and its members'
-popularity rank is 0.156, and against vote_average rank 0.028. Both are noise.
-
-### Tags are not available, and would sharpen this
-I described the surprise as running on "connections and tags". The connections are Layer 1, and
-the row uses them. The tags are not: `Tag` and `ShowTag` are both empty, 0 rows, so genre is
-the only categorical signal the catalog has today. Genre is coarse for this job, as the
-Drama-on-66-shows number shows. Once the ingest lands tags, the same shape works with a finer
-vocabulary: the novelty share would run over tags as well as genres, which would let the row
-tell "a workplace comedy you have not tried" apart from "a comedy", and would push the
-fully-novel band above 8 percent of picks. That is a later decision, not this one.
+### Tags exist now, and would still sharpen this
+When this was written `Tag` and `ShowTag` held 0 rows, so genre was the only categorical
+signal. ADR-14 landed tags and they now hold 7 and 9, which is enough to exist and not enough
+to run novelty over. Genre remains coarse for this job. Once tags are populated, the same shape
+works with a finer vocabulary: novelty would run over tags as well as genres, letting the row
+tell "a workplace comedy you have not tried" from "a comedy". Still a later decision.
 
 ### One hazard this touched
 `Show.Meta.ordering = ["-popularity"]` means any queryset that forgets an explicit

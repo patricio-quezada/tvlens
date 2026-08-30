@@ -86,10 +86,14 @@ at request time meant a `role_indexes` pass over every show the reader had
 rated. Profiled on the real catalog that was **53% of the entire profile
 build**, spent re-deriving numbers that only change on ingest.
 
-Moving it to the edge cut a 249-rating profile from 579ms to 205ms, and a
-profile that has rated **every show in the catalog** now builds in 224ms with
-22 queries. It also removed the ceiling on how many edges Layer 2 may read,
-which is what made ADR-15's estimator work at all.
+Moving it to the edge cut a 249-rating profile from 579ms to 205ms. Removing a
+separate four-join `OR` in `Show.objects.watched_by` the same night took it to
+**56ms**, and a profile that has rated every show in the catalog now builds its
+whole home page in **49ms across 22 queries**. Total SQL for that page went from
+109ms to 4.0ms with nothing above 2ms.
+
+It also removed the ceiling on how many edges Layer 2 may read, which is what
+made ADR-15's estimator work at all.
 
 The cost is two floats per edge, written by `rebuild_similar_shows` in the same
 pass that already computes the ranking, and one full rebuild to backfill.
@@ -129,7 +133,7 @@ Crime Scene Investigation left Breaking Bad's top 12 entirely as the catalog gre
 shows.** It is still in the catalog. Nothing failed, because a claim in prose cannot fail, and
 the sentence sat here being wrong for months.
 
-On the 464-show catalog, after the rescoring in
+On the 464-show catalog of the time, since pruned to 248 (see MIN_VOTE_COUNT), after the rescoring in
 [ADR-04](04-episode-weighted-people-recommender.md) and the widened `SERVICE_JOBS` in
 [ADR-01](01-exclude-casting-roles.md), the store holds **4,013 edges across 409 sources**, and
 Breaking Bad reads:
