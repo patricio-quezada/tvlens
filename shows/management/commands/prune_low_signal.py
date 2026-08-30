@@ -29,7 +29,17 @@ from django.db import transaction
 from django.db.models import Count
 
 from shows.ingestion import MIN_VOTE_COUNT
-from shows.models import CastMember, CrewMember, Person, Rating, Show, SimilarShow
+from shows.models import (
+    CastMember,
+    CrewMember,
+    Person,
+    Rating,
+    Review,
+    Show,
+    ShowTag,
+    SimilarShow,
+    Watchlist,
+)
 
 
 class Command(BaseCommand):
@@ -57,7 +67,26 @@ class Command(BaseCommand):
         dry_run = options["dry_run"]
         floor = options["min_votes"]
 
-        doomed = Show.objects.filter(vote_count__lt=floor)
+        # A show someone has engaged with is never pruned, however far its
+        # vote_count has fallen. Popularity is TMDb's opinion; a rating is the
+        # user's, and deleting a Show cascades to the Ratings hanging off it.
+        # Losing someone's 5.0 because a show got less popular is the one
+        # outcome this command must never produce.
+        spoken_for = (
+            set(Rating.objects.values_list("show_id", flat=True))
+            | set(Review.objects.values_list("show_id", flat=True))
+            | set(Watchlist.objects.values_list("show_id", flat=True))
+            | set(ShowTag.objects.values_list("show_id", flat=True))
+        )
+        doomed = Show.objects.filter(vote_count__lt=floor).exclude(id__in=spoken_for)
+        spared = Show.objects.filter(vote_count__lt=floor, id__in=spoken_for).count()
+        if spared:
+            self.stdout.write(
+                self.style.WARNING(
+                    f"Sparing {spared} show(s) below the floor that someone has rated, "
+                    "reviewed, listed or tagged."
+                )
+            )
         if not doomed.exists():
             self.stdout.write(f"Nothing below vote_count {floor}. Catalog is already clean.")
             return
