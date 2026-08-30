@@ -188,6 +188,59 @@ Raising the cap was only affordable because ADR-07 moved the cast/crew split
 onto the edge. On the same profiles afterwards, the constructed one fires at
 0.809 and every random profile stays silent.
 
+## Amendment, 2026-08-30: the gate is a permutation test, not a threshold
+
+Pruning the catalog broke the calibration set the day before, which is the
+useful part of the story. `synthetic-broad`, a purely random 60-rating profile,
+started firing at 0.607 against a 0.5 floor. The constant had been fitted to a
+464-show catalog and the catalog had become 248 shows.
+
+Measuring again showed the fixed threshold was never going to hold, because the
+noise depends on how many edges a user happens to have and no single number can
+track that:
+
+| ratings | inner edges | false leans at 0.5 |
+|---|---|---|
+| 20 | 20 | **27%** |
+| 40 | 72 | **27%** |
+| 60 | 164 | 3% |
+| 100 | 400 | 0% |
+| 248 | 400 | 0% |
+
+So the bar is now computed per profile. The user's own ratings are reassigned
+across their own rated shows two hundred times and the lean recomputed each
+time; the lean is reported only if it beats 95% of those shuffles. A user with
+twenty edges faces a high bar automatically, one with four hundred a low one,
+and a catalog change cannot invalidate it.
+
+**The shuffle must happen over shows, not over edges.** An edge's signal is the
+mean of its two ends, so edges sharing a show share signal. Permuting edge
+signals directly breaks that correlation, makes the null distribution too
+tight, and lets noise through 22% to 40% of the time, which is worse than the
+constant it replaced. Permuting ratings across shows keeps the graph intact and
+asks the question worth asking: would these same ratings, spread differently
+over this same graph, still look like a preference?
+
+Measured after the correction, on pure noise:
+
+| ratings | 20 | 40 | 60 | 100 | 150 | 248 |
+|---|---|---|---|---|---|---|
+| false leans | 2% | 5% | 8% | 0% | 5% | 5% |
+
+Flat, and at the 5% a 95% bar should produce. The profile built to lean still
+fires, at 1.047.
+
+`MIN_CONNECTION_TYPE_LEAN` drops from 0.5 to **0.25** and changes job. It is no
+longer the test; it is the separate judgment that a difference smaller than a
+quarter of a star is not worth reporting however statistically real it is.
+`CONNECTION_TYPE_MAX_EDGES` stays at 400.
+
+The unit fixture grew from two rated pairs to five a side. With four shows
+there are six ways to split them, so the most extreme possible result carries
+p = 0.167 and could never clear a 95% bar. Ten shows give 252 arrangements and
+a perfect split lands at p = 0.004. The fixture was asserting a preference read
+off four shows, which was never evidence.
+
 ## After Action Review
 It works, and on today's database it correctly declines to do anything. The ten-rating user gets
 no lean because they rated everything highly; the ratingless user gets no lean because they have

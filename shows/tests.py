@@ -3607,12 +3607,18 @@ class AlreadyWatchedFilterTests(TestCase):
 class ConnectionTypePreferenceTests(TestCase):
     """What a user's own ratings say about cast connections versus crew ones.
 
-    Issue #7. Two rated pairs: one held together by a shared lead on every
-    episode of both, one by a shared creator on every episode of both. Each
-    pair is a mutual Layer 1 edge, so the rated set carries the four directed
-    edges MIN_CONNECTION_TYPE_EDGES asks for, and one whole-run person on each
-    side clears the per-type mass floor. Moving only the ratings therefore
-    moves only the lean, which is the thing under test.
+    Issue #7. Five rated pairs held together by a shared lead on every episode
+    of both, and five by a shared creator, each pair a mutual Layer 1 edge.
+
+    Five and not two, because the gate is a permutation test now (ADR-15): it
+    asks whether these ratings spread differently over this same graph would
+    still look like a preference. With two pairs there are only six ways to
+    split four shows, so the most extreme possible result carries p = 0.167 and
+    could never clear a 95% bar however cleanly the ratings separated. Ten
+    shows give 252 arrangements and a perfect split lands at p = 0.004.
+
+    That is the fixture matching the contract rather than the contract bending
+    to the fixture: a preference read off four shows was never evidence.
     """
 
     @classmethod
@@ -3626,18 +3632,32 @@ class ConnectionTypePreferenceTests(TestCase):
                 tmdb_id=tmdb_id, name=name, number_of_episodes=10, vote_average=8.0
             )
 
-        cls.cast_a, cls.cast_b = show(1, "Cast A"), show(2, "Cast B")
-        cls.crew_a, cls.crew_b = show(3, "Crew A"), show(4, "Crew B")
-        for s in (cls.cast_a, cls.cast_b):
-            CastMember.objects.create(
-                show=s, person=cls.lead, order=0, character="Hero", episode_count=10
-            )
-        for s in (cls.crew_a, cls.crew_b):
-            CrewMember.objects.create(show=s, person=cls.creator, job="Creator", episode_count=10)
-        cls._edge(cls.cast_a, cls.cast_b)
-        cls._edge(cls.cast_b, cls.cast_a)
-        cls._edge(cls.crew_a, cls.crew_b)
-        cls._edge(cls.crew_b, cls.crew_a)
+        # Five pairs a side. Each pair shares its own person, so the pairs are
+        # edges to each other and not to the rest, which keeps every edge in
+        # the set purely cast or purely crew.
+        cls.cast_shows, cls.crew_shows = [], []
+        for i in range(5):
+            a, b = show(10 + i * 2, f"Cast A{i}"), show(11 + i * 2, f"Cast B{i}")
+            lead = Person.objects.create(tmdb_id=100 + i, name=f"Lead {i}")
+            for s in (a, b):
+                CastMember.objects.create(
+                    show=s, person=lead, order=0, character="Hero", episode_count=10
+                )
+            cls._edge(a, b)
+            cls._edge(b, a)
+            cls.cast_shows += [a, b]
+
+            c, d = show(50 + i * 2, f"Crew A{i}"), show(51 + i * 2, f"Crew B{i}")
+            maker = Person.objects.create(tmdb_id=200 + i, name=f"Creator {i}")
+            for s in (c, d):
+                CrewMember.objects.create(show=s, person=maker, job="Creator", episode_count=10)
+            cls._edge(c, d)
+            cls._edge(d, c)
+            cls.crew_shows += [c, d]
+
+        # Kept for the tests that name a single show.
+        cls.cast_a, cls.cast_b = cls.cast_shows[0], cls.cast_shows[1]
+        cls.crew_a, cls.crew_b = cls.crew_shows[0], cls.crew_shows[1]
 
     @classmethod
     def _edge(cls, source, target):
@@ -3660,9 +3680,9 @@ class ConnectionTypePreferenceTests(TestCase):
         )
 
     def _rate(self, cast_score, crew_score):
-        for s in (self.cast_a, self.cast_b):
+        for s in self.cast_shows:
             Rating.objects.create(user=self.user, show=s, score=cast_score)
-        for s in (self.crew_a, self.crew_b):
+        for s in self.crew_shows:
             Rating.objects.create(user=self.user, show=s, score=crew_score)
         return build_profile(self.user)
 
@@ -3709,9 +3729,13 @@ class ConnectionTypePreferenceTests(TestCase):
         self.assertEqual(profile.connection_type_lean, 0.0)
 
     def test_a_gap_below_the_floor_is_not_called(self):
-        # 0.25 of a star apart: real arithmetic, not a real opinion.
-        profile = self._rate(cast_score=5.0, crew_score=4.75)
-        self.assertGreater(MIN_CONNECTION_TYPE_LEAN, 0.25)
+        # A tenth of a star apart, and perfectly consistent across all ten
+        # shows. The permutation test would call that significant, correctly:
+        # it IS a reliable difference. MIN_CONNECTION_TYPE_LEAN is the separate
+        # judgment that a difference this small is not worth reporting however
+        # real it is, which is why the floor survives the move to shuffling.
+        profile = self._rate(cast_score=5.0, crew_score=4.9)
+        self.assertGreater(MIN_CONNECTION_TYPE_LEAN, 0.1)
         self.assertEqual(profile.connection_type_weights, {})
 
     def test_too_few_edges_inside_the_rated_set_is_not_called(self):
