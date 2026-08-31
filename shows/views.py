@@ -1,5 +1,6 @@
 """Shows app views."""
 
+import logging
 import time
 
 from django.contrib import messages
@@ -35,6 +36,9 @@ from .recommenders import (
     stored_similar,
 )
 from .search import search as run_search
+from .tmdb_client import TMDBClient
+
+logger = logging.getLogger(__name__)
 
 # The MovieLens half-star scale, 0.5 to 5.0 (the same scale ADR-08 assumes for
 # Layer 2, enforced by Rating's model validators). Every value the widget offers
@@ -387,12 +391,38 @@ def search(request):
         .order_by("original_language")
     )
 
+    # Only when the catalog comes back empty, and only for a plain title query.
+    # A reader who searched a show we do not have should learn that, rather than
+    # concluding search is broken. Nothing is ingested here: this is a label,
+    # not a fetch. Adding a show is deliberate, via `manage.py ingest_show`.
+    elsewhere = []
+    if not shows and raw.strip() and not parsed.too_short:
+        try:
+            have = set(Show.objects.values_list("id", flat=True))
+            elsewhere = [
+                {
+                    "tmdb_id": r["id"],
+                    "name": r.get("name") or "",
+                    "year": (r.get("first_air_date") or "")[:4],
+                    "votes": r.get("vote_count") or 0,
+                    "score": r.get("vote_average") or 0,
+                    "overview": (r.get("overview") or "")[:180],
+                }
+                for r in TMDBClient().search_tv(raw)
+                if r.get("id") not in have and (r.get("vote_count") or 0) > 0
+            ]
+        except Exception:
+            # TMDb being down must never break catalog search. The reader loses
+            # a hint, not the page.
+            logger.warning("TMDb fallback search failed for %r", raw, exc_info=True)
+
     return render(
         request,
         "shows/search.html",
         {
             "q": raw,
             "parsed": parsed,
+            "elsewhere": elsewhere,
             # The page already carries a search box front and centre. A second
             # one in the bar is a duplicate control competing with it.
             "hide_nav_search": True,

@@ -58,6 +58,24 @@ class TMDBClient:
         params = {"page": page, "sort_by": sort_by, **filters}
         return self._get("/discover/tv", params=params)
 
+    def search_tv(self, query, limit=6):
+        """Shows TMDb knows about, whether or not we have them.
+
+        The catalog is built by walking Discover sorted by popularity, so it is
+        "the most popular N shows" rather than "shows worth having". Bluey has
+        735 votes and an 8.6 average and was absent on 2026-08-31 purely
+        because it never reached the pages we pull.
+
+        That made local search look broken: a reader searching a show they know
+        exists got "nothing matched". This is the fallback that keeps search
+        honest. It does NOT ingest anything; it only lets the page say "we know
+        about this one, we just do not have it yet".
+        """
+        if not query or len(query.strip()) < 2:
+            return []
+        data = self._get("/search/tv", {"query": query.strip()}) or {}
+        return data.get("results", [])[:limit]
+
     def get_tv_details(self, tv_id, append_to_response="credits,videos"):
         """Full details for a single show including credits."""
         return self._get(

@@ -94,9 +94,33 @@
 </p>
 {% else %}
 <p class="empty">
-    Nothing matched “{{ q }}”. Search covers titles, cast, crew, characters,
-    genres, networks, season names and episode synopses.
+    Nothing in the catalog matched “{{ q }}”. Search covers titles, cast, crew,
+    characters, genres, networks, season names and episode synopses.
 </p>
+{% comment %}The catalog is the most popular N shows, not every show that
+exists, so a reader can search something real and get nothing. Saying "we know
+about this one, we just do not have it" is the difference between a small
+catalog and broken search. Nothing here is ingested; adding a show is
+deliberate, via manage.py ingest_show.{% endcomment %}
+{% if elsewhere %}
+<div class="elsewhere">
+    <h2>On TMDb, but not in TVLens yet</h2>
+    <ul>
+        {% for s in elsewhere %}
+        <li>
+            <span class="elsewhere-name">{{ s.name }}</span>{% if s.year %}
+            <span class="elsewhere-year">{{ s.year }}</span>{% endif %}
+            <span class="elsewhere-votes">{{ s.score|floatformat:1 }} · {{ s.votes }} votes</span>
+            {% if s.overview %}<p class="elsewhere-overview">{{ s.overview }}</p>{% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+    <p class="elsewhere-note">
+        TVLens holds the shows its recommendation graph can connect. These are
+        not in it yet.
+    </p>
+</div>
+{% endif %}
 {% endif %}
 {% else %}
 <div class="search-hint">
@@ -168,6 +192,15 @@
         border-radius: 999px; color: var(--accent); font-size: 0.78rem;
     }
     .chip-note { font-style: italic; }
+    .elsewhere { max-width: 640px; margin: 2.5rem auto 0; }
+    .elsewhere h2 { font-size: .8rem; letter-spacing: .09em; text-transform: uppercase;
+                    opacity: .6; font-weight: 600; margin: 0 0 .9rem; }
+    .elsewhere ul { list-style: none; margin: 0; padding: 0;
+                    display: flex; flex-direction: column; gap: 1.1rem; }
+    .elsewhere-name { font-weight: 600; }
+    .elsewhere-year, .elsewhere-votes { opacity: .6; font-size: .9rem; margin-left: .4rem; }
+    .elsewhere-overview { margin: .25rem 0 0; opacity: .75; font-size: .92rem; }
+    .elsewhere-note { margin: 1.4rem 0 0; opacity: .6; font-size: .88rem; }
     .did-you-mean, .search-count, .empty, .search-hint { max-width: 640px; margin-left: auto; margin-right: auto; }
     .search-count { margin-top: 1.5rem; margin-bottom: 1rem; color: var(--text-secondary); font-size: 0.9rem; }
     .search-count .timing { margin-left: 0.6rem; opacity: 0.6; font-size: 0.8rem; }
