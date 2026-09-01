@@ -112,3 +112,48 @@ fourth-billed actor is obviously right; whether an episode synopsis should outra
 a guess, and the first real feedback should overturn it.
 
 Ranking never uses popularity, per ADR-05.
+
+## Amendment, 2026-09-01: the episode branch reads FTS5, for bm25 more than speed
+
+The episode synopsis branch now queries an FTS5 index instead of scanning
+164,360 overviews with LIKE plus a regex. Every other branch is unchanged, and
+so is the "no text index" reasoning above: those branches still have no latency
+to recover. This one had something better to recover, which is ranking.
+
+Ranking is the reason, and #29 framed it that way before the build. This
+record already admitted the branch weights are a guess; below the weights, the
+old branch had no ordering at all, so a show whose episodes are about the
+query sorted level with a show that mentions it once, and the crowd score
+decided. bm25 now orders shows within the episode bucket by their best
+episode's match. It reaches no further: weighing bm25 against the other
+branches would overturn the branch ordering, and that needs its own evidence.
+
+Matching is prefix, not exact, because exact would have been a silent
+behaviour change: `murder*` returned the regex's 151 shows where exact FTS
+matching lost "murderer" and "murders" and returned 132. Measured on the live
+catalog, prefix FTS returned exactly the regex's shows for every term tried.
+The user's term never reaches MATCH raw; it is quoted into a single phrase
+with internal quotes doubled, because FTS5 treats quotes, hyphens and AND, OR,
+NOT as syntax, and `don't` must be a word rather than an error.
+
+The numbers, re-measured 2026-09-01 on 249 shows and 164,360 episodes. The
+branch fell from 170 ms to 81 ms on "the", 34 to 5, and 17 to 0.1 on "murder"
+and "zeppelin". Half of the 81 is the bm25 aggregation itself: ids alone come
+back in 41 ms, which matches what #29 predicted. The price is size, 43 MB on a
+77 MB database, a little over the 37 MB #29 measured because every episode row
+is mirrored, empty synopses included, to keep the sync invariant one-to-one.
+The index built in under a second.
+
+The index creates an obligation the old scan never had: it must answer for the
+episodes table as it is now. Three SQLite triggers discharge it at write time,
+on insert, update and delete, created in the same migration that builds the
+table, so no ingest command has to remember anything. The update trigger fires
+on `season_id` as well as `overview`, because TMDb moves episodes between
+seasons while keeping their id, and an overview-only trigger would leave a
+moved episode answering for its old show.
+
+The table carries show_id, season_id and episode_id unindexed, so the season
+pivot (#25, #26) becomes a change of SELECT column rather than an index
+rebuild. Tested in `FtsQueryEscapingTests`, `EpisodeFtsSearchTests` and
+`EpisodeFtsTriggerTests`. The Python-side early-exit fallback #29 kept in
+reserve was not needed.
