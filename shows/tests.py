@@ -14,7 +14,7 @@ from django.db.models import Max
 from django.test import TestCase
 from django.urls import reverse
 
-from .ingestion import Ingestor
+from .ingestion import MIN_VOTE_COUNT, Ingestor
 from .models import (
     CastMember,
     CrewMember,
@@ -23,12 +23,14 @@ from .models import (
     Network,
     Person,
     Rating,
+    Review,
     Season,
     Show,
     ShowTag,
     SimilarShow,
     Tag,
     WatchHistory,
+    Watchlist,
 )
 from .personalization import (
     MIN_CONNECTION_TYPE_EDGES,
@@ -4242,3 +4244,115 @@ class WatchNextTests(TestCase):
         result = watch_next(stranded)
         self.assertEqual(list(result), [])
         self.assertTrue(result.has_seeds)
+
+
+class CatalogShipTests(TestCase):
+    """A catalog ship is a merge, and spoken-for shows are undeletable (#28).
+
+    The catalog is TMDb's and read-only; ratings, reviews, watchlist rows and
+    tags are the user's. A catalog update must therefore be a merge in place,
+    never a replacement, and the invariant these tests freeze is: no command
+    may delete a Show that any user row points at. Today that protection is an
+    implementation detail of prune_low_signal's spoken_for set; these tests
+    are what turn it into a contract a refactor cannot silently drop.
+
+    Identity is the other half (ADR-03): ingest_show pins pk == tmdb_id, so a
+    re-ingest corrects a show's record without re-pointing anyone's rating.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.alice = User.objects.create_user("alice", password="pw-alice-123")
+        low = MIN_VOTE_COUNT - 90  # comfortably under the floor
+        make = lambda i, name: Show.objects.create(
+            tmdb_id=i, id=i, name=name, vote_count=low, number_of_episodes=8
+        )
+        cls.rated = make(9001, "Rated but unpopular")
+        cls.reviewed = make(9002, "Reviewed but unpopular")
+        cls.listed = make(9003, "Watchlisted but unpopular")
+        cls.tagged = make(9004, "Tagged but unpopular")
+        cls.unloved = make(9005, "Unloved and unpopular")
+        cls.healthy = Show.objects.create(
+            tmdb_id=9006, id=9006, name="Healthy", vote_count=5000, number_of_episodes=8
+        )
+
+        Rating.objects.create(user=cls.alice, show=cls.rated, score=5.0)
+        Review.objects.create(user=cls.alice, show=cls.reviewed, title="Kept", body="…")
+        Watchlist.objects.create(user=cls.alice, show=cls.listed)
+        cozy = Tag.objects.create(name="cozy", slug="cozy")
+        ShowTag.objects.create(user=cls.alice, show=cls.tagged, tag=cozy)
+
+    def test_prune_spares_every_spoken_for_kind(self):
+        # Losing someone's 5.0 because a show got less popular is the one
+        # outcome prune must never produce, and the same holds for the three
+        # other ways a user can point at a show.
+        out = StringIO()
+        call_command("prune_low_signal", "--skip-rebuild", stdout=out)
+
+        survivors = set(Show.objects.values_list("tmdb_id", flat=True))
+        self.assertNotIn(9005, survivors)  # nothing spoke for it
+        for spared in (9001, 9002, 9003, 9004, 9006):
+            self.assertIn(spared, survivors)
+
+        self.assertEqual(Rating.objects.count(), 1)
+        self.assertEqual(Review.objects.count(), 1)
+        self.assertEqual(Watchlist.objects.count(), 1)
+        self.assertEqual(ShowTag.objects.count(), 1)
+
+    def test_reingest_corrects_the_record_without_repointing_ratings(self):
+        # A shipped catalog meets an existing database as update_or_create on
+        # tmdb_id with pk pinned to it (ADR-03), so fresher data lands in the
+        # same row the rating already points at.
+        class FakeClient:
+            def get_tv_details(self, tmdb_id):
+                return {
+                    "name": "Rated and renamed",
+                    "vote_count": 4000,
+                    "vote_average": 8.1,
+                    "seasons": [],
+                }
+
+            def get_tv_aggregate_credits(self, tmdb_id):
+                return {}
+
+        rating_pk_before = Rating.objects.get(user=self.alice).pk
+        show_pk_before = self.rated.pk
+
+        Ingestor(client=FakeClient()).ingest_show(self.rated.tmdb_id)
+
+        rating = Rating.objects.get(pk=rating_pk_before)
+        self.assertEqual(rating.show_id, show_pk_before)
+        self.assertEqual(rating.show.tmdb_id, 9001)
+        self.assertEqual(rating.show.name, "Rated and renamed")
+        self.assertEqual(rating.show.vote_count, 4000)
+        self.assertEqual(rating.score, 5.0)
+
+    def test_refresh_reports_a_fall_and_prune_spares_it(self):
+        # The full ship cycle for the worst case: a rated show drops under the
+        # floor. refresh_catalog must report without deleting, and the prune
+        # that follows must spare it. The rating survives the whole cycle.
+        from unittest.mock import patch
+
+        Show.objects.filter(pk=self.rated.pk).update(vote_count=MIN_VOTE_COUNT + 400)
+        # .update() dodges auto_now, making this the stalest show on purpose.
+        Show.objects.filter(pk=self.rated.pk).update(updated_at="2020-01-01T00:00:00Z")
+
+        class FallingIngestor:
+            def ingest_show(self, tmdb_id):
+                Show.objects.filter(tmdb_id=tmdb_id).update(vote_count=MIN_VOTE_COUNT - 60)
+
+        out = StringIO()
+        with patch(
+            "shows.management.commands.refresh_catalog.Ingestor",
+            return_value=FallingIngestor(),
+        ):
+            call_command("refresh_catalog", "--oldest", "1", "--skip-rebuild", stdout=out)
+
+        report = out.getvalue()
+        self.assertIn("fell below", report)
+        self.assertIn("Not removed", report)
+        self.assertTrue(Show.objects.filter(tmdb_id=9001).exists())
+
+        call_command("prune_low_signal", "--skip-rebuild", stdout=StringIO())
+        self.assertTrue(Show.objects.filter(tmdb_id=9001).exists())
+        self.assertEqual(Rating.objects.count(), 1)
