@@ -15,17 +15,20 @@ The same search, split into one query per branch with the ids unioned in
 Python, runs in 32 ms and 74 ms worst case. So every branch below is its own
 query and nothing is ever ORed across a join.
 
-**No text index, deliberately.** icontains compiles to LIKE '%x%', which is
-unanchored, so SQLite full-scans whatever index sits on the column. The slowest
-single scan in the catalog is Person.name at 5.1 ms across 82,763 rows. There
-is no latency here to recover, so FTS5 would be complexity without payoff.
-Revisit if the catalog grows an order of magnitude: cost here scales with cast
-size, not show count.
+**No text index, except where ranking needs one.** icontains compiles to LIKE
+'%x%', which is unanchored, so SQLite full-scans whatever index sits on the
+column. The slowest single scan in the catalog is Person.name at 5.1 ms across
+82,763 rows; there is no latency to recover there, so FTS5 on those columns
+would be complexity without payoff. Episode synopses are the exception (#29):
+that branch reads an FTS5 index, and the reason is bm25 ordering within the
+branch rather than speed, which improved from 170 ms to 43 ms on the worst
+term as a side effect. See ADR-12.
 """
 
 import re
 from difflib import SequenceMatcher, get_close_matches
 
+from django.db import connection
 from django.db.models import Q
 
 from .models import Person, Show
@@ -252,6 +255,62 @@ def _word(field, term):
     return Q(**{f"{field}__icontains": term, f"{field}__iregex": pattern})
 
 
+def _fts_query(term):
+    """Turn a raw user term into an FTS5 prefix query, or None.
+
+    FTS5 MATCH is a query language, not a string match. Double quotes delimit
+    phrases, AND, OR and NOT are operators, and a stray hyphen or apostrophe
+    is a syntax error rather than a character. A reader typing don't or
+    spider-man is not writing that language, so the whole term becomes one
+    quoted phrase, internal quotes doubled the way SQL doubles them, safe by
+    construction rather than by a blocklist of operators.
+
+    The trailing star matches word prefixes. #29 measured prefix matching as
+    identical to the \\b regex it replaces on every term tried, where exact
+    matching silently dropped "murderer" and "murders".
+
+    A term the tokenizer keeps nothing of, like a bare * or --, would build a
+    query around the empty phrase, which FTS5 rejects. None tells the caller
+    there is nothing to run.
+    """
+    term = term.strip()
+    if not any(c.isalnum() for c in term):
+        return None
+    escaped = term.replace('"', '""')
+    return f'"{escaped}"*'
+
+
+def _episode_fts(term):
+    """Shows whose episode synopses match `term`, as {show_id: bm25}.
+
+    Reads the episode_fts index that migration 0010 builds and its triggers
+    keep in sync, instead of scanning 164,360 overviews. The win is not the
+    43 ms (#29 measured the old scan at 170 ms on its worst term): it is that
+    bm25 finally orders this branch by how well the synopses match rather than
+    by the shows' crowd score. A show's rank is its best episode's, and lower
+    bm25 is better, which is FTS5's convention, not ours.
+
+    bm25 orders shows within this branch only. Weighing it against the other
+    branches would overturn ADR-12's branch ordering, and that needs its own
+    evidence.
+    """
+    query = _fts_query(term)
+    if query is None:
+        return {}
+    with connection.cursor() as cursor:
+        # rank is FTS5's built-in bm25 column. The bm25() function itself is
+        # refused under an aggregate ("unable to use function bm25 in the
+        # requested context"), and hiding it in a subquery only survives until
+        # the flattener inlines it; the rank column has no such restriction.
+        cursor.execute(
+            "SELECT show_id, min(rank) AS best"
+            " FROM episode_fts WHERE episode_fts MATCH %s"
+            " GROUP BY show_id ORDER BY best",
+            [query],
+        )
+        return {show_id: best for show_id, best in cursor.fetchall()}
+
+
 def _ids(queryset):
     """Ids only. Never .distinct() on a fan-out join: pull ids and let the set
     deduplicate, which avoids SELECT DISTINCT over a multiplied result."""
@@ -305,15 +364,18 @@ def _branch(name, term, main_cast_only=False):
         # "Thousand-Year Blood War" finds Bleach. Ranked low because most of
         # the 141 distinct names read "Season 3".
         "season_name": lambda: Show.objects.filter(_word("seasons__name", term)),
-        # The deepest branch. Synopsis only: episode titles were cut
-        # deliberately, they are short, generic and mostly noise.
-        "episode": lambda: Show.objects.filter(_word("seasons__episodes__overview", term)),
+        # The deepest branch, and the one branch on an FTS5 index (#29).
+        # Synopsis only: episode titles were cut deliberately, they are
+        # short, generic and mostly noise. Returns {show_id: bm25} so the
+        # caller can order within the branch by match quality.
+        "episode": lambda: _episode_fts(term),
         # A reader's own vocabulary, not TMDb's. Ranked with genre and network
         # because a tag is the same kind of claim about a show.
         "tag": lambda: Show.objects.filter(_word("user_tags__tag__name", term)),
     }
     result = queries[name]()
-    return result if isinstance(result, set) else _ids(result)
+    # The episode branch hands back {show_id: bm25}, not a queryset.
+    return result if isinstance(result, (set, dict)) else _ids(result)
 
 
 # Rank order for free text. A title hit outranks a show whose fourth-billed
@@ -411,12 +473,16 @@ def search(
         return [], parsed
 
     ranks = {}
+    episode_rank = {}  # show_id -> bm25, lower is better. Episode branch only.
     matched = None  # None means unconstrained by any text branch
 
     term = parsed.searchable_text
     if term:
         for name, weight in BRANCH_WEIGHTS:
-            for show_id in _branch(name, term, main_cast_only=main_cast_only):
+            found = _branch(name, term, main_cast_only=main_cast_only)
+            if name == "episode":
+                episode_rank = found
+            for show_id in found:
                 if ranks.get(show_id, 0) < weight:
                     ranks[show_id] = weight
         matched = set(ranks)
@@ -446,7 +512,12 @@ def search(
 
     # Operators intersect: actor:cranston genre:drama means both, not either.
     for name, value in parsed.fields:
-        ids = _branch(name, value, main_cast_only=main_cast_only)
+        found = _branch(name, value, main_cast_only=main_cast_only)
+        # An episode: operator's bm25 still orders its survivors, unless the
+        # free-text pass already ran the branch and holds the ranking.
+        if name == "episode" and not episode_rank:
+            episode_rank = found
+        ids = set(found)
         matched = ids if matched is None else (matched & ids)
         if not matched:
             return [], parsed
@@ -493,7 +564,18 @@ def search(
         show.search_rank = ranks.get(show.id, 0)
         shows.append(show)
 
-    # Rank bucket first, then the crowd's score inside a bucket. Never
+    # Rank bucket first; inside the episode bucket, bm25 match quality; then
+    # the crowd's score. bm25 only reaches shows the episode branch alone
+    # found, because letting it reorder higher buckets would re-weight
+    # branches against each other, which #29 ruled out of scope. Never
     # popularity: ADR-05 removed that as an ordering for good reason.
-    shows.sort(key=lambda s: (-s.search_rank, -(s.vote_average or 0), s.name))
+    unranked = float("inf")
+    shows.sort(
+        key=lambda s: (
+            -s.search_rank,
+            episode_rank.get(s.id, unranked) if s.search_rank <= W_EPISODE else unranked,
+            -(s.vote_average or 0),
+            s.name,
+        )
+    )
     return shows[:limit], parsed

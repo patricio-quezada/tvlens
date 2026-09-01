@@ -63,7 +63,7 @@ from .recommenders import (
     similar_by_people,
     stored_similar,
 )
-from .search import ParsedQuery
+from .search import ParsedQuery, _episode_fts, _fts_query, _word
 from .search import search as run_search
 from .views import DETAIL_RECOMMENDATION_LIMIT
 
@@ -4356,3 +4356,219 @@ class CatalogShipTests(TestCase):
         call_command("prune_low_signal", "--skip-rebuild", stdout=StringIO())
         self.assertTrue(Show.objects.filter(tmdb_id=9001).exists())
         self.assertEqual(Rating.objects.count(), 1)
+
+
+class FtsQueryEscapingTests(TestCase):
+    """Freezes #29's named rabbit hole: a raw term never reaches MATCH raw.
+
+    FTS5 MATCH is a query language. Double quotes delimit phrases, AND, OR
+    and NOT are operators, and a bare hyphen or asterisk is syntax. Every
+    term becomes one quoted phrase with a trailing star, safe by construction,
+    so the escaping is what these tests freeze, not any particular match.
+    """
+
+    def test_an_apostrophe_survives_quoting(self):
+        self.assertEqual(_fts_query("don't"), '"don\'t"*')
+
+    def test_a_hyphen_is_text_not_an_operator(self):
+        # Unquoted, spider-man parses as spider NOT man and excludes matches.
+        self.assertEqual(_fts_query("spider-man"), '"spider-man"*')
+
+    def test_an_embedded_quote_is_doubled(self):
+        # SQL-style doubling: the one escape FTS5 understands inside a phrase.
+        self.assertEqual(_fts_query('say "cheese"'), '"say ""cheese"""*')
+
+    def test_surrounding_space_is_stripped(self):
+        self.assertEqual(_fts_query("  padded  "), '"padded"*')
+
+    def test_a_bare_star_produces_no_query(self):
+        # The tokenizer keeps nothing of it, and FTS5 rejects an empty
+        # phrase, so the helper refuses to build one rather than raising.
+        self.assertIsNone(_fts_query("*"))
+        self.assertIsNone(_fts_query("--"))
+        self.assertIsNone(_fts_query("  "))
+
+    def test_every_edge_case_executes_without_raising(self):
+        # The point of the escaping: MATCH accepts whatever the helper built.
+        for term in ["don't", "spider-man", 'say "cheese"', "*", "AND", "NOT near"]:
+            _episode_fts(term)  # raises OperationalError if escaping is wrong
+
+
+class EpisodeFtsSearchTests(TestCase):
+    """Freezes #29's two decisions: prefix parity and bm25 within the branch.
+
+    Prefix matching was measured identical to the \\b regex on every term
+    tried, where exact matching silently lost "murderer" and "murders". And
+    bm25 orders shows inside the episode bucket only: branch weights stay as
+    ADR-12 left them, so a title hit still beats the best synopsis match.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        def show(tmdb_id, name, vote_average):
+            return Show.objects.create(
+                tmdb_id=tmdb_id,
+                name=name,
+                slug=name.lower().replace(" ", "-"),
+                first_air_date="2010-01-01",
+                vote_average=vote_average,
+                vote_count=500,
+                original_language="en",
+                status="Ended",
+            )
+
+        def episode(show_obj, tmdb_id, overview):
+            season = Season.objects.create(show=show_obj, tmdb_id=tmdb_id, season_number=1)
+            return Episode.objects.create(
+                season=season, tmdb_id=tmdb_id, episode_number=1, overview=overview
+            )
+
+        # bm25 should rank the synopsis about zeppelins above the synopsis
+        # that mentions one, and the crowd score is set to disagree so the
+        # old vote_average ordering would fail this test.
+        cls.about = show(9101, "Airship Diaries", vote_average=5.0)
+        episode(cls.about, 9101, "Zeppelin zeppelin: the zeppelin race begins.")
+        cls.mentions = show(9102, "Balloon Court", vote_average=9.0)
+        episode(
+            cls.mentions,
+            9102,
+            "A long day at the court ends when a distant zeppelin drifts past "
+            "the window and everyone argues about lunch instead of the case.",
+        )
+        # Branch weights are untouched: a title match still wins the page.
+        cls.titled = show(9103, "Zeppelin", vote_average=2.0)
+        episode(cls.titled, 9103, "Nothing relevant happens.")
+
+        # The prefix trap pair: "murder" must reach "murderer", "war" must
+        # never reach "toward" or "warm".
+        cls.murders = show(9104, "Quiet Village", vote_average=6.0)
+        episode(cls.murders, 9104, "The murderer confesses to both murders.")
+        # "warm" is deliberately absent: a word-start prefix is supposed to
+        # match (ADR-12: "break" finds Breaking Bad), so \bwar reaches
+        # "warm" too. Mid-word is what must stay excluded.
+        cls.decoy = show(9105, "Quiet Regards", vote_average=6.0)
+        episode(cls.decoy, 9105, "She walks toward the sea, onward.")
+
+    def old_regex_branch(self, term):
+        return set(
+            Show.objects.filter(_word("seasons__episodes__overview", term)).values_list(
+                "id", flat=True
+            )
+        )
+
+    def test_prefix_matches_what_the_regex_matched(self):
+        # The drop-in guarantee: same shows, term by term, including the
+        # prefix hits exact matching would silently lose.
+        for term in ["murder", "murderer", "war", "zeppelin", "the"]:
+            self.assertEqual(set(_episode_fts(term)), self.old_regex_branch(term), term)
+
+    def test_substring_noise_stays_excluded(self):
+        # "war" inside "toward" was the garbage that made ADR-12 anchor on
+        # word boundaries. Tokens anchor the same way.
+        self.assertNotIn(self.decoy.id, _episode_fts("war"))
+
+    def test_bm25_orders_within_the_episode_bucket(self):
+        results, _ = run_search("zeppelin")
+        names = [s.name for s in results]
+        self.assertLess(
+            names.index(self.about.name),
+            names.index(self.mentions.name),
+            "the show about zeppelins must beat the higher-voted mention",
+        )
+
+    def test_a_title_hit_still_outranks_the_best_synopsis(self):
+        # bm25 must not re-weight branches against each other (#29, ADR-12).
+        results, _ = run_search("zeppelin")
+        self.assertEqual(results[0].name, self.titled.name)
+
+    def test_the_episode_operator_keeps_bm25_order(self):
+        results, _ = run_search("episode:zeppelin")
+        names = [s.name for s in results]
+        self.assertLess(names.index(self.about.name), names.index(self.mentions.name))
+
+
+class EpisodeFtsTriggerTests(TestCase):
+    """Freezes #29's sync decision: triggers, live at write time.
+
+    The index must answer for the episodes table as it is now, not as it was
+    at the last rebuild. Insert, update and delete each have a trigger, and
+    the update trigger also fires on season_id because TMDb moves episodes
+    between seasons while keeping their id (see Ingestor._upsert_child).
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.show = Show.objects.create(
+            tmdb_id=9201,
+            name="Trigger Town",
+            slug="trigger-town",
+            first_air_date="2012-01-01",
+            vote_count=100,
+            original_language="en",
+            status="Ended",
+        )
+        cls.season = Season.objects.create(show=cls.show, tmdb_id=9201, season_number=1)
+
+    def test_an_inserted_episode_is_searchable_at_once(self):
+        Episode.objects.create(
+            season=self.season, tmdb_id=9301, episode_number=1, overview="A quokka smiles."
+        )
+        self.assertIn(self.show.id, _episode_fts("quokka"))
+
+    def test_an_updated_overview_answers_for_its_new_text_only(self):
+        ep = Episode.objects.create(
+            season=self.season, tmdb_id=9302, episode_number=2, overview="A quokka smiles."
+        )
+        ep.overview = "A wombat digs."
+        ep.save()
+        self.assertIn(self.show.id, _episode_fts("wombat"))
+        self.assertNotIn(self.show.id, _episode_fts("quokka"))
+
+    def test_a_deleted_episode_is_gone_from_the_index(self):
+        ep = Episode.objects.create(
+            season=self.season, tmdb_id=9303, episode_number=3, overview="A quokka smiles."
+        )
+        ep.delete()
+        self.assertEqual(_episode_fts("quokka"), {})
+
+    def test_a_cascade_delete_reaches_the_index(self):
+        # Deleting a show cascades through seasons to episodes as row
+        # deletes, and each one must fire the delete trigger.
+        other = Show.objects.create(
+            tmdb_id=9202,
+            name="Doomed",
+            slug="doomed",
+            first_air_date="2012-01-01",
+            vote_count=100,
+            original_language="en",
+            status="Ended",
+        )
+        season = Season.objects.create(show=other, tmdb_id=9202, season_number=1)
+        Episode.objects.create(
+            season=season, tmdb_id=9304, episode_number=1, overview="An axolotl waits."
+        )
+        other.delete()
+        self.assertEqual(_episode_fts("axolotl"), {})
+
+    def test_an_episode_moved_between_seasons_answers_for_its_new_show(self):
+        # The season move TMDb actually performs: same episode id, new season.
+        # An overview-only update trigger would leave it answering for the
+        # old show.
+        other = Show.objects.create(
+            tmdb_id=9203,
+            name="New Home",
+            slug="new-home",
+            first_air_date="2012-01-01",
+            vote_count=100,
+            original_language="en",
+            status="Ended",
+        )
+        new_season = Season.objects.create(show=other, tmdb_id=9203, season_number=1)
+        ep = Episode.objects.create(
+            season=self.season, tmdb_id=9305, episode_number=4, overview="A quokka smiles."
+        )
+        ep.season = new_season
+        ep.save()
+        found = _episode_fts("quokka")
+        self.assertIn(other.id, found)
+        self.assertNotIn(self.show.id, found)

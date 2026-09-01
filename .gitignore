@@ -14,6 +14,7 @@ env/
 # Django
 db.sqlite3
 db.sqlite3-journal
+db.sqlite3.pre-fts-backup
 # WAL sidecars, present whenever a connection is open (#23)
 db.sqlite3-wal
 db.sqlite3-shm
