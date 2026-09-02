@@ -31,8 +31,6 @@ from .recommenders import (
     name_connections,
     role_indexes,
     shared_connections,
-    similar_by_cast,
-    similar_by_crew,
     stored_similar,
 )
 from .search import VALID_OPERATORS
@@ -794,21 +792,6 @@ def rate(request, slug):
     # which reads as "the page reloaded and lost my click" even though the
     # rating saved. The fragment costs nothing and needs no script.
     return redirect(f"{show.get_absolute_url()}#rate")
-
-
-def similar(request, pk):
-    """Shows connected to this one by shared people. Layer 1, all edges."""
-    show = get_object_or_404(Show, pk=pk)
-    return render(
-        request,
-        "shows/similar.html",
-        {
-            "show": show,
-            "by_people": stored_similar(show),
-            "by_cast": similar_by_cast(show),
-            "by_crew": similar_by_crew(show),
-        },
-    )
 
 
 def register(request):
