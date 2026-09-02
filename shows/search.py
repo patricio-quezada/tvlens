@@ -562,6 +562,11 @@ def search(
             continue
         seen.add(show.id)
         show.search_rank = ranks.get(show.id, 0)
+        # W_EPISODE is the lowest branch weight, so landing exactly on it means
+        # no stronger branch (title, cast, blurb, ...) matched at all: the
+        # reader searched for something the catalog only mentions in passing,
+        # in an episode synopsis, not something it actually holds.
+        show.episode_only_match = show.search_rank == W_EPISODE
         shows.append(show)
 
     # Rank bucket first; inside the episode bucket, bm25 match quality; then

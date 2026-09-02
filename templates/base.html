@@ -258,6 +258,9 @@
         .card-year { color: var(--text-tertiary); font-size: 0.75rem; }
         .card-genres { display: flex; gap: 0.25rem; flex-wrap: wrap; justify-content: center; }
         .card-genre { background: var(--surface); color: var(--text-secondary); font-size: 0.65rem; padding: 0.15rem 0.45rem; border-radius: 4px; white-space: nowrap; border: 1px solid transparent; }
+        /* A search result that only matched an episode synopsis is not a show
+           about the query, and looks unlabelled exactly like one that is. */
+        .card-flag { color: var(--text-tertiary); font-size: 0.68rem; font-style: italic; }
 
         .genre-pills { display: flex; flex-wrap: wrap; gap: 0.5rem; }
         /* Filled, not outlined. --surface on --bg is a four-value difference
