@@ -501,7 +501,7 @@ def without_watched(user, ranked):
     return result
 
 
-def rerank(user, ranked):
+def rerank(user, ranked, profile=None):
     """Re-order a Layer 1 RankedShows for `user`, preserving its mode and rows.
 
     Each candidate's final score is Layer 1 gravity (its rank plus its Layer 1
@@ -510,13 +510,18 @@ def rerank(user, ranked):
     taste while a dominant edge (large Layer 1 score) holds. The sort is stable,
     so equal scores fall back to Layer 1's order.
 
+    `profile` lets a caller that already built one (the home view builds one
+    per request) hand it in instead of paying for a second identical build.
+    None builds it here, same as before.
+
     Returns a new RankedShows carrying the same Show objects (their Layer 1
     `score` and `shared_people` intact), each annotated with `.preference` and
     `.layer2_score`. The result also carries `.profile` and `.personalized`
     (True once the user's own ratings exist), so the page can show it was
     tailored.
     """
-    profile = build_profile(user)
+    if profile is None:
+        profile = build_profile(user)
     n = len(ranked)
 
     tags_by_show = {}
@@ -652,7 +657,7 @@ WATCH_NEXT_SEED_FLOOR = 4.0
 WATCH_NEXT_SEED_STEP = 1.0
 
 
-def watch_next(user, limit=12, exclude_ids=()):
+def watch_next(user, limit=12, exclude_ids=(), profile=None):
     """Unwatched shows reachable from what this user already likes (#24).
 
     The home page's answer to "what should I watch next". Top Picks ranks shows
@@ -676,6 +681,8 @@ def watch_next(user, limit=12, exclude_ids=()):
     already contains nothing they have seen. Returns a RankedShows so the
     template can caption it the same way every other row is captioned; empty for
     anonymous readers and for anyone with no seed above the floor.
+
+    `profile` is passed straight through to rerank(); see there.
     """
 
     def empty(has_seeds=False):
@@ -724,7 +731,7 @@ def watch_next(user, limit=12, exclude_ids=()):
     if not ranked:
         return empty(has_seeds=True)
 
-    reranked = rerank(user, ranked)
+    reranked = rerank(user, ranked, profile=profile)
     result = RankedShows(list(reranked)[:limit], mode=reranked.mode)
     result.has_seeds = True
     for carried in ("profile", "personalized"):

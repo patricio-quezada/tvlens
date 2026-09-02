@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Not found · TVLens{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <h1>Not on this page</h1>
+    <p>Nothing lives at that address. Try the <a href="{% url 'shows:index' %}">home page</a>
+       or search the catalog instead.</p>
+</div>
+
+{% endblock %}

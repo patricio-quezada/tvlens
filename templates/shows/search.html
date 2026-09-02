@@ -29,8 +29,8 @@
                 <label>Language
                     <select name="language">
                         <option value="">Any</option>
-                        {% for l in languages %}
-                        <option value="{{ l }}" {% if l == f_language %}selected{% endif %}>{{ l }}</option>
+                        {% for code, name in languages %}
+                        <option value="{{ code }}" {% if code == f_language %}selected{% endif %}>{{ name }}</option>
                         {% endfor %}
                     </select>
                 </label>
@@ -59,7 +59,7 @@
         {% for branch, value in parsed.fields %}<span class="chip">{{ branch }}: {{ value }}</span>{% endfor %}
         {% if parsed.year %}<span class="chip">year {{ parsed.year }}{% if parsed.year_to %}–{{ parsed.year_to }}{% endif %}</span>{% endif %}
         {% if parsed.season %}<span class="chip">season {{ parsed.season }}</span>{% endif %}
-        {% if parsed.language %}<span class="chip">language {{ parsed.language }}</span>{% endif %}
+        {% if parsed.language %}<span class="chip">language {{ language_label }}</span>{% endif %}
         {% if parsed.status %}<span class="chip">status {{ parsed.status }}</span>{% endif %}
         {% if parsed.min_score %}<span class="chip">score ≥ {{ parsed.min_score }}</span>{% endif %}
         {% if parsed.min_votes %}<span class="chip">votes ≥ {{ parsed.min_votes }}</span>{% endif %}
@@ -67,8 +67,13 @@
         {% comment %}An operator that was typed but not understood has to be
            said out loud. Silently treating it as text is how a reader ends up
            trusting a filter that never ran.{% endcomment %}
-        {% for bad in parsed.unknown %}<span class="chip chip-bad">not understood: {{ bad }}</span>{% endfor %}
+        {% for bad in parsed.unknown %}<span class="chip chip-bad">not a filter: {{ bad }}</span>{% endfor %}
     </p>
+    {% if parsed.unknown %}
+    <p class="chip-note">
+        Valid operators: {{ valid_operators|join:", " }}.
+    </p>
+    {% endif %}
     {% endif %}
 </div>
 

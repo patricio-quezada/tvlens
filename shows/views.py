@@ -31,15 +31,58 @@ from .recommenders import (
     name_connections,
     role_indexes,
     shared_connections,
-    similar_by_cast,
-    similar_by_crew,
     stored_similar,
 )
-from .search import W_TITLE
+from .search import VALID_OPERATORS, W_TITLE
 from .search import search as run_search
 from .tmdb_client import TMDBClient
 
 logger = logging.getLogger(__name__)
+
+# ISO 639-1 codes to English names, for the search page's language filter.
+# Covers every code the catalog carries as of 2026-09-01 plus enough common
+# ones to survive it growing. A code not listed here (a language TMDb ingests
+# later) falls back to the bare code rather than breaking the page.
+LANGUAGE_NAMES = {
+    "en": "English",
+    "ja": "Japanese",
+    "ko": "Korean",
+    "es": "Spanish",
+    "fr": "French",
+    "de": "German",
+    "it": "Italian",
+    "pt": "Portuguese",
+    "zh": "Chinese",
+    "cn": "Chinese",
+    "ru": "Russian",
+    "hi": "Hindi",
+    "ar": "Arabic",
+    "sv": "Swedish",
+    "da": "Danish",
+    "no": "Norwegian",
+    "nl": "Dutch",
+    "pl": "Polish",
+    "tr": "Turkish",
+    "th": "Thai",
+    "id": "Indonesian",
+    "he": "Hebrew",
+    "fi": "Finnish",
+    "cs": "Czech",
+    "el": "Greek",
+    "hu": "Hungarian",
+    "ro": "Romanian",
+    "uk": "Ukrainian",
+    "vi": "Vietnamese",
+    "fa": "Persian",
+    "ta": "Tamil",
+    "te": "Telugu",
+    "is": "Icelandic",
+}
+
+
+def language_name(code):
+    return LANGUAGE_NAMES.get(code, code)
+
 
 # The MovieLens half-star scale, 0.5 to 5.0 (the same scale ADR-08 assumes for
 # Layer 2, enforced by Rating's model validators). Every value the widget offers
@@ -119,6 +162,11 @@ def favorite_genre_ids_for(user, minimum=2):
 def index(request):
     base_qs = Show.objects.prefetch_related("genres")
 
+    # Built once and threaded through: watch_next's rerank and the genre
+    # ordering below both need it, and it depends only on the user, not on
+    # whatever candidate list is being reranked, so one build answers both.
+    profile = build_profile(request.user)
+
     picks: list = []
     favorite_genre_ids: set = set()
     top_picks_title = None
@@ -161,7 +209,7 @@ def index(request):
     #
     # It handles the anonymous and no-seed cases itself, so it is called outside
     # the is_authenticated block.
-    next_up = watch_next(request.user, exclude_ids=pick_ids | quest_ids)
+    next_up = watch_next(request.user, exclude_ids=pick_ids | quest_ids, profile=profile)
     next_ids = {s.pk for s in next_up}
     recently_added = base_qs.exclude(pk__in=pick_ids | next_ids | quest_ids).order_by(
         "-created_at"
@@ -183,7 +231,6 @@ def index(request):
     # ordering. Genres they have said nothing about score 0.0 and fall through
     # to the prior, so the untouched tail still sorts by quality rather than
     # arbitrarily. Catalog count and then name break the remaining ties.
-    profile = build_profile(request.user)
     learned = {} if profile.is_cold_start else profile.learned_genre_weights
     quality = profile.genre_weights if profile.is_cold_start else genre_quality()
     genres = sorted(
@@ -381,15 +428,17 @@ def search(request):
         language=language,
         main_cast_only=main_cast_only,
     )
-    elapsed_ms = (time.perf_counter() - started) * 1000
 
     # Only offer filter values the catalog can actually satisfy. A dropdown
     # listing five statuses when three exist invites empty result sets.
-    languages = (
+    # Sorted by name, not code, since that is what the reader sees.
+    language_codes = (
         Show.objects.exclude(original_language="")
         .values_list("original_language", flat=True)
         .distinct()
-        .order_by("original_language")
+    )
+    languages = sorted(
+        ((code, language_name(code)) for code in language_codes), key=lambda pair: pair[1]
     )
 
     # Not only when the catalog comes back empty: a query that only matched
@@ -410,24 +459,38 @@ def search(request):
         and not title_matched
         and (parsed.searchable_text or not shows)
     ):
-        try:
-            have = set(Show.objects.values_list("id", flat=True))
-            elsewhere = [
-                {
-                    "tmdb_id": r["id"],
-                    "name": r.get("name") or "",
-                    "year": (r.get("first_air_date") or "")[:4],
-                    "votes": r.get("vote_count") or 0,
-                    "score": r.get("vote_average") or 0,
-                    "overview": (r.get("overview") or "")[:180],
-                }
-                for r in TMDBClient().search_tv(raw)
-                if r.get("id") not in have and (r.get("vote_count") or 0) > 0
-            ]
-        except Exception:
-            # TMDb being down must never break catalog search. The reader loses
-            # a hint, not the page.
-            logger.warning("TMDb fallback search failed for %r", raw, exc_info=True)
+        # An operator the catalog does not understand, or a malformed value
+        # for one it does, is search syntax, not a title. Sending it to TMDb
+        # verbatim would ask TMDb to search for text like "acter:cranston",
+        # which means nothing there either.
+        tmdb_query = raw
+        for bad in parsed.unknown:
+            tmdb_query = tmdb_query.replace(bad, "", 1)
+        tmdb_query = " ".join(tmdb_query.split())
+        if tmdb_query:
+            try:
+                have = set(Show.objects.values_list("id", flat=True))
+                elsewhere = [
+                    {
+                        "tmdb_id": r["id"],
+                        "name": r.get("name") or "",
+                        "year": (r.get("first_air_date") or "")[:4],
+                        "votes": r.get("vote_count") or 0,
+                        "score": r.get("vote_average") or 0,
+                        "overview": (r.get("overview") or "")[:180],
+                    }
+                    for r in TMDBClient().search_tv(tmdb_query)
+                    if r.get("id") not in have and (r.get("vote_count") or 0) > 0
+                ]
+            except Exception:
+                # TMDb being down must never break catalog search. The reader
+                # loses a hint, not the page.
+                logger.warning("TMDb fallback search failed for %r", tmdb_query, exc_info=True)
+
+    # After the TMDb fallback, not after run_search alone: that fallback is
+    # the slowest path this page has, and stopping the clock before it ran
+    # under-reported exactly the request that most needed an honest number.
+    elapsed_ms = (time.perf_counter() - started) * 1000
 
     return render(
         request,
@@ -448,6 +511,8 @@ def search(request):
                 .order_by("status")
             ),
             "languages": languages,
+            "language_label": language_name(parsed.language) if parsed.language else "",
+            "valid_operators": VALID_OPERATORS,
             "f_status": status,
             "f_language": language,
             "f_min_score": request.GET.get("min_score", ""),
@@ -659,7 +724,13 @@ def my_ratings(request):
             "rating_count": len(shows),
             "average_score": (sum(s.user_score for s in shows) / len(shows) if shows else None),
             "tags": tags,
-            "tagged_count": sum(t.uses for t in tags),
+            # Distinct shows, not summed tag uses: a show carrying three tags
+            # must count once here or the copy that says "across N shows"
+            # lies whenever a reader's own tags overlap on the same show.
+            "tagged_count": ShowTag.objects.filter(user=request.user)
+            .values("show_id")
+            .distinct()
+            .count(),
         },
     )
 
@@ -737,21 +808,6 @@ def rate(request, slug):
     # which reads as "the page reloaded and lost my click" even though the
     # rating saved. The fragment costs nothing and needs no script.
     return redirect(f"{show.get_absolute_url()}#rate")
-
-
-def similar(request, pk):
-    """Shows connected to this one by shared people. Layer 1, all edges."""
-    show = get_object_or_404(Show, pk=pk)
-    return render(
-        request,
-        "shows/similar.html",
-        {
-            "show": show,
-            "by_people": stored_similar(show),
-            "by_cast": similar_by_cast(show),
-            "by_crew": similar_by_crew(show),
-        },
-    )
 
 
 def register(request):
