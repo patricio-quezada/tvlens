@@ -33,7 +33,7 @@ from .recommenders import (
     shared_connections,
     stored_similar,
 )
-from .search import VALID_OPERATORS
+from .search import VALID_OPERATORS, W_TITLE
 from .search import search as run_search
 from .tmdb_client import TMDBClient
 
@@ -441,12 +441,24 @@ def search(request):
         ((code, language_name(code)) for code in language_codes), key=lambda pair: pair[1]
     )
 
-    # Only when the catalog comes back empty, and only for a plain title query.
-    # A reader who searched a show we do not have should learn that, rather than
-    # concluding search is broken. Nothing is ingested here: this is a label,
-    # not a fetch. Adding a show is deliberate, via `manage.py ingest_show`.
+    # Not only when the catalog comes back empty: a query that only matched
+    # through a weaker branch (an episode synopsis mentioning the name, say)
+    # is still a reader who searched a show we do not have. The hint is gated
+    # on the title branch specifically, and only when there was free text to
+    # search a title with -- an operator-scoped query like genre:drama has
+    # nothing title-shaped to ask TMDb about, and its own results should not
+    # earn a "not in the catalog" hint next to them.
+    # A reader who searched a show we do not have should learn that, rather
+    # than concluding search is broken. Nothing is ingested here: this is a
+    # label, not a fetch. Adding a show is deliberate, via `manage.py ingest_show`.
+    title_matched = any(s.search_rank == W_TITLE for s in shows)
     elsewhere = []
-    if not shows and raw.strip() and not parsed.too_short:
+    if (
+        raw.strip()
+        and not parsed.too_short
+        and not title_matched
+        and (parsed.searchable_text or not shows)
+    ):
         # An operator the catalog does not understand, or a malformed value
         # for one it does, is search syntax, not a title. Sending it to TMDb
         # verbatim would ask TMDb to search for text like "acter:cranston",
