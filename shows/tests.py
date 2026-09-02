@@ -3067,8 +3067,44 @@ class SearchOperatorTests(TestCase):
         self.assertIn("year:notayear", parsed.unknown)
         self.assertIsNone(parsed.year)
 
-    def test_an_unknown_key_stays_as_plain_text(self):
-        self.assertIn("bogus:xyz", ParsedQuery("bogus:xyz corner").text)
+    def test_an_unknown_key_is_reported_not_silently_kept_as_text(self):
+        parsed = ParsedQuery("bogus:xyz corner")
+        self.assertIn("bogus:xyz", parsed.unknown)
+        self.assertNotIn("bogus:xyz", parsed.text)
+        self.assertIn("corner", parsed.text)
+
+
+class SearchUnknownOperatorViewTests(TestCase):
+    """Freezes the fix for the 2026-09-01 papercut audit: an unrecognised
+    word:value used to become silent, unmatchable literal text, and got
+    shipped as-is to the TMDb elsewhere fallback. It is now named on the page
+    and stripped before anything reaches TMDb.
+    """
+
+    def test_the_page_names_the_unrecognised_operator(self):
+        resp = self.client.get(reverse("shows:search"), {"q": "acter:cranston"})
+        html = resp.content.decode()
+        self.assertIn("not a filter: acter:cranston", html)
+        self.assertIn("actor", html)  # named among the valid operators
+
+    def test_tmdb_never_receives_the_raw_operator_string(self):
+        from unittest.mock import patch
+
+        with patch("shows.views.TMDBClient.search_tv", return_value=[]) as mocked:
+            self.client.get(reverse("shows:search"), {"q": "acter:cranston mystery show"})
+        mocked.assert_called_once()
+        (query,), _ = mocked.call_args
+        self.assertNotIn("acter:cranston", query)
+        self.assertIn("mystery", query)
+
+    def test_a_query_that_is_only_an_unknown_operator_never_calls_tmdb(self):
+        """Nothing survives stripping the bad operator, so there is nothing
+        left worth asking TMDb about."""
+        from unittest.mock import patch
+
+        with patch("shows.views.TMDBClient.search_tv") as mocked:
+            self.client.get(reverse("shows:search"), {"q": "acter:cranston"})
+        mocked.assert_not_called()
 
 
 class SearchPageChromeTests(TestCase):

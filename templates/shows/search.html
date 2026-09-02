@@ -67,8 +67,13 @@
         {% comment %}An operator that was typed but not understood has to be
            said out loud. Silently treating it as text is how a reader ends up
            trusting a filter that never ran.{% endcomment %}
-        {% for bad in parsed.unknown %}<span class="chip chip-bad">not understood: {{ bad }}</span>{% endfor %}
+        {% for bad in parsed.unknown %}<span class="chip chip-bad">not a filter: {{ bad }}</span>{% endfor %}
     </p>
+    {% if parsed.unknown %}
+    <p class="chip-note">
+        Valid operators: {{ valid_operators|join:", " }}.
+    </p>
+    {% endif %}
     {% endif %}
 </div>
 
