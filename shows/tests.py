@@ -3025,6 +3025,138 @@ class SearchPageChromeTests(TestCase):
         self.assertIsNone(resp.context["parsed"].suggestion)
 
 
+class SearchResultLabelTests(TestCase):
+    """Freezes the fix for the 2026-09-01 papercut audit: a result that only
+    matched through the episode-synopsis branch must say so, rather than
+    sitting in the grid looking exactly like a title match.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.titled = Show.objects.create(
+            tmdb_id=9501,
+            name="Zeppelin",
+            slug="zeppelin",
+            overview="An air show.",
+            first_air_date="2010-01-01",
+            vote_average=6.0,
+            vote_count=500,
+            original_language="en",
+            status="Ended",
+        )
+        cls.episode_only = Show.objects.create(
+            tmdb_id=9502,
+            name="Quiet Harbor",
+            slug="quiet-harbor",
+            overview="A coastal town.",
+            first_air_date="2012-01-01",
+            vote_average=6.0,
+            vote_count=500,
+            original_language="en",
+            status="Ended",
+        )
+        season = Season.objects.create(show=cls.episode_only, tmdb_id=9502, season_number=1)
+        Episode.objects.create(
+            season=season,
+            tmdb_id=9502,
+            episode_number=1,
+            overview="A zeppelin drifts overhead as the town watches.",
+        )
+
+    def test_a_synopsis_only_match_is_flagged(self):
+        results, _ = run_search("zeppelin")
+        by_name = {s.name: s for s in results}
+        self.assertTrue(by_name[self.episode_only.name].episode_only_match)
+
+    def test_a_title_match_is_not_flagged(self):
+        results, _ = run_search("zeppelin")
+        by_name = {s.name: s for s in results}
+        self.assertFalse(by_name[self.titled.name].episode_only_match)
+
+
+class SearchElsewhereHintTests(TestCase):
+    """Freezes the fix for the 2026-09-01 papercut audit: the "not in the
+    catalog, but it exists on TMDb" hint used to gate on the result set being
+    empty. A query that only matched a weaker branch (an episode synopsis
+    mentioning the name) got neither a hint nor a label, and looked like a
+    normal set of results for a show that is not in the catalog at all.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.titled = Show.objects.create(
+            tmdb_id=9601,
+            name="Severance",
+            slug="severance",
+            overview="A workplace splits its employees in two.",
+            first_air_date="2022-01-01",
+            vote_average=8.0,
+            vote_count=900,
+            original_language="en",
+            status="Returning Series",
+        )
+        cls.mentions_only = Show.objects.create(
+            tmdb_id=9602,
+            name="Office Games",
+            slug="office-games",
+            overview="A workplace comedy.",
+            first_air_date="2015-01-01",
+            vote_average=6.0,
+            vote_count=400,
+            original_language="en",
+            status="Ended",
+        )
+        season = Season.objects.create(show=cls.mentions_only, tmdb_id=9602, season_number=1)
+        Episode.objects.create(
+            season=season,
+            tmdb_id=9602,
+            episode_number=1,
+            overview="Everyone jokes about their severance package all episode.",
+        )
+
+    def test_hint_absent_when_a_title_match_exists(self):
+        from unittest.mock import patch
+
+        with patch("shows.views.TMDBClient.search_tv") as mocked:
+            resp = self.client.get(reverse("shows:search"), {"q": "severance"})
+        mocked.assert_not_called()
+        self.assertEqual(resp.context["elsewhere"], [])
+
+    def test_hint_present_when_only_a_weaker_branch_matched(self):
+        from unittest.mock import patch
+
+        self.titled.delete()
+        with patch(
+            "shows.views.TMDBClient.search_tv",
+            return_value=[
+                {
+                    "id": 555555,
+                    "name": "Severance",
+                    "first_air_date": "2022-02-01",
+                    "vote_count": 5000,
+                    "vote_average": 8.7,
+                    "overview": "A TMDb-only show.",
+                }
+            ],
+        ) as mocked:
+            resp = self.client.get(reverse("shows:search"), {"q": "severance"})
+        mocked.assert_called_once()
+        self.assertTrue(resp.context["elsewhere"])
+
+
+class MobileNavSearchTests(TestCase):
+    """Freezes the fix for the 2026-09-01 papercut audit: search must stay
+    reachable from the nav under 640px. The old rule hid .nav-search there
+    outright with no other route to shows:search, so a phone reader had no
+    way into the catalog except typing the URL by hand.
+    """
+
+    def test_the_nav_search_form_is_not_unconditionally_hidden(self):
+        html = self.client.get(reverse("shows:index")).content.decode()
+        self.assertIn('class="nav-search"', html)
+        self.assertNotIn(".nav-search { display: none; }", html)
+
+
 class TaggingTests(TestCase):
     """Tags are a shared vocabulary applied privately.
 
