@@ -4264,9 +4264,11 @@ class CatalogShipTests(TestCase):
     def setUpTestData(cls):
         cls.alice = User.objects.create_user("alice", password="pw-alice-123")
         low = MIN_VOTE_COUNT - 90  # comfortably under the floor
-        make = lambda i, name: Show.objects.create(
-            tmdb_id=i, id=i, name=name, vote_count=low, number_of_episodes=8
-        )
+
+        def make(i, name):
+            return Show.objects.create(
+                tmdb_id=i, id=i, name=name, vote_count=low, number_of_episodes=8
+            )
         cls.rated = make(9001, "Rated but unpopular")
         cls.reviewed = make(9002, "Reviewed but unpopular")
         cls.listed = make(9003, "Watchlisted but unpopular")
