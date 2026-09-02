@@ -3144,6 +3144,19 @@ class SearchElsewhereHintTests(TestCase):
         self.assertTrue(resp.context["elsewhere"])
 
 
+class MobileNavSearchTests(TestCase):
+    """Freezes the fix for the 2026-09-01 papercut audit: search must stay
+    reachable from the nav under 640px. The old rule hid .nav-search there
+    outright with no other route to shows:search, so a phone reader had no
+    way into the catalog except typing the URL by hand.
+    """
+
+    def test_the_nav_search_form_is_not_unconditionally_hidden(self):
+        html = self.client.get(reverse("shows:index")).content.decode()
+        self.assertIn('class="nav-search"', html)
+        self.assertNotIn(".nav-search { display: none; }", html)
+
+
 class TaggingTests(TestCase):
     """Tags are a shared vocabulary applied privately.
 

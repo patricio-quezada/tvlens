@@ -157,7 +157,13 @@
             border-radius: 999px;
         }
         .nav-search input:focus { outline: none; border-color: var(--accent); }
-        @media (max-width: 640px) { .nav-search { display: none; } }
+        /* Search is reachable at every width, not hidden under 640px with
+           nothing else in the nav to reach shows:search from. Rather than a
+           second control, the same form wraps to its own full-width row. */
+        @media (max-width: 640px) {
+            nav { flex-wrap: wrap; }
+            .nav-search { flex: 1 1 100%; order: 3; margin: 0.5rem 0 0; }
+        }
         nav .user { color: var(--text-secondary); }
         nav form { display: inline; }
         nav button { background: none; border: none; color: var(--accent); cursor: pointer; font-family: inherit; font-size: inherit; padding: 0; }
