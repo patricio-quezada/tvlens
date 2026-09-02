@@ -322,8 +322,8 @@
             <span class="user">{{ user.username }}</span>
             <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit">Logout</button></form>
         {% else %}
-            <a href="{% url 'login' %}">Login</a>
-            <a href="{% url 'register' %}">Register</a>
+            <a href="{% url 'login' %}">Log in</a>
+            <a href="{% url 'register' %}">Sign up</a>
         {% endif %}
     </nav>
     <main>

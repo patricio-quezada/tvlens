@@ -11,7 +11,7 @@ from io import StringIO
 from django.contrib.auth.models import AnonymousUser, User
 from django.core.management import call_command
 from django.db.models import Max
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from .ingestion import MIN_VOTE_COUNT, Ingestor
@@ -749,6 +749,22 @@ class ShowDetailViewTests(TestCase):
 
     def test_unknown_slug_returns_404(self):
         self.assertEqual(self.client.get(reverse("shows:detail", args=["nope"])).status_code, 404)
+
+
+class NotFoundPageTests(TestCase):
+    """Freezes the fix for the 2026-09-01 papercut audit: a 404 wears the
+    site identity (base.html) instead of Django's default error page, with a
+    link back home. Django only serves templates/404.html with DEBUG off, so
+    the test forces that shape rather than waiting for a deploy to prove it.
+    """
+
+    def test_the_404_page_extends_the_site_identity(self):
+        with override_settings(DEBUG=False, ALLOWED_HOSTS=["testserver"]):
+            resp = self.client.get("/this-page-does-not-exist/")
+        self.assertEqual(resp.status_code, 404)
+        html = resp.content.decode()
+        self.assertIn('class="brand"', html)
+        self.assertIn(reverse("shows:index"), html)
 
 
 class StoredSimilarTests(TestCase):
@@ -2886,6 +2902,66 @@ class SearchViewTests(TestCase):
         resp = self.client.get(reverse("shows:search"), {"q": "west", "status": "Ended"})
         self.assertTrue(resp.context["advanced_open"])
 
+    def test_elapsed_ms_includes_the_tmdb_fallback(self):
+        """Freezes the fix for the 2026-09-01 papercut audit: the clock used
+        to stop before the TMDb elsewhere fetch, under-reporting exactly the
+        slowest path the page has."""
+        import time
+        from unittest.mock import patch
+
+        def slow_search(query):
+            time.sleep(0.05)
+            return []
+
+        with patch("shows.views.TMDBClient.search_tv", side_effect=slow_search):
+            resp = self.client.get(reverse("shows:search"), {"q": "nothing matches this term"})
+        self.assertGreaterEqual(resp.context["elapsed_ms"], 50)
+
+
+class SearchLanguageLabelTests(TestCase):
+    """Freezes the fix for the 2026-09-01 papercut audit: the language filter
+    shows an English name, not the raw ISO code the catalog stores.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        Show.objects.create(
+            tmdb_id=9201,
+            name="Tokyo Nights",
+            slug="tokyo-nights",
+            overview="x",
+            first_air_date="2015-01-01",
+            vote_average=7.0,
+            vote_count=100,
+            original_language="ja",
+        )
+        # A code the dict does not carry, to prove the fallback holds.
+        Show.objects.create(
+            tmdb_id=9202,
+            name="Somewhere Else",
+            slug="somewhere-else",
+            overview="x",
+            first_air_date="2016-01-01",
+            vote_average=7.0,
+            vote_count=100,
+            original_language="zz",
+        )
+
+    def test_the_dropdown_shows_names_not_codes(self):
+        resp = self.client.get(reverse("shows:search"), {"q": "west"})
+        pairs = dict(resp.context["languages"])
+        self.assertEqual(pairs["ja"], "Japanese")
+
+    def test_an_unmapped_code_falls_back_to_itself(self):
+        resp = self.client.get(reverse("shows:search"), {"q": "west"})
+        pairs = dict(resp.context["languages"])
+        self.assertEqual(pairs["zz"], "zz")
+
+    def test_the_chip_names_the_language(self):
+        resp = self.client.get(reverse("shows:search"), {"q": "2015 language:ja"})
+        self.assertEqual(resp.context["language_label"], "Japanese")
+        self.assertIn("language Japanese", resp.content.decode())
+
 
 class SearchFuzzyTests(TestCase):
     """A misspelling should land close, and only after the exact search fails.
@@ -3006,8 +3082,44 @@ class SearchOperatorTests(TestCase):
         self.assertIn("year:notayear", parsed.unknown)
         self.assertIsNone(parsed.year)
 
-    def test_an_unknown_key_stays_as_plain_text(self):
-        self.assertIn("bogus:xyz", ParsedQuery("bogus:xyz corner").text)
+    def test_an_unknown_key_is_reported_not_silently_kept_as_text(self):
+        parsed = ParsedQuery("bogus:xyz corner")
+        self.assertIn("bogus:xyz", parsed.unknown)
+        self.assertNotIn("bogus:xyz", parsed.text)
+        self.assertIn("corner", parsed.text)
+
+
+class SearchUnknownOperatorViewTests(TestCase):
+    """Freezes the fix for the 2026-09-01 papercut audit: an unrecognised
+    word:value used to become silent, unmatchable literal text, and got
+    shipped as-is to the TMDb elsewhere fallback. It is now named on the page
+    and stripped before anything reaches TMDb.
+    """
+
+    def test_the_page_names_the_unrecognised_operator(self):
+        resp = self.client.get(reverse("shows:search"), {"q": "acter:cranston"})
+        html = resp.content.decode()
+        self.assertIn("not a filter: acter:cranston", html)
+        self.assertIn("actor", html)  # named among the valid operators
+
+    def test_tmdb_never_receives_the_raw_operator_string(self):
+        from unittest.mock import patch
+
+        with patch("shows.views.TMDBClient.search_tv", return_value=[]) as mocked:
+            self.client.get(reverse("shows:search"), {"q": "acter:cranston mystery show"})
+        mocked.assert_called_once()
+        (query,), _ = mocked.call_args
+        self.assertNotIn("acter:cranston", query)
+        self.assertIn("mystery", query)
+
+    def test_a_query_that_is_only_an_unknown_operator_never_calls_tmdb(self):
+        """Nothing survives stripping the bad operator, so there is nothing
+        left worth asking TMDb about."""
+        from unittest.mock import patch
+
+        with patch("shows.views.TMDBClient.search_tv") as mocked:
+            self.client.get(reverse("shows:search"), {"q": "acter:cranston"})
+        mocked.assert_not_called()
 
 
 class SearchPageChromeTests(TestCase):
@@ -3023,6 +3135,38 @@ class SearchPageChromeTests(TestCase):
     def test_exact_disables_the_fuzzy_rescue(self):
         resp = self.client.get(reverse("shows:search"), {"q": "cranson", "exact": "1"})
         self.assertIsNone(resp.context["parsed"].suggestion)
+
+
+class AuthVerbConsistencyTests(TestCase):
+    """Freezes the fix for the 2026-09-01 papercut audit: one verb pair,
+    "Log in" and "Sign up", instead of Login/Register/Sign in scattered
+    across the nav and the tag empty-state.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.show = Show.objects.create(
+            tmdb_id=9701,
+            name="Anonymous Hours",
+            slug="anonymous-hours",
+            overview="x",
+            first_air_date="2010-01-01",
+            vote_average=7.0,
+            vote_count=100,
+            original_language="en",
+        )
+
+    def test_the_nav_uses_log_in_and_sign_up(self):
+        html = self.client.get(reverse("shows:index")).content.decode()
+        self.assertIn(">Log in<", html)
+        self.assertIn(">Sign up<", html)
+        self.assertNotIn(">Login<", html)
+        self.assertNotIn(">Register<", html)
+
+    def test_the_signed_out_tag_prompt_says_log_in(self):
+        html = self.client.get(self.show.get_absolute_url()).content.decode()
+        self.assertIn("Log in to tag this show.", html)
+        self.assertNotIn("Sign in to tag", html)
 
 
 class SearchResultLabelTests(TestCase):
@@ -3465,7 +3609,10 @@ class MyRatingsTagsTests(TestCase):
         self.assertNotIn("theirs", {t.name for t in self.context()["tags"]})
 
     def test_the_count_spans_shows_not_tags(self):
-        self.assertEqual(self.context()["tagged_count"], 3)
+        # Show "a" carries two tags and "b" carries one: three tag
+        # applications, but the copy says "across N shows", so the count
+        # must be the two distinct shows, not the three applications.
+        self.assertEqual(self.context()["tagged_count"], 2)
 
     def test_the_page_works_for_someone_with_no_tags(self):
         self.client.login(username="stranger2", password="pw")

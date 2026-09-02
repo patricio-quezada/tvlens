@@ -20,15 +20,25 @@ shipped work as `queued` is worse than no queue — it gets believed.
 | — | #11 | shipped Day 20 | My Ratings page |
 | — | #9  | shipped Day 20 | Genre pages as a catalog grid |
 | — | #16 | shipped Day 20 | Demo papercuts, all five items |
-| 1  | #8  | queued | Search — a design day before a build day, its own scope |
-| 2  | #21 | queued | Homepage branding: the name appears twice *(propose first)* |
-| 3  | #22 | queued | Signal a rating above the TVLens crowd *(propose first)* |
-| 4  | #7  | queued | Personalized context box |
-| 5  | #4  | queued | Callout voice / "why recommended" |
-| 6  | #3  | queued | Per-pair "See all N" shared-people view |
-| 7  | #13 | queued | Actor pages *(design not recorded: propose first)* |
+| — | #8  | shipped 2026-08-24 | Catalog search, one query per branch (ADR-12) |
 | — | #14 | shipped Day 21 | Trailers / YouTube link |
-| 8  | #20 | blocked | Side Quests constants — needs a catalog past 100 shows |
+| — | #21 | shipped 2026-08-29 | Homepage branding: the name stated once, in the bar |
+| — | #7  | shipped 2026-08-29 | Personalized context box: connection-type preference (ADR-15) |
+| — | #4  | shipped 2026-08-29 | Callout voice refinement — closed inside #7's change |
+| — | #20 | shipped 2026-08-27 | Side Quests' novelty gate graded, not binary (ADR-09 amendment) |
+| — | #3  | swept 2026-08-25 | Per-pair shared-people view — never built; moved to Fizzy #168 |
+| — | #13 | swept 2026-08-25 | Actor pages — never built; moved to Fizzy #169 |
+| — | #22 | swept 2026-08-31 | Rating-above-crowd signal — shaped, not bet: the baseline is nearly flat, so lift and raw score rank identically and a badge would say nothing #19's score doesn't; reopens if that stops holding. Moved to Fizzy #174 |
+
+#20's row-composition idea (cap one dominant genre cluster so the rest of the
+row reads as surprising) was measured, not shipped: the issue's own close says
+"recommending nothing," and that half of it is still open, unowned by any
+Fizzy card found so far.
+
+Nothing is `queued` here as of 2026-09-01. Recent triage (#3, #13, #22) moved
+unbuilt backlog into Fizzy rather than closing it into this table, so a
+reader looking for what is next should check there, not assume this queue is
+simply empty.
 
 ## How the queue works
 
