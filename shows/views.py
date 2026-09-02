@@ -268,7 +268,7 @@ def detail(request, slug):
     # anything else falls back to the opening step.
     try:
         step = int(request.GET.get("show", ""))
-    except (TypeError, ValueError):
+    except (TypeError, ValueError):  # fmt: skip
         step = DETAIL_RECOMMENDATION_LIMIT
     if step not in RECOMMENDATION_STEPS:
         step = DETAIL_RECOMMENDATION_LIMIT
@@ -684,7 +684,7 @@ def rate(request, slug):
     else:
         try:
             score = float(request.POST.get("score", ""))
-        except (TypeError, ValueError):
+        except (TypeError, ValueError):  # fmt: skip
             return HttpResponseBadRequest("Rating must be a number.")
         if score not in VALID_SCORES:
             return HttpResponseBadRequest("Rating must be a half-star step between 0.5 and 5.0.")
