@@ -1,7 +1,13 @@
 # Ruff config for TVLens. Minimal by intent: catch real problems (undefined
 # names, unused imports) and keep imports tidy, nothing that would churn the
 # hand-tuned recommender code.
-target-version = "py314"
+#
+# The target is the FLOOR the project promises (see pyproject.toml), not the
+# newest Python on the dev box. Targeting py314 here is what let ruff format
+# strip the parens off two except clauses on Day 27: legal on 3.14 by PEP 758,
+# a SyntaxError on every Python the cloud runs. The formatter formats for the
+# oldest Python we support, so it can never make that trade again.
+target-version = "py312"
 
 # 100, not the default 88. The offenders were 89-129 characters and almost all
 # of them were hand-tuned recommender lines the comment above says not to churn.

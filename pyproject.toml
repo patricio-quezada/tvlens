@@ -1,0 +1,8 @@
+# The line whose absence was the Day 31 story: nothing declared which Pythons
+# TVLens promises to run on, so a formatter targeting the dev box's 3.14 could
+# silently drop support for everything older and stay green on every check.
+# Django 6.1 sets the true floor.
+[project]
+name = "tvlens"
+version = "0"
+requires-python = ">=3.12"
