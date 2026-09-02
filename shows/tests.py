@@ -2903,6 +2903,51 @@ class SearchViewTests(TestCase):
         self.assertTrue(resp.context["advanced_open"])
 
 
+class SearchLanguageLabelTests(TestCase):
+    """Freezes the fix for the 2026-09-01 papercut audit: the language filter
+    shows an English name, not the raw ISO code the catalog stores.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        Show.objects.create(
+            tmdb_id=9201,
+            name="Tokyo Nights",
+            slug="tokyo-nights",
+            overview="x",
+            first_air_date="2015-01-01",
+            vote_average=7.0,
+            vote_count=100,
+            original_language="ja",
+        )
+        # A code the dict does not carry, to prove the fallback holds.
+        Show.objects.create(
+            tmdb_id=9202,
+            name="Somewhere Else",
+            slug="somewhere-else",
+            overview="x",
+            first_air_date="2016-01-01",
+            vote_average=7.0,
+            vote_count=100,
+            original_language="zz",
+        )
+
+    def test_the_dropdown_shows_names_not_codes(self):
+        resp = self.client.get(reverse("shows:search"), {"q": "west"})
+        pairs = dict(resp.context["languages"])
+        self.assertEqual(pairs["ja"], "Japanese")
+
+    def test_an_unmapped_code_falls_back_to_itself(self):
+        resp = self.client.get(reverse("shows:search"), {"q": "west"})
+        pairs = dict(resp.context["languages"])
+        self.assertEqual(pairs["zz"], "zz")
+
+    def test_the_chip_names_the_language(self):
+        resp = self.client.get(reverse("shows:search"), {"q": "2015 language:ja"})
+        self.assertEqual(resp.context["language_label"], "Japanese")
+        self.assertIn("language Japanese", resp.content.decode())
+
+
 class SearchFuzzyTests(TestCase):
     """A misspelling should land close, and only after the exact search fails.
 
