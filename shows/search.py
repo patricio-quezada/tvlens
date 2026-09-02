@@ -3,13 +3,15 @@
 Two rules shape this module, and both come from measurement rather than taste.
 
 **Never OR two fan-out relations into one filter().** Cast and crew are reverse
-foreign keys with 128,577 and 24,482 rows behind 100 shows. Django compiles a
+foreign keys, and each holds far more rows than the catalog has shows -- in the
+hundreds of thousands, and growing as the catalog does (238,357 cast rows and
+52,602 crew rows behind 249 shows, measured 2026-09-01). Django compiles a
 single filter() with both into one SELECT, and SQLite materializes the cross
-product before DISTINCT collapses it: 61 million rows for cast crossed with
-crew, 368 million once genres and networks join in. Measured, that query does
-not return a slow answer, it does not return at all. Two runs were killed at
-eight seconds and one was still executing after two minutes, on a query with
-sixteen real hits.
+product before DISTINCT collapses it: measured against a 100-show catalog,
+that was 61 million rows for cast crossed with crew, 368 million once genres
+and networks join in. Measured, that query does not return a slow answer, it
+does not return at all. Two runs were killed at eight seconds and one was
+still executing after two minutes, on a query with sixteen real hits.
 
 The same search, split into one query per branch with the ids unioned in
 Python, runs in 32 ms and 74 ms worst case. So every branch below is its own
@@ -17,9 +19,11 @@ query and nothing is ever ORed across a join.
 
 **No text index, except where ranking needs one.** icontains compiles to LIKE
 '%x%', which is unanchored, so SQLite full-scans whatever index sits on the
-column. The slowest single scan in the catalog is Person.name at 5.1 ms across
-82,763 rows; there is no latency to recover there, so FTS5 on those columns
-would be complexity without payoff. Episode synopses are the exception (#29):
+column. The slowest single scan in the catalog is Person.name, measured at
+5.1 ms against 82,763 rows when this was first written; the people table has
+since grown past that (131,639, measured 2026-09-01) and there is still no
+latency to recover there, so FTS5 on those columns would be complexity
+without payoff. Episode synopses are the exception (#29):
 that branch reads an FTS5 index, and the reason is bm25 ordering within the
 branch rather than speed, which improved from 170 ms to 43 ms on the worst
 term as a side effect. See ADR-12.
@@ -321,10 +325,12 @@ def _shows_via_people(term, relation, extra=None):
     """Find shows whose cast or crew includes a person matching `term`.
 
     Two steps, not one join. Joining Show to cast to person makes SQLite
-    re-evaluate the name predicate once per credit row, and there are 278,632
-    cast rows against 154,699 people. Scanning people once and then looking
-    shows up by an indexed foreign key measured 59 ms against 9 ms for the same
-    26 results, and 64 ms against 25 ms on a name matching 2,646 people.
+    re-evaluate the name predicate once per credit row, against a cast table
+    that outnumbers the people table several times over (238,357 cast rows,
+    131,639 people, measured 2026-09-01). Scanning people once and then
+    looking shows up by an indexed foreign key measured 59 ms against 9 ms for
+    the same 26 results, and 64 ms against 25 ms on a name matching 2,646
+    people, on the catalog as it stood then.
 
     The id list is batched under the SQLite variable ceiling for the reason
     ADR-06 records: the bundled build allows 32,766 bindings and an older
@@ -346,10 +352,12 @@ def _branch(name, term, main_cast_only=False):
     """Show ids matching `term` in one named branch. One query, one relation.
 
     Never OR two fan-out relations into one filter(). Cast and crew are reverse
-    foreign keys with 128,577 and 24,482 rows behind 100 shows; Django compiles
-    a single filter() holding both into one SELECT and SQLite materialises the
-    cross product before DISTINCT collapses it. Measured, that query does not
-    return a slow answer, it does not return.
+    foreign keys, each holding far more rows than the catalog has shows
+    (238,357 cast rows and 52,602 crew rows behind 249 shows, measured
+    2026-09-01); Django compiles a single filter() holding both into one
+    SELECT and SQLite materialises the cross product before DISTINCT
+    collapses it. Measured, that query does not return a slow answer, it does
+    not return.
     """
     lead = {"cast__order__lt": 10} if main_cast_only else {}
     queries = {
@@ -404,11 +412,11 @@ def suggest(term):
     Secondary by design: this only runs after the exact search comes back
     empty, so a spelling that works never pays for it.
 
-    The candidate set is narrowed in SQL first. Scoring "cranson" against all
-    154,699 people costs more than the search it is rescuing, so only names
-    with a *word* starting with the same letter are considered. That is the
-    trade: a typo in the first letter goes uncaught. Typos land mid-word far
-    more often than at the start of one.
+    The candidate set is narrowed in SQL first. Scoring "cranson" against
+    every person in the catalog (131,639, measured 2026-09-01) costs more than
+    the search it is rescuing, so only names with a *word* starting with the
+    same letter are considered. That is the trade: a typo in the first letter
+    goes uncaught. Typos land mid-word far more often than at the start of one.
 
     difflib.get_close_matches does the scoring because it screens with two
     cheap upper bounds before computing a real ratio, which is the difference
