@@ -3333,7 +3333,10 @@ class MyRatingsTagsTests(TestCase):
         self.assertNotIn("theirs", {t.name for t in self.context()["tags"]})
 
     def test_the_count_spans_shows_not_tags(self):
-        self.assertEqual(self.context()["tagged_count"], 3)
+        # Show "a" carries two tags and "b" carries one: three tag
+        # applications, but the copy says "across N shows", so the count
+        # must be the two distinct shows, not the three applications.
+        self.assertEqual(self.context()["tagged_count"], 2)
 
     def test_the_page_works_for_someone_with_no_tags(self):
         self.client.login(username="stranger2", password="pw")

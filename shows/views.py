@@ -646,7 +646,13 @@ def my_ratings(request):
             "rating_count": len(shows),
             "average_score": (sum(s.user_score for s in shows) / len(shows) if shows else None),
             "tags": tags,
-            "tagged_count": sum(t.uses for t in tags),
+            # Distinct shows, not summed tag uses: a show carrying three tags
+            # must count once here or the copy that says "across N shows"
+            # lies whenever a reader's own tags overlap on the same show.
+            "tagged_count": ShowTag.objects.filter(user=request.user)
+            .values("show_id")
+            .distinct()
+            .count(),
         },
     )
 
