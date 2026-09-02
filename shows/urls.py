@@ -16,5 +16,4 @@ urlpatterns = [
     path("shows/<slug:slug>/tag/", views.add_tag, name="add_tag"),
     path("shows/<slug:slug>/untag/", views.remove_tag, name="remove_tag"),
     path("tags/<slug:slug>/", views.tag, name="tag"),
-    path("shows/<int:pk>/similar/", views.similar, name="similar"),
 ]
