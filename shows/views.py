@@ -40,6 +40,51 @@ from .tmdb_client import TMDBClient
 
 logger = logging.getLogger(__name__)
 
+# ISO 639-1 codes to English names, for the search page's language filter.
+# Covers every code the catalog carries as of 2026-09-01 plus enough common
+# ones to survive it growing. A code not listed here (a language TMDb ingests
+# later) falls back to the bare code rather than breaking the page.
+LANGUAGE_NAMES = {
+    "en": "English",
+    "ja": "Japanese",
+    "ko": "Korean",
+    "es": "Spanish",
+    "fr": "French",
+    "de": "German",
+    "it": "Italian",
+    "pt": "Portuguese",
+    "zh": "Chinese",
+    "cn": "Chinese",
+    "ru": "Russian",
+    "hi": "Hindi",
+    "ar": "Arabic",
+    "sv": "Swedish",
+    "da": "Danish",
+    "no": "Norwegian",
+    "nl": "Dutch",
+    "pl": "Polish",
+    "tr": "Turkish",
+    "th": "Thai",
+    "id": "Indonesian",
+    "he": "Hebrew",
+    "fi": "Finnish",
+    "cs": "Czech",
+    "el": "Greek",
+    "hu": "Hungarian",
+    "ro": "Romanian",
+    "uk": "Ukrainian",
+    "vi": "Vietnamese",
+    "fa": "Persian",
+    "ta": "Tamil",
+    "te": "Telugu",
+    "is": "Icelandic",
+}
+
+
+def language_name(code):
+    return LANGUAGE_NAMES.get(code, code)
+
+
 # The MovieLens half-star scale, 0.5 to 5.0 (the same scale ADR-08 assumes for
 # Layer 2, enforced by Rating's model validators). Every value the widget offers
 # and the only values rate() will store. Multiples of 0.5 are exact in binary,
@@ -388,11 +433,14 @@ def search(request):
 
     # Only offer filter values the catalog can actually satisfy. A dropdown
     # listing five statuses when three exist invites empty result sets.
-    languages = (
+    # Sorted by name, not code, since that is what the reader sees.
+    language_codes = (
         Show.objects.exclude(original_language="")
         .values_list("original_language", flat=True)
         .distinct()
-        .order_by("original_language")
+    )
+    languages = sorted(
+        ((code, language_name(code)) for code in language_codes), key=lambda pair: pair[1]
     )
 
     # Only when the catalog comes back empty, and only for a plain title query.
@@ -439,6 +487,7 @@ def search(request):
                 .order_by("status")
             ),
             "languages": languages,
+            "language_label": language_name(parsed.language) if parsed.language else "",
             "f_status": status,
             "f_language": language,
             "f_min_score": request.GET.get("min_score", ""),
