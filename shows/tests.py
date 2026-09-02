@@ -11,7 +11,7 @@ from io import StringIO
 from django.contrib.auth.models import AnonymousUser, User
 from django.core.management import call_command
 from django.db.models import Max
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from .ingestion import MIN_VOTE_COUNT, Ingestor
@@ -749,6 +749,22 @@ class ShowDetailViewTests(TestCase):
 
     def test_unknown_slug_returns_404(self):
         self.assertEqual(self.client.get(reverse("shows:detail", args=["nope"])).status_code, 404)
+
+
+class NotFoundPageTests(TestCase):
+    """Freezes the fix for the 2026-09-01 papercut audit: a 404 wears the
+    site identity (base.html) instead of Django's default error page, with a
+    link back home. Django only serves templates/404.html with DEBUG off, so
+    the test forces that shape rather than waiting for a deploy to prove it.
+    """
+
+    def test_the_404_page_extends_the_site_identity(self):
+        with override_settings(DEBUG=False, ALLOWED_HOSTS=["testserver"]):
+            resp = self.client.get("/this-page-does-not-exist/")
+        self.assertEqual(resp.status_code, 404)
+        html = resp.content.decode()
+        self.assertIn('class="brand"', html)
+        self.assertIn(reverse("shows:index"), html)
 
 
 class StoredSimilarTests(TestCase):
