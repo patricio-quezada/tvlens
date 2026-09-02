@@ -118,6 +118,11 @@ def favorite_genre_ids_for(user, minimum=2):
 def index(request):
     base_qs = Show.objects.prefetch_related("genres")
 
+    # Built once and threaded through: watch_next's rerank and the genre
+    # ordering below both need it, and it depends only on the user, not on
+    # whatever candidate list is being reranked, so one build answers both.
+    profile = build_profile(request.user)
+
     picks: list = []
     favorite_genre_ids: set = set()
     top_picks_title = None
@@ -160,7 +165,7 @@ def index(request):
     #
     # It handles the anonymous and no-seed cases itself, so it is called outside
     # the is_authenticated block.
-    next_up = watch_next(request.user, exclude_ids=pick_ids | quest_ids)
+    next_up = watch_next(request.user, exclude_ids=pick_ids | quest_ids, profile=profile)
     next_ids = {s.pk for s in next_up}
     recently_added = base_qs.exclude(pk__in=pick_ids | next_ids | quest_ids).order_by(
         "-created_at"
@@ -182,7 +187,6 @@ def index(request):
     # ordering. Genres they have said nothing about score 0.0 and fall through
     # to the prior, so the untouched tail still sorts by quality rather than
     # arbitrarily. Catalog count and then name break the remaining ties.
-    profile = build_profile(request.user)
     learned = {} if profile.is_cold_start else profile.learned_genre_weights
     quality = profile.genre_weights if profile.is_cold_start else genre_quality()
     genres = sorted(
