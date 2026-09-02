@@ -4548,6 +4548,7 @@ class CatalogShipTests(TestCase):
             return Show.objects.create(
                 tmdb_id=i, id=i, name=name, vote_count=low, number_of_episodes=8
             )
+
         cls.rated = make(9001, "Rated but unpopular")
         cls.reviewed = make(9002, "Reviewed but unpopular")
         cls.listed = make(9003, "Watchlisted but unpopular")
