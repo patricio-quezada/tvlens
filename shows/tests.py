@@ -3041,6 +3041,38 @@ class SearchPageChromeTests(TestCase):
         self.assertIsNone(resp.context["parsed"].suggestion)
 
 
+class AuthVerbConsistencyTests(TestCase):
+    """Freezes the fix for the 2026-09-01 papercut audit: one verb pair,
+    "Log in" and "Sign up", instead of Login/Register/Sign in scattered
+    across the nav and the tag empty-state.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.show = Show.objects.create(
+            tmdb_id=9701,
+            name="Anonymous Hours",
+            slug="anonymous-hours",
+            overview="x",
+            first_air_date="2010-01-01",
+            vote_average=7.0,
+            vote_count=100,
+            original_language="en",
+        )
+
+    def test_the_nav_uses_log_in_and_sign_up(self):
+        html = self.client.get(reverse("shows:index")).content.decode()
+        self.assertIn(">Log in<", html)
+        self.assertIn(">Sign up<", html)
+        self.assertNotIn(">Login<", html)
+        self.assertNotIn(">Register<", html)
+
+    def test_the_signed_out_tag_prompt_says_log_in(self):
+        html = self.client.get(self.show.get_absolute_url()).content.decode()
+        self.assertIn("Log in to tag this show.", html)
+        self.assertNotIn("Sign in to tag", html)
+
+
 class TaggingTests(TestCase):
     """Tags are a shared vocabulary applied privately.
 
