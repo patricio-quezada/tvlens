@@ -428,7 +428,6 @@ def search(request):
         language=language,
         main_cast_only=main_cast_only,
     )
-    elapsed_ms = (time.perf_counter() - started) * 1000
 
     # Only offer filter values the catalog can actually satisfy. A dropdown
     # listing five statuses when three exist invites empty result sets.
@@ -475,6 +474,11 @@ def search(request):
                 # TMDb being down must never break catalog search. The reader
                 # loses a hint, not the page.
                 logger.warning("TMDb fallback search failed for %r", tmdb_query, exc_info=True)
+
+    # After the TMDb fallback, not after run_search alone: that fallback is
+    # the slowest path this page has, and stopping the clock before it ran
+    # under-reported exactly the request that most needed an honest number.
+    elapsed_ms = (time.perf_counter() - started) * 1000
 
     return render(
         request,
