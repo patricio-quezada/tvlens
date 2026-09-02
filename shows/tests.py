@@ -2902,6 +2902,21 @@ class SearchViewTests(TestCase):
         resp = self.client.get(reverse("shows:search"), {"q": "west", "status": "Ended"})
         self.assertTrue(resp.context["advanced_open"])
 
+    def test_elapsed_ms_includes_the_tmdb_fallback(self):
+        """Freezes the fix for the 2026-09-01 papercut audit: the clock used
+        to stop before the TMDb elsewhere fetch, under-reporting exactly the
+        slowest path the page has."""
+        import time
+        from unittest.mock import patch
+
+        def slow_search(query):
+            time.sleep(0.05)
+            return []
+
+        with patch("shows.views.TMDBClient.search_tv", side_effect=slow_search):
+            resp = self.client.get(reverse("shows:search"), {"q": "nothing matches this term"})
+        self.assertGreaterEqual(resp.context["elapsed_ms"], 50)
+
 
 class SearchLanguageLabelTests(TestCase):
     """Freezes the fix for the 2026-09-01 papercut audit: the language filter
