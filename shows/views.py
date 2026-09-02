@@ -35,6 +35,7 @@ from .recommenders import (
     similar_by_crew,
     stored_similar,
 )
+from .search import VALID_OPERATORS
 from .search import search as run_search
 from .tmdb_client import TMDBClient
 
@@ -449,24 +450,33 @@ def search(request):
     # not a fetch. Adding a show is deliberate, via `manage.py ingest_show`.
     elsewhere = []
     if not shows and raw.strip() and not parsed.too_short:
-        try:
-            have = set(Show.objects.values_list("id", flat=True))
-            elsewhere = [
-                {
-                    "tmdb_id": r["id"],
-                    "name": r.get("name") or "",
-                    "year": (r.get("first_air_date") or "")[:4],
-                    "votes": r.get("vote_count") or 0,
-                    "score": r.get("vote_average") or 0,
-                    "overview": (r.get("overview") or "")[:180],
-                }
-                for r in TMDBClient().search_tv(raw)
-                if r.get("id") not in have and (r.get("vote_count") or 0) > 0
-            ]
-        except Exception:
-            # TMDb being down must never break catalog search. The reader loses
-            # a hint, not the page.
-            logger.warning("TMDb fallback search failed for %r", raw, exc_info=True)
+        # An operator the catalog does not understand, or a malformed value
+        # for one it does, is search syntax, not a title. Sending it to TMDb
+        # verbatim would ask TMDb to search for text like "acter:cranston",
+        # which means nothing there either.
+        tmdb_query = raw
+        for bad in parsed.unknown:
+            tmdb_query = tmdb_query.replace(bad, "", 1)
+        tmdb_query = " ".join(tmdb_query.split())
+        if tmdb_query:
+            try:
+                have = set(Show.objects.values_list("id", flat=True))
+                elsewhere = [
+                    {
+                        "tmdb_id": r["id"],
+                        "name": r.get("name") or "",
+                        "year": (r.get("first_air_date") or "")[:4],
+                        "votes": r.get("vote_count") or 0,
+                        "score": r.get("vote_average") or 0,
+                        "overview": (r.get("overview") or "")[:180],
+                    }
+                    for r in TMDBClient().search_tv(tmdb_query)
+                    if r.get("id") not in have and (r.get("vote_count") or 0) > 0
+                ]
+            except Exception:
+                # TMDb being down must never break catalog search. The reader
+                # loses a hint, not the page.
+                logger.warning("TMDb fallback search failed for %r", tmdb_query, exc_info=True)
 
     return render(
         request,
@@ -488,6 +498,7 @@ def search(request):
             ),
             "languages": languages,
             "language_label": language_name(parsed.language) if parsed.language else "",
+            "valid_operators": VALID_OPERATORS,
             "f_status": status,
             "f_language": language,
             "f_min_score": request.GET.get("min_score", ""),

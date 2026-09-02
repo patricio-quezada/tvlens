@@ -80,6 +80,11 @@ TEXT_FIELDS = {
 }
 VALUE_FIELDS = {"year", "season", "lang", "language", "status", "score", "votes"}
 
+# Every operator word the box understands, for the page to name back when a
+# reader typed one it does not recognise (an unrecognised word:value is not
+# quietly text, it is a filter that never ran).
+VALID_OPERATORS = sorted(set(TEXT_FIELDS) | VALUE_FIELDS)
+
 
 def _unquote(value):
     return value[1:-1] if len(value) > 1 and value[0] == value[-1] == '"' else value
@@ -138,10 +143,15 @@ class ParsedQuery:
         for match in OPERATOR_RE.finditer(raw):
             key = match.group(1).lower()
             value = _unquote(match.group(2))
-            if key not in TEXT_FIELDS and key not in VALUE_FIELDS:
-                continue  # not an operator, leave it in the text
             kept.append(raw[cursor : match.start()])
             cursor = match.end()
+            if key not in TEXT_FIELDS and key not in VALUE_FIELDS:
+                # Shaped like an operator (word:value) but not one the catalog
+                # knows. Leaving it in the text made it a silent no-op:
+                # "acter:cranston" matched nothing as a filter and nothing as
+                # a literal string either, with no sign either happened.
+                self.unknown.append(f"{key}:{value}")
+                continue
             self._apply(key, value)
         kept.append(raw[cursor:])
         return " ".join("".join(kept).split())
