@@ -4,8 +4,10 @@
 have seen, track what you are watching, and get recommendations for what to watch next.
 
 I am building it in public to learn engineering and coding, one day at a time, on
-Django and the TMDb API. The site is live at [tvlens.org](https://tvlens.org), and
-[I logged the build for the first 80 days of TVLens](https://tvlens.org/80dp/), alongside [the decisions behind it](https://tvlens.org/decisions/).
+Django and the TMDb API. [tvlens.org](https://tvlens.org) is the public build log and
+decision record, a static site; [I logged the build for the first 80 days of TVLens](https://tvlens.org/80dp/),
+alongside [the decisions behind it](https://tvlens.org/decisions/). The Django app in
+this repository is not deployed anywhere yet — it runs locally, against the local demo.
 
 If you want to understand the why behind certain choices for TVLens, you can
 [browse the ADRs](docs/adr/).
@@ -73,7 +75,7 @@ quality-based cold-start rather than popularity.
 
 ## Built with
 
-Django 5.2 and SQLite, server-rendered with no JS framework. Data from the TMDb API.
+Django 6.1 and SQLite, server-rendered with no JS framework. Data from the TMDb API.
 Dependencies: `django-extensions`, `python-dotenv`, `requests`.
 
 ## License
