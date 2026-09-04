@@ -233,7 +233,7 @@ changed to `["name"]`, deliberately; the comment on `Show.Meta` records the reas
 - the surprise arithmetic appears once, written out against a known pick
 
 ## Note, 2026-08-26: the hop decay is tilted, and left alone
-**status: draft**
+**status: accepted 2026-09-04**
 
 [ADR-04](04-episode-weighted-people-recommender.md) raised each shared person's episode share to
 `INVOLVEMENT_EXPONENT = 1.375` before summing. That changes the input to `math.log1p(score)`,

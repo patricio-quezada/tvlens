@@ -1,7 +1,7 @@
 ---
 adr: 7
 title: Precompute the Layer 1 ranking and serve it from a table
-status: accepted
+status: amended
 date: 2026-08-17
 tags:
   - adr
@@ -122,7 +122,7 @@ Provenance: issue #1 (Recommender scale hardening), problem 2, the caching follo
 [ADR-06](06-sql-variable-ceiling.md).
 
 ## Note, 2026-08-26: the review above is a measurement, not an invariant
-**status: draft**
+**status: accepted 2026-09-04**
 
 The After Action Review records "Better Call Saul 14.79, The Blacklist 1.09, CSI 0.19 in eighth"
 as Breaking Bad's preview, along with 1041 edges across 96 sources. Those numbers were true of

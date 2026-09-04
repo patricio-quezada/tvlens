@@ -1,7 +1,7 @@
 ---
 adr: 12
 title: "Catalog search: one query per branch, matched on word boundaries"
-status: accepted
+status: amended
 date: 2026-08-24
 tags:
   - adr
