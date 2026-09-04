@@ -128,6 +128,10 @@ Still open. Four things are worth watching once this has been lived with for a w
 - **Whether this stays one script.** The line was "no JS"; the line is now "one script, no
   framework, everything works without it". That is a much softer boundary, and the next feature
   that would be easier with a little more will test it.
+
+  2026-09-04: Answered by events. `detail.html` now holds four script blocks, and tagging
+  followed the same pattern (ADR-14). The rating script stays inline until a build forces
+  the split.
 - **The `X-Requested-With` convention.** Chosen because it is one header and needs no content
   negotiation. If a second endpoint ever needs this, decide then whether to keep the header or
   move to `Accept: application/json`, rather than having both.
