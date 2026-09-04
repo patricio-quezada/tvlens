@@ -1,7 +1,7 @@
 ---
 adr: 4
 title: Recommend by episode-weighted shared people
-status: accepted
+status: amended
 date: 2026-08-11
 tags:
   - adr
@@ -85,7 +85,7 @@ comes out zero, which needs its own answer:
 [ADR-05](05-no-signal-fallback-ladder.md).
 
 ## Amendment, 2026-08-26: the weight is superlinear
-**status: draft**
+**status: accepted 2026-09-04**
 
 The weight above is linear, and that is not enough. A person in 3 of 100 episodes contributes
 0.03, which is correct as a description of their involvement but wrong as a vote. The problem

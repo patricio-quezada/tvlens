@@ -1,7 +1,7 @@
 ---
 adr: 3
 title: "Three identities: pk, tmdb_id, slug"
-status: accepted
+status: amended
 date: 2026-08-11
 tags:
   - adr

@@ -1,7 +1,7 @@
 ---
 adr: 1
 title: Exclude casting roles from crew matching
-status: accepted
+status: amended
 date: 2026-08-11
 tags:
   - adr
@@ -53,7 +53,7 @@ The same exclusion carries into the full weighted recommender,
 [ADR-04](04-episode-weighted-people-recommender.md).
 
 ## Amendment, 2026-08-26: the argument covers more than casting
-**status: draft**
+**status: accepted 2026-09-04**
 
 The reasoning above is not really about casting. It is about a credit that ties two productions
 together without saying anything about the two shows, and casting was simply the first and most

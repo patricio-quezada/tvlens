@@ -1,7 +1,7 @@
 ---
 adr: 15
 title: "Learn whether a reader is tied to shows by cast or by crew, and name accordingly"
-status: accepted
+status: amended
 date: 2026-08-26
 tags:
   - adr
