@@ -1,16 +1,18 @@
 ---
-title: A catalog ship is a merge, and spoken-for shows are undeletable
+adr: 16
+title: Shipping the catalog is a merge, and spoken-for shows are undeletable
 status: accepted
 date: 2026-09-01
 tags:
   - adr
-relates: ["03-identifiers.md"]
+relates:
+  - "[[03-identifiers]]"
 ---
-# 16. A catalog ship is a merge, and spoken-for shows are undeletable
+# 16. Shipping the catalog is a merge, and spoken-for shows are undeletable
 
 **A catalog update merges into the database the user already has, row by row, and no command
-may delete a Show that any user row points at.** Nothing a user made — a rating, a review, a
-watchlist entry, a tag — changes or disappears when the catalog does.
+may delete a Show that any user row points at.** Nothing a user made (a rating, a review, a
+watchlist entry, a tag) changes or disappears when the catalog does.
 
 ## Context
 

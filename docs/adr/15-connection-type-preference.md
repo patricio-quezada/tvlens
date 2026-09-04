@@ -143,7 +143,7 @@ costs an order of magnitude more work, indexing about 130 shows instead of a doz
 **Correlate rating against cast share directly.** Same numbers in the limit, but it introduces a
 second statistical idiom into a module whose whole argument is that it is one linear, inspectable
 model. The weighted mean already in use for tags answers the question and reads the same way as
-its neighbours.
+its neighbors.
 
 **Let the reader set it themselves.** Out of scope by decision, deferred to v2. A control is a
 different product question from a learned signal, and shipping the control first would have made
@@ -159,7 +159,7 @@ on noise.** Both failures had the same cause and neither was the threshold.
 ### The cap was starving the estimator
 
 Seven synthetic profiles from 2 to 249 ratings produced no lean at all, including
-one built to lean by rating cast-tied neighbours 5.0 and crew-tied ones 1.0. It
+one built to lean by rating cast-tied neighbors 5.0 and crew-tied ones 1.0. It
 reached 0.358 against a required 0.5.
 
 Twenty pure-noise profiles showed why: at a 60-edge cap their leans ran to 0.864

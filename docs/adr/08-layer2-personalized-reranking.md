@@ -12,7 +12,7 @@ relates:
 # 8. Layer 2: personalize by re-ranking the graph per user
 
 **Two users looking at the same show saw the identical list. Layer 2 keeps a signed weight per
-genre and tag from a user's own ratings and re-orders Layer 1's existing list with it -- never
+genre and tag from a user's own ratings and re-orders Layer 1's existing list with it: never
 recomputing the graph, never scoring people twice, and never smuggling popularity in through
 the cold start.**
 
@@ -38,7 +38,7 @@ Layer 2 is a per-user preference profile that **re-ranks** Layer 1's output.
 
 **The signal is explicit ratings plus watched, and a rating implies watched.** A user rates a
 show 0.5 to 5.0. Submitting a rating also marks it watched, because nobody rates what they have
-not seen, and that holds at any score -- a 1-star rating is still a watched show. Watched on
+not seen, and that holds at any score: a 1-star rating is still a watched show. Watched on
 its own, with no rating, is a weaker unsigned positive. These are the only inputs. Layer 2
 never infers taste from something a user did not deliberately do.
 
@@ -51,7 +51,7 @@ store holds what is the same for everyone, the request computes what depends on 
 **The profile is signed weights over genres and tags.** For each user the profile keeps an
 affinity number per genre and per tag. Rating a show moves that show's genres and tags by a
 *signed* amount: a high rating pushes them up, a low rating pushes them down. A 1-star rating
-is information rather than noise -- it says "less of this" -- so it lowers those weights rather
+is information rather than noise (it says "less of this"), so it lowers those weights rather
 than being discarded. A candidate's Layer-2 score is how well its genres and tags line up with
 the user's weights.
 
@@ -71,7 +71,7 @@ that base as ratings arrive.
 **Interpretable weights, not embeddings, on purpose.** Because Layer 2 weights real, nameable
 features, it can always explain itself: "ranked up because you rate shows with this creator or
 genre highly." That explanation *is* the product, the context box in issue #7. A learned
-embedding -- a black-box numeric fingerprint of a show -- might rank marginally better and
+embedding (a black-box numeric fingerprint of a show) might rank marginally better and
 could not say why, which would kill the one thing that makes TVLens TVLens. Interpretability is
 a requirement here, not a nicety.
 
@@ -81,5 +81,5 @@ writing anything.
 
 Two things stuck. Keep the layers honest, so Layer 1 stays global and Layer 2 only re-ranks and
 nothing already working gets rebuilt. And keep it explainable, because the reason a show is
-recommended is the product itself -- which is why nameable weights beat a smarter black box
+recommended is the product itself, which is why nameable weights beat a smarter black box
 that could not account for itself.

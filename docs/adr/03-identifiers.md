@@ -1,13 +1,13 @@
 ---
 adr: 3
-title: "Three identities: surrogate pk, tmdb_id, slug"
+title: "Three identities: pk, tmdb_id, slug"
 status: accepted
 date: 2026-08-11
 tags:
   - adr
 relates: []
 ---
-# 3. Three identities: surrogate pk, tmdb_id, slug
+# 3. Three identities: pk, tmdb_id, slug
 
 **A show is identified three times, for three different jobs: an integer pk for foreign keys, a
 tmdb_id for matching on ingest, and a slug for URLs. One clever identifier serving all three

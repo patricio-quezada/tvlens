@@ -19,7 +19,7 @@ substring match answers three-letter queries with garbage.**
 ## Context
 
 Issue #8 asked for search over titles, cast, crew, characters, descriptions, genres, networks,
-season names and episode synopses, modelled on Obsidian's advanced search rather than a single
+season names and episode synopses, modeled on Obsidian's advanced search rather than a single
 text box.
 
 The obvious implementation is one `filter()` with every branch ORed together. On the 100-show
@@ -29,7 +29,7 @@ return.
 
 The cause is fan-out, not scan cost. Cast and crew are reverse foreign keys holding 128,577 and
 24,482 rows behind 100 shows. Django compiles a single `filter()` containing both into one SELECT,
-and SQLite materialises the cross product before `DISTINCT` collapses it: 61 million rows for cast
+and SQLite materializes the cross product before `DISTINCT` collapses it: 61 million rows for cast
 crossed with crew, 368 million once genres and networks join in. No index changes that number,
 because it is a property of the query shape.
 
@@ -101,7 +101,7 @@ half the table.
 **The waste is worst where the result is least useful.** Searching "the" costs 235 ms to return
 the 120-show cap, which is not an answer to anything. A term matching half the corpus has no
 power to discriminate, so the branch could be skipped on exactly the terms that make it slow.
-That is a behaviour change and belongs in a proposal, not here.
+That is a behavior change and belongs in a proposal, not here.
 
 **Cost scales with term frequency, not catalog size.** The catalog since shrank by 46% and the
 worst case got worse, because the pruned shows were low-signal ones whose synopses matched
@@ -129,7 +129,7 @@ episode's match. It reaches no further: weighing bm25 against the other
 branches would overturn the branch ordering, and that needs its own evidence.
 
 Matching is prefix, not exact, because exact would have been a silent
-behaviour change: `murder*` returned the regex's 151 shows where exact FTS
+behavior change: `murder*` returned the regex's 151 shows where exact FTS
 matching lost "murderer" and "murders" and returned 132. Measured on the live
 catalog, prefix FTS returned exactly the regex's shows for every term tried.
 The user's term never reaches MATCH raw; it is quoted into a single phrase
