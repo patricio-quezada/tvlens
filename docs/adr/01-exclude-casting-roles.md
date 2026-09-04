@@ -32,8 +32,8 @@ never counts toward two shows being similar.
 
 The ingest keeps an explicit list of casting job titles to exclude rather than matching on the
 word "casting," so the list is easy to check by hand. TMDb occasionally adds a new title that
-slips the list -- a later review caught eight, including "Extras Casting" and "Location
-Casting," which the list now carries.
+slips the list; a review on 2026-08-06 caught eight, including "Extras Casting" and
+"Location Casting," which the list now carries.
 
 I considered lowering casting's weight instead of removing it. It does not work. A casting
 director credited on 60 episodes still says nothing about the show, so the episode weighting in
@@ -43,7 +43,7 @@ problem and it needs a separate answer.
 ## After Action Review
 A show's similar list is now built from the people who actually made both shows, not from the
 back-office staff a studio reuses across unrelated titles. The obviously wrong matches
-disappeared and genuine ones took their place -- shows that really do share a creator, a
+disappeared and genuine ones took their place: shows that really do share a creator, a
 director, and a composer.
 
 The cost is that a couple of shows whose only link was a shared casting office now show no

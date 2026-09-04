@@ -1,6 +1,6 @@
 ---
 adr: 9
-title: "Side Quests: strong edges into genres a user has not rated highly"
+title: "Side Quests: strong connections into genres a user has not rated highly"
 status: amended
 date: 2026-08-21
 tags:
@@ -10,12 +10,12 @@ relates:
   - "[[07-materialized-recommendations]]"
   - "[[08-layer2-personalized-reranking]]"
 ---
-# 9. Side Quests: strong edges into genres a user has not rated highly
+# 9. Side Quests: strong connections into genres a user has not rated highly
 
 **A side quest is a show a user would plausibly like but would not have reached for, and
 surprise only means anything measured against what someone has demonstrated. The row is built
 from that user's own highly-rated shows, walks two hops out at a discount, and ranks by
-strength times novelty times how few of their favourites reach it.**
+strength times novelty times how few of their favorites reach it.**
 
 ## Context
 Side Quests shipped as a stub. It rendered for signed-in users only, it was always empty, and
@@ -99,7 +99,7 @@ the graph's most reliable edges.
 **A show that many seeds reach sinks.** Divided by `(seeds that reached it) **
 SIDE_QUEST_CENTRALITY_EXPONENT`. This is the term that most directly answers "edge cases bound
 by our recommendations": a candidate every one of a user's favorites points at sits at the
-*centre* of that taste, and centrality is measurable where peripherality was previously only
+*center* of that taste, and centrality is measurable where peripherality was previously only
 implied.
 
 #### What it did
@@ -120,7 +120,7 @@ candidates were plentiful, and whether it is too harsh or too generous is not an
 this data. Deferred to
 [#20](https://github.com/patricio-quezada/tvlens/issues/20), together with a limitation the
 same measurement exposed: novelty is binary, so a user with no Crime rating sees *every*
-Crime-tagged show score as fully novel, and a seed whose neighbourhood is one cluster can fill
+Crime-tagged show score as fully novel, and a seed whose neighborhood is one cluster can fill
 most of the row with that cluster. Genre affinity has more resolution than has-genre /
 has-not, and Layer 2 already keeps a signed number per genre.
 
@@ -181,7 +181,9 @@ simulation, so it is a real state rather than a theoretical one.
 **The dedupe chain is unchanged: Top Picks, then Side Quests, then Recently added.** One show,
 one row. The priority is by how *personal* a row is, and it deliberately does not match render
 order: Side Quests sits below Recently added on the page but claims its shows before it. A
-show only ever falls down that chain.
+show only ever falls down that chain. Watch Next has since joined the chain (#24), claiming
+after Side Quests and before Recently added; the comment in `views.index` records why it
+yields to a row with the smaller pool.
 
 ### What the numbers established, and what has since moved
 Measured in August 2026 against 4000 synthetic three-seed users on a 100-show catalog, before
@@ -199,16 +201,16 @@ Re-measuring against the current rule and the current catalog is worth doing bef
 
 ### Tags exist now, and would still sharpen this
 When this was written `Tag` and `ShowTag` held 0 rows, so genre was the only categorical
-signal. ADR-14 landed tags and they now hold 7 and 9, which is enough to exist and not enough
-to run novelty over. Genre remains coarse for this job. Once tags are populated, the same shape
+signal. ADR-14 landed tags, which held 7 tags and 9 applications at the time,
+enough to exist and not enough to run novelty over. Genre remains coarse for this job. Once tags are populated, the same shape
 works with a finer vocabulary: novelty would run over tags as well as genres, letting the row
 tell "a workplace comedy you have not tried" from "a comedy". Still a later decision.
 
 ### One hazard this touched
-`Show.Meta.ordering = ["-popularity"]` means any queryset that forgets an explicit
-`order_by` silently becomes the popularity ranking ADR-05 forbids. Every queryset on the Side
-Quests path is explicitly ordered and says so in a comment. Whether that default should
-change repo-wide is a separate decision with a wider blast radius and is not settled here.
+`Show.Meta.ordering` was `["-popularity"]` at the time, which meant any queryset that forgot
+an explicit `order_by` silently became the popularity ranking ADR-05 forbids. Every queryset
+on the Side Quests path is explicitly ordered and says so in a comment. The default has since
+changed to `["name"]`, deliberately; the comment on `Show.Meta` records the reasoning.
 
 ## After Action Review
 `shows/tests.py::SideQuestsTests` freezes the definition:
@@ -218,7 +220,7 @@ change repo-wide is a separate decision with a wider blast radius and is not set
 - every pick lands in a genre the user has never rated highly
 - the walk refuses the graph's strongest edge when it is more of the same
 - distance can beat a stronger edge and cannot win on its own
-- the walk covers only the strong half of a seed's list, and only the user's own favourites
+- the walk covers only the strong half of a seed's list, and only the user's own favorites
 - an unlocked user with nothing new gets no section rather than the locked copy
 
 `SideQuestsRankingTests` freezes the second revision:
@@ -229,6 +231,7 @@ change repo-wide is a separate decision with a wider blast radius and is not set
 - a watched show is never a pick and still carries the walk
 - a show every seed reaches ranks below one that only a single seed found
 - the surprise arithmetic appears once, written out against a known pick
+
 ## Note, 2026-08-26: the hop decay is tilted, and left alone
 **status: draft**
 
@@ -248,8 +251,9 @@ would mean `SIDE_QUEST_HOP_DECAY = 0.33` rather than 0.5.
 **Left at 0.5 deliberately.** This ADR already flags the constant as needing a re-fit at real
 catalog scale, tracked in #20, and it was tuned against a 100-show catalog that no longer
 exists. Re-fitting it inside the rescoring change would mix two adjustments and make neither
-measurable. Side Quests is also due to be replaced by Watch Next as the homepage row, which will
-re-open these constants with a clearer question to answer.
+measurable. Side Quests was also expected to give way to Watch Next as the homepage row.
+Watch Next has since shipped (#24) and leads the page, but Side Quests stayed below it, so
+these constants are still live.
 
 The direction of the tilt is toward novelty, which is the axis this row exists to serve, so 3.6
 percentage points is not a regression. It is written down here so the next person to touch the
@@ -281,7 +285,7 @@ Familiarity is now a share of the seeds rather than a membership test, and
 novelty is the mean of `1 - familiarity` across the candidate's genres, raised to
 `SIDE_QUEST_GENRE_EXPONENT`.
 
-**The hard drop is gone, but its behaviour is not.** A candidate whose every
+**The hard drop is gone, but its behavior is not.** A candidate whose every
 genre sits at familiarity 1.0 scores exactly 0.0 and can never be chosen, so the
 old cliff survives as the limit case of the formula rather than as a branch
 beside it.

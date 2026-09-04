@@ -69,7 +69,7 @@ banner at the top of a page the user is not looking at.
 **Every failure falls back to the plain submit.** No `fetch`, no `FormData`, a non-2xx
 response, a network error: the script rebuilds the score as a hidden input and submits the form
 normally. `form.submit()` does not carry a submit button's own name and value, which is the one
-sharp edge here, and the script handles it explicitly. The worst case is the behaviour this ADR
+sharp edge here, and the script handles it explicitly. The worst case is the behavior this ADR
 replaces.
 
 ### What this reverses
@@ -85,7 +85,7 @@ next request to "just add a little JS" no longer meets a bright line. That is th
 and it is a cultural one rather than a technical one.
 
 ### Alternatives, and why they lost
-**A. Keep the reload and land at the top of the page.** The original behaviour. Correct, and it
+**A. Keep the reload and land at the top of the page.** The original behavior. Correct, and it
 loses the user's place on every rating. For a repeated action this is the wrong shape however
 fast the server is.
 
@@ -107,7 +107,7 @@ price, worse outcome.
 
 **E. Turbo, htmx, or similar.** These solve this properly and generally. They are also a
 dependency, a vendored asset or a CDN, and a build decision, taken on behalf of one
-interaction. If TVLens later wants this behaviour in several places, this is the alternative to
+interaction. If TVLens later wants this behavior in several places, this is the alternative to
 revisit, and revisit it deliberately rather than arriving at it by accretion.
 
 **F. Rebuild the average sentence in JavaScript.** Avoids the extra template. It also puts

@@ -10,13 +10,13 @@ relates: []
 # 11. One visual identity, defined once, taken from the landing page itself
 
 **Ten of eleven pages wore an older brown palette while only the show page carried the
-tvlens.org look, so the nav changed colour mid-journey. The identity now lives once in
+tvlens.org look, so the nav changed color mid-journey. The identity now lives once in
 `base.html`, and it was read off the live landing page rather than copied from the one page
-that already had it -- which caught three drifts, including a colour invented from scratch
+that already had it, which caught three drifts, including a color invented from scratch
 because the real one was invisible from inside the repo.**
 
 ## Context
-The nav changed colour on the walk from the homepage into a show.
+The nav changed color on the walk from the homepage into a show.
 
 It is defined once, in `base.html`, so that is not a bug in the nav. It is the nav honestly
 reporting that the page under it had a different palette. TVLens had two looks:
@@ -32,7 +32,7 @@ Cloud Dancer, and it surfaced while verifying
 [#12](https://github.com/patricio-quezada/tvlens/issues/12): the show page had been brought
 into line with the landing page and the homepage had not.
 
-The mechanism to fix it already existed, and `detail.html` said so in its own comment --
+The mechanism to fix it already existed, and `detail.html` said so in its own comment:
 redefining the shared palette variables on `body.detail` lets the inherited nav and shell adopt
 the cinematic look without a second stylesheet. Everything needed was that same move, one level
 up.
@@ -87,8 +87,8 @@ Consolas on Windows and Liberation Mono on Linux. The only way to get identical 
 every device is to serve the font.
 
 **I rejected monospace on the reader's behalf.** TVLens exists to explain a
-recommendation in a sentence -- "nine people worked on both this and Better Call Saul"
--- and it renders show overviews, row captions and callout prose. Monospace is
+recommendation in a sentence ("nine people worked on both this and Better Call Saul"),
+and it renders show overviews, row captions and callout prose. Monospace is
 measurably harder to read at length. It would have been a stylistic win paid for by the
 reader on every recommendation, which is the wrong trade for a product whose value is
 the sentence.
@@ -101,7 +101,7 @@ permits redistribution.
 
 **DM Sans upright is the variable file.** One 61 KB download covers every weight from
 100 to 1000. Shipping the three static weights the CSS asks for would have cost 108 KB
-and still synthesised 600 and 700, which base.html uses; those are now real. Italic
+and still synthesized 600 and 700, which base.html uses; those are now real. Italic
 stays a single static 300, because that is the only italic in the product, and the
 variable italic is 61 KB on its own.
 
@@ -116,7 +116,7 @@ would sit on top of content rather than behind a composition. The identity is th
 palette, the type and the grain; the streak is staging for a single-screen page.
 
 ### Alternatives, and why they lost
-**A. Leave it.** Two looks, and the nav changing colour mid-journey. This is the state this
+**A. Leave it.** Two looks, and the nav changing color mid-journey. This is the state this
 record fixes, and it needs no further argument.
 
 **B. Promote `detail.html`'s tokens instead of reading the landing page.** Faster, and
@@ -125,9 +125,9 @@ including a hand-invented amber sitting next to a real one nobody could see.
 
 **C. A second stylesheet for "cinematic" pages.** This is what the original comment
 explicitly avoided, and the reason holds: two stylesheets means two places to change a
-colour and no answer to which one is right.
+color and no answer to which one is right.
 
-**D2. Keep loading fonts from Google's CDN.** Fewer bytes in the repo and a chance the
+**D. Keep loading fonts from Google's CDN.** Fewer bytes in the repo and a chance the
 visitor already has them cached from another site. It also means the page renders
 differently, or not as designed, for anyone whose network or browser blocks that host,
 and it reports every visitor to a third party. The landing page and the app both paid
@@ -138,7 +138,7 @@ project built in public from a terminal. It is also harder to read, on a product
 explanatory sentences, and it would have retired the Bebas wordmark. Rejected on the
 reader's behalf; see above.
 
-**D. Move the palette but leave type alone.** Half the identity. The landing page's
+**F. Move the palette but leave type alone.** Half the identity. The landing page's
 voice is as much Bebas Neue over DM Sans as it is amber on near-black, and
 `system-ui` headings under an amber palette read as a theme applied to someone else's
 app.
@@ -154,4 +154,4 @@ Still open. Three things are worth watching:
   different sizes. In one identity it is obvious.
 - **Contrast on the quieter text.** `--text-secondary: #7a756c` on `#08080a` suited a landing
   page with very little text. It now carries card metadata, form labels and the row captions,
-  far more reading than that colour was ever meant to carry.
+  far more reading than that color was ever meant to carry.

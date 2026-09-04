@@ -32,13 +32,14 @@ does: it stays every show sharing at least one qualifying person. The order fall
 steps.
 
 1. **Weighted, the normal path.** Rank by the shared-people score from
-[ADR-04](04-episode-weighted-people-recommender.md). 2. **Estimated.** When every weighted
-score is zero, rank by the half still visible: how much of the *candidate* show the shared
-person made. A candidate whose shared person led their whole show ranks above one where that
-person was a one-episode guest. Ties break on rating, then vote count. 3. **Rating.** When even
-that has nothing to go on, rank by TMDb rating, with vote count as the tiebreaker so a 10 from
-three votes cannot beat an 8.9 from ten thousand. Rating measures quality, not popularity,
-which keeps it inside the rule rather than around it.
+   [ADR-04](04-episode-weighted-people-recommender.md).
+2. **Estimated.** When every weighted score is zero, rank by the half still visible: how much
+   of the *candidate* show the shared person made. A candidate whose shared person led their
+   whole show ranks above one where that person was a one-episode guest. Ties break on rating,
+   then vote count.
+3. **Rating.** When even that has nothing to go on, rank by TMDb rating, with vote count as
+   the tiebreaker so a 10 from three votes cannot beat an 8.9 from ten thousand. Rating
+   measures quality, not popularity, which keeps it inside the rule rather than around it.
 
 Each list says which step produced it, so a fallback ranking never passes itself off as a full
 match.

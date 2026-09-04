@@ -75,7 +75,7 @@ tens of thousands of qualifying people no longer 500s a public page.
 Nothing else moved, measured against the real catalog: cast coverage stays 95 of 100, crew 88,
 either 96, and Breaking Bad's weighted preview is unchanged. A regression test builds two shows
 sharing more people than the batch size, spanning several chunks, and confirms all three
-recommenders return the right overlap with no `OperationalError` -- so a change that dropped
+recommenders return the right overlap with no `OperationalError`, so a change that dropped
 the subquery or the chunking fails there rather than in production.
 
 One deliberate limit remains. `similar_by_people` still materializes its person list out of

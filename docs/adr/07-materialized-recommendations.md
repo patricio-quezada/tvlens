@@ -1,6 +1,6 @@
 ---
 adr: 7
-title: Materialize the Layer 1 ranking and serve reads from a table
+title: Precompute the Layer 1 ranking and serve it from a table
 status: accepted
 date: 2026-08-17
 tags:
@@ -9,7 +9,7 @@ relates:
   - "[[05-no-signal-fallback-ladder]]"
   - "[[06-sql-variable-ceiling]]"
 ---
-# 7. Materialize the Layer 1 ranking and serve reads from a table
+# 7. Precompute the Layer 1 ranking and serve it from a table
 
 **The shared-people ranking is the same for every visitor and only changes when an ingest
 changes the credits underneath it, so TVLens computes it once into a table and reads from
@@ -24,7 +24,7 @@ Then the next visitor opens the same page, and it does all of it again.
 
 The list does not depend on who is looking. It only changes when an ingest changes the credits
 underneath it. So every page load after the first was paying full price for an answer TVLens
-already had -- and [ADR-06](06-sql-variable-ceiling.md) had already named it as the open
+already had, and [ADR-06](06-sql-variable-ceiling.md) had already named it as the open
 follow-up, issue #1, problem 2: the pages run the recommenders on every request with no
 caching.
 
@@ -120,6 +120,7 @@ them. That is a real piece of work, deliberately not attempted here.
 
 Provenance: issue #1 (Recommender scale hardening), problem 2, the caching follow-up named in
 [ADR-06](06-sql-variable-ceiling.md).
+
 ## Note, 2026-08-26: the review above is a measurement, not an invariant
 **status: draft**
 
@@ -133,7 +134,7 @@ Crime Scene Investigation left Breaking Bad's top 12 entirely as the catalog gre
 shows.** It is still in the catalog. Nothing failed, because a claim in prose cannot fail, and
 the sentence sat here being wrong for months.
 
-On the 464-show catalog of the time, since pruned to 248 (see MIN_VOTE_COUNT), after the rescoring in
+On the 464-show catalog of the time, since pruned to 248 (see `MIN_VOTE_COUNT`), after the rescoring in
 [ADR-04](04-episode-weighted-people-recommender.md) and the widened `SERVICE_JOBS` in
 [ADR-01](01-exclude-casting-roles.md), the store holds **4,013 edges across 409 sources**, and
 Breaking Bad reads:

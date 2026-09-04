@@ -1,6 +1,6 @@
 ---
 adr: 13
-title: "Resolve child records by two keys, because TMDb keeps neither stable"
+title: "Resolve seasons and episodes by two keys, because TMDb keeps neither stable"
 status: accepted
 date: 2026-08-24
 tags:
@@ -9,9 +9,9 @@ relates:
   - "[[03-identifiers]]"
   - "[[02-aggregate-credits-ingest]]"
 ---
-# 13. Resolve child records by two keys, because TMDb keeps neither stable
+# 13. Resolve seasons and episodes by two keys, because TMDb keeps neither stable
 
-**Season and Episode each carry a unique `tmdb_id` and a unique natural key, and TMDb honours
+**Season and Episode each carry a unique `tmdb_id` and a unique natural key, and TMDb honors
 neither across time. Upserts on those two tables now resolve by id first, fall back to the natural
 key, and evict whatever stale row is sitting on the key they are about to claim. This amends
 [ADR-03](03-identifiers.md), which says `tmdb_id` is the ingest identity. For a show that is still
@@ -22,7 +22,7 @@ Growing the catalog from 100 shows to 500 meant re-ingesting the shows already p
 never been done. Every previous ingest ran against a fresh database, so every upsert was an insert
 and no key was ever tested for stability.
 
-Forty five seconds into the run:
+Forty-five seconds into the run:
 
 ```
 IntegrityError: UNIQUE constraint failed: shows_season.show_id, shows_season.season_number
@@ -45,7 +45,7 @@ collides on `tmdb_id`.
 the other class of drift unhandled, and both fail as an IntegrityError partway through an ingest
 that has already written thousands of rows.
 
-This is not a TMDb defect. A catalogue that tracks decades of television has to re-organise
+This is not a TMDb defect. A catalog that tracks decades of television has to reorganize
 seasons, split specials, and move episodes when a broadcaster renumbers a run. The identifiers
 move because the underlying facts move.
 
@@ -55,7 +55,7 @@ One helper, `Ingestor._upsert_child`, resolves both tables:
 1. Look the row up by `tmdb_id`.
 2. If that misses, fall back to the natural key.
 3. If the id matched but a *different* row occupies the natural key, delete that row. TMDb no
-   longer recognises it, and leaving it would block the write forever.
+   longer recognizes it, and leaving it would block the write forever.
 4. Write both keys and every field.
 
 Step three is the uncomfortable one and it is deliberate. The evicted row is a record TMDb has
@@ -64,7 +64,7 @@ generated hangs off a Season or an Episode, so the eviction costs metadata that 
 about to rewrite.
 
 **ADR-03 is amended, not overturned.** Its claim holds for `Show`, where `tmdb_id` is genuinely
-stable, because TMDb does not merge or renumber whole series the way it reorganises their parts.
+stable, because TMDb does not merge or renumber whole series the way it reorganizes their parts.
 The claim was written when only `Show` had been exercised against a real ingest.
 
 ## After Action Review
