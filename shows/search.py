@@ -96,7 +96,7 @@ class ParsedQuery:
     Three things can appear in the box and only one of them is text.
 
     Operators (`actor:cranston`, `genre:drama`) scope a search to one branch,
-    the way notes scopes with `file:` or `tag:`. Several of them AND
+    the way some note apps scope with `file:` or `tag:`. Several of them AND
     together, because someone typing two is narrowing, not widening.
 
     Bare filters are Patricio's rule: a year or a season number typed on its

@@ -19,7 +19,7 @@ substring match answers three-letter queries with garbage.**
 ## Context
 
 Issue #8 asked for search over titles, cast, crew, characters, descriptions, genres, networks,
-season names and episode synopses, modeled on notes's advanced search rather than a single
+season names and episode synopses, modeled on a plain-text notes app's advanced search rather than a single
 text box.
 
 The obvious implementation is one `filter()` with every branch ORed together. On the 100-show

@@ -26,7 +26,6 @@ media/
 
 # IDE
 .vscode/
-.notes/
 .idea/
 *.swp
 *.swo
