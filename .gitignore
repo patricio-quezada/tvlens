@@ -36,3 +36,10 @@ media/
 Thumbs.db
 .gstack/
 
+
+# Demo captures are disposable; the scripts are not
+demo/screenshots/
+demo/video/build/
+demo/video/raw/
+demo/video/txt/
+demo/video/*.mp4
