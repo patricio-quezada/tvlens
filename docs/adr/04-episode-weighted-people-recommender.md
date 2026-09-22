@@ -1,16 +1,3 @@
----
-adr: 4
-title: Recommend by episode-weighted shared people
-status: amended
-date: 2026-08-11
-tags:
-  - adr
-relates:
-  - "[[01-exclude-casting-roles]]"
-  - "[[02-aggregate-credits-ingest]]"
-  - "[[05-no-signal-fallback-ladder]]"
-  - "[[07-materialized-recommendations]]"
----
 # 4. Recommend by episode-weighted shared people
 
 **Counting shared people equally made two shows look alike when they had cycled through the
@@ -85,7 +72,6 @@ comes out zero, which needs its own answer:
 [ADR-05](05-no-signal-fallback-ladder.md).
 
 ## Amendment, 2026-08-26: the weight is superlinear
-**status: accepted 2026-09-04**
 
 The weight above is linear, and that is not enough. A person in 3 of 100 episodes contributes
 0.03, which is correct as a description of their involvement but wrong as a vote. The problem
@@ -111,7 +97,7 @@ which recomputes the same arithmetic for the callout.
 away thin shows, and hurting short-form content. A continuous reweighting does none of those:
 every shared person still contributes, and no edge is thrown away. Measured across all 37,950
 candidate edges in the catalog, not one reaches exactly 0.0, and the smallest is 9.6e-06, so
-ADR-05's requirement that the candidate set never change is untouched.
+[ADR-05](05-no-signal-fallback-ladder.md)'s requirement that the candidate set never change is untouched.
 
 The shape follows `SIDE_QUEST_CENTRALITY_EXPONENT` in `personalization.py`, whose comment makes
 the same argument in the same form: being reached twice should cost something, but it should
@@ -162,7 +148,7 @@ distribution goes from min 0.0001, max 33.376, mean 0.8388, median 0.4572 to min
 max 28.278, mean 0.4612, median 0.1351. The mean barely moves and the median collapses, which
 is the intended shape: blowout edges survive, the indifferent tail flattens.
 
-Breaking Bad, which ADR-07's review recorded, now reads: Better Call Saul 9.7473, The Blacklist
+Breaking Bad, which [ADR-07](07-materialized-recommendations.md)'s review recorded, now reads: Better Call Saul 9.7473, The Blacklist
 1.0204, Malcolm in the Middle 1.0133, Westworld 0.3775, The Mandalorian 0.3641, The Boys 0.3584,
 House of the Dragon 0.3552, Fargo 0.3418.
 
@@ -196,7 +182,7 @@ re-derivation: bare `Producer` makes only four full-run pairs and every one of t
 (Star Trek: The Next Generation to Voyager and to the original series, Frieren to Hunter x
 Hunter), while excluding it would have dropped the person entirely on 45% of its credits. The
 corrected method, counting only pairs where the job is the person's sole credit on that show, is
-what the ADR-01 amendment is built on.
+what the [ADR-01](01-exclude-casting-roles.md) amendment is built on.
 
 ### Tests
 

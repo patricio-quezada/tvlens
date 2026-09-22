@@ -10,7 +10,6 @@ cd "$(dirname "$0")"
 RAW="raw/walkthrough-raw.webm"
 FB="/usr/share/fonts/noto/NotoSans-Black.ttf"    # headlines / wordmark
 FM="/usr/share/fonts/noto/NotoSans-Medium.ttf"   # subtext
-FA="/usr/share/fonts/liberation/LiberationSans-Regular.ttf"  # has the -> arrow glyph (Noto lacks U+2192)
 BG="0x08080a"      # app darkest background
 WHITE="0xf0ebe3"   # app --text-primary
 AMBER="0xe89b2d"   # app --accent
@@ -25,26 +24,33 @@ ffmpeg -y -loglevel error -f lavfi -i "color=c=${BG}:s=1920x1080:d=4.5:r=30" -fi
   fade=t=in:st=0:d=0.4,fade=t=out:st=4.1:d=0.4,format=yuv420p
 " -c:v libx264 -crf 18 -pix_fmt yuv420p -an build/title.mp4
 
-# --- Closing card (4.5s): wordmark, honest builder line, site.
-ffmpeg -y -loglevel error -f lavfi -i "color=c=${BG}:s=1920x1080:d=4.5:r=30" -filter_complex "
-  drawtext=fontfile=${FB}:textfile=txt/wtv.txt:fontsize=130:fontcolor=${WHITE}:x=w/2-tw-50:y=340,
-  drawtext=fontfile=${FB}:textfile=txt/wlens.txt:fontsize=130:fontcolor=${AMBER}:x=w/2-50:y=340,
-  drawtext=fontfile=${FM}:textfile=txt/csub.txt:fontsize=44:fontcolor=${WHITE}:x=(w-tw)/2:y=545,
-  drawtext=fontfile=${FA}:textfile=txt/curl.txt:fontsize=34:fontcolor=${AMBER}:x=(w-tw)/2:y=625,
-  fade=t=in:st=0:d=0.4,fade=t=out:st=4.1:d=0.4,format=yuv420p
+# --- Closing card (5.5s, at least 5 per the demo decisions block): small
+# wordmark, one honest line, then the URL itself large -- it is the whole
+# point of an end card, since nobody can click a link inside a video.
+ffmpeg -y -loglevel error -f lavfi -i "color=c=${BG}:s=1920x1080:d=5.5:r=30" -filter_complex "
+  drawtext=fontfile=${FB}:textfile=txt/wtv.txt:fontsize=90:fontcolor=${WHITE}:x=w/2-tw-42:y=250,
+  drawtext=fontfile=${FB}:textfile=txt/wlens.txt:fontsize=90:fontcolor=${AMBER}:x=w/2-42:y=250,
+  drawtext=fontfile=${FM}:textfile=txt/csub.txt:fontsize=38:fontcolor=${WHITE}:x=(w-tw)/2:y=400,
+  drawbox=x=(iw-300)/2:y=470:w=300:h=4:color=${AMBER}@0.9:t=fill,
+  drawtext=fontfile=${FB}:textfile=txt/curl.txt:fontsize=140:fontcolor=${AMBER}:x=(w-tw)/2:y=540,
+  fade=t=in:st=0:d=0.4,fade=t=out:st=5.1:d=0.4,format=yuv420p
 " -c:v libx264 -crf 18 -pix_fmt yuv420p -an build/closing.mp4
 
-# --- Body: real footage with four timed caption bands (head + sub).
+# --- Body: real footage with four timed caption bands (head + sub), one per
+# story beat, in story order (Top Picks, Watch Next, the "why", Side Quests).
+# Times below are measured, not guessed: record_walkthrough.py prints
+# elapsed time at every scene boundary, and these are that run's numbers.
+# Re-measure and update if the recording is re-shot with different hold times.
 # band: full-width dark strip; head: white Black; sub: amber Medium.
 band() { echo "drawbox=x=0:y=850:w=1920:h=230:color=${BG}@0.82:t=fill:enable='between(t,$1,$2)'"; }
 head() { echo "drawtext=fontfile=${FB}:textfile=$3:fontsize=58:fontcolor=${WHITE}:x=(w-tw)/2:y=884:enable='between(t,$1,$2)'"; }
 sub()  { echo "drawtext=fontfile=${FM}:textfile=$3:fontsize=36:fontcolor=${AMBER}:x=(w-tw)/2:y=968:enable='between(t,$1,$2)'"; }
 
 FC="fps=30,scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:${BG},"
-FC+="$(band 0.6 5.2),$(head 0.6 5.2 txt/c1h.txt),$(sub 0.6 5.2 txt/c1s.txt),"
-FC+="$(band 11.2 16.2),$(head 11.2 16.2 txt/c2h.txt),$(sub 11.2 16.2 txt/c2s.txt),"
-FC+="$(band 17.8 23.2),$(head 17.8 23.2 txt/c3h.txt),$(sub 17.8 23.2 txt/c3s.txt),"
-FC+="$(band 26.3 32.6),$(head 26.3 32.6 txt/c4h.txt),$(sub 26.3 32.6 txt/c4s.txt),"
+FC+="$(band 2.6 6.6),$(head 2.6 6.6 txt/c1h.txt),$(sub 2.6 6.6 txt/c1s.txt),"
+FC+="$(band 8.3 12.3),$(head 8.3 12.3 txt/c2h.txt),$(sub 8.3 12.3 txt/c2s.txt),"
+FC+="$(band 17.0 22.0),$(head 17.0 22.0 txt/c3h.txt),$(sub 17.0 22.0 txt/c3s.txt),"
+FC+="$(band 24.2 28.2),$(head 24.2 28.2 txt/c4h.txt),$(sub 24.2 28.2 txt/c4s.txt),"
 FC+="format=yuv420p"
 
 ffmpeg -y -loglevel error -i "${RAW}" -vf "${FC}" -c:v libx264 -crf 18 -pix_fmt yuv420p -r 30 -an build/body.mp4

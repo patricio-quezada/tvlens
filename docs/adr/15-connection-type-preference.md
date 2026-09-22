@@ -1,16 +1,3 @@
----
-adr: 15
-title: "Learn whether a reader is tied to shows by cast or by crew, and name accordingly"
-status: amended
-date: 2026-08-26
-tags:
-  - adr
-relates:
-  - "[[04-episode-weighted-people-recommender]]"
-  - "[[08-layer2-personalized-reranking]]"
-amends:
-  - "issue #2, the fixed \"pitch by cast\" clause order"
----
 # 15. Learn whether a reader is tied to shows by cast or by crew, and name accordingly
 
 **Layer 2 gains a third dimension, alongside genre and tag: the average rating signal that cast
@@ -175,7 +162,7 @@ noise, which averages out with more edges while a real lean does not:
 | **400** | **0.809** | **0.339** |
 | 1000 | 0.847 | 0.307 |
 
-`CONNECTION_TYPE_MAX_EDGES` is now **400**. Affordable only because ADR-07 moved
+`CONNECTION_TYPE_MAX_EDGES` is now **400**. Affordable only because [ADR-07](07-materialized-recommendations.md) moved
 the cast/crew split onto the edge; before that, more edges meant more graph
 walked.
 
@@ -232,7 +219,7 @@ user gets none because they have no ratings. Both are the honest answer. Of seve
 synthetic profiles only the one built to lean fires, at 1.047, and it survives a
 catalog prune that invalidated every hand-fitted constant.
 
-Cost is bounded rather than proportional. The split rides on the edge (ADR-07),
+Cost is bounded rather than proportional. The split rides on the edge ([ADR-07](07-materialized-recommendations.md)),
 so reading a reader's edges is 400 rows and no graph work, and 200 shuffles is
 200 passes over those rows with no queries behind them. A reader who has rated
 **every show in the catalog** builds their whole home page in 49ms across 22

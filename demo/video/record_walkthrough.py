@@ -1,9 +1,20 @@
 """Record a silent walkthrough of TVLens as the live user `test`.
 
+Storytelling take (2026-09-20, demo/walkthrough.md decisions block): one person
+deciding what to watch tonight, not a feature tour. The camera follows the
+story in this order:
+
+  1. Top Picks   -- what test rated, the raw material every row is built from.
+  2. Watch Next  -- the answer: unwatched shows that share people with those.
+  3. A show's "why" -- open Game of Thrones, scroll to the shared-people reason.
+  4. Side Quests -- the surprise, off the usual path.
+
 Logs in out of frame (a throwaway context), then records a second context that
 starts already signed in, so the video is only the product. Motion is a hand
 written eased scroll, so the timing is deterministic and the captions in
-build_video.sh line up with the scenes.
+build_video.sh line up with the scenes. Each scene boundary prints its elapsed
+time (time.monotonic() since the recorded context's first page was created) so
+build_video.sh's caption windows can be set from measured numbers, not guesses.
 
 Output: demo/video/raw/<hash>.webm  (renamed to walkthrough-raw.webm by the shell script)
 
@@ -13,6 +24,7 @@ Run with the dev server up:
 """
 
 import pathlib
+import time
 
 from playwright.sync_api import sync_playwright
 
@@ -59,6 +71,13 @@ def hold(page, ms):
     page.wait_for_timeout(ms)
 
 
+t0 = None
+
+
+def mark(label):
+    print(f"{time.monotonic() - t0:6.2f}s  {label}")
+
+
 with sync_playwright() as p:
     browser = p.chromium.launch(executable_path="/usr/bin/chromium", args=["--no-sandbox"])
 
@@ -81,39 +100,52 @@ with sync_playwright() as p:
         record_video_size={"width": W, "height": H},
     )
     page = ctx.new_page()
+    t0 = time.monotonic()
     page.goto(f"{BASE}/", wait_until="networkidle")
+    mark("home loaded")
     hold(page, 400)  # let posters paint
 
-    # Scene 1: home top, Watch next.
-    hold(page, 5000)
-
-    # Scroll down through Top Picks and Recently added to Side Quests.
-    y_side = page.evaluate(TOP_OF, "Side Quests")
+    # Scene 1: Top Picks -- what the person rated, the raw material.
     y_top = page.evaluate(TOP_OF, "Top Picks")
-    smooth(page, y_top, 2000)
-    hold(page, 1500)
-    smooth(page, y_side, 2500)
+    smooth(page, y_top, 1200)
+    mark("scrolled to Top Picks")
+    hold(page, 4200)
+    mark("Top Picks hold done")
 
-    # Scene 2: Side Quests hold.
-    hold(page, 5000)
+    # Scene 2: Watch Next -- the answer built from those ratings.
+    y_next = page.evaluate(TOP_OF, "Watch next")
+    smooth(page, y_next, 1500)
+    mark("scrolled to Watch Next")
+    hold(page, 4200)
+    mark("Watch Next hold done")
 
-    # Navigate into a show (real click on its card).
+    # Navigate into a show (real click on its card) to explain why it is here.
     page.locator("a[href='/shows/game-of-thrones/']").first.click()
     page.wait_for_load_state("networkidle")
+    mark("Game of Thrones detail loaded")
     page.evaluate("window.scrollTo(0,0)")
-    hold(page, 500)
+    hold(page, 400)
 
-    # Scene 3: detail hero.
-    hold(page, 4500)
-
-    # Scroll to the plain-language reasons.
+    # Scene 3: detail hero, brief, then the plain-language "why" reasons.
+    hold(page, 2000)
+    mark("hero hold done")
     y_why = page.evaluate(TOP_OF, "More shows like this")
-    smooth(page, y_why, 2500)
+    smooth(page, y_why, 2000)
+    mark("scrolled to why reasons")
+    hold(page, 4500)
+    mark("why hold done")
 
-    # Scene 4: the "why" reasons, the money shot. Linger.
-    hold(page, 7500)
+    # Scene 4: Side Quests -- the surprise, back on the home page.
+    page.goto(f"{BASE}/", wait_until="networkidle")
+    mark("home reloaded")
+    y_side = page.evaluate(TOP_OF, "Side Quests")
+    smooth(page, y_side, 1500)
+    mark("scrolled to Side Quests")
+    hold(page, 4200)
+    mark("Side Quests hold done")
 
     ctx.close()  # writes the webm
+    mark("context closed")
     browser.close()
 
 # Playwright names the file by a hash; rename to the stable name build_video.sh reads.

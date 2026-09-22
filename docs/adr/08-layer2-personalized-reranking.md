@@ -1,14 +1,3 @@
----
-adr: 8
-title: "Layer 2: personalize by re-ranking the graph per user"
-status: accepted
-date: 2026-08-18
-tags:
-  - adr
-relates:
-  - "[[05-no-signal-fallback-ladder]]"
-  - "[[07-materialized-recommendations]]"
----
 # 8. Layer 2: personalize by re-ranking the graph per user
 
 **Two users looking at the same show saw the identical list. Layer 2 keeps a signed weight per
@@ -45,7 +34,7 @@ never infers taste from something a user did not deliberately do.
 **It re-ranks the existing list rather than running a second engine.** Layer 1 stays exactly as
 it is. Layer 2 takes its list and re-orders it, instead of sending the request through a
 separate engine that scores every show from scratch. It nudges the order of something already
-computed and stored, and never recomputes the graph per user. That mirrors ADR-07's split: the
+computed and stored, and never recomputes the graph per user. That mirrors [ADR-07](07-materialized-recommendations.md)'s split: the
 store holds what is the same for everyone, the request computes what depends on the viewer.
 
 **The profile is signed weights over genres and tags.** For each user the profile keeps an

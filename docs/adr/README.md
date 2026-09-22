@@ -84,7 +84,7 @@ credits; the reasoning is about any graph built from shared entities.
 - [10 - Rating saves in place, and TVLens takes its first script](10-rating-saves-in-place.md)
 - [11 - One visual identity, defined once, taken from the landing page itself](11-one-visual-identity.md)
 - [12 - Catalog search: one query per branch, matched on word boundaries](12-catalog-search.md) *(amended 2026-09-01: the episode branch reads FTS5)*
-- [13 - Resolve seasons and episodes by two keys, because TMDb keeps neither stable](13-child-record-identity.md) *(amends ADR-03 for Season and Episode)*
+- [13 - Resolve seasons and episodes by two keys, because TMDb keeps neither stable](13-child-record-identity.md) *(amends [ADR-03](03-identifiers.md) for Season and Episode)*
 - [14 - Tags are a shared vocabulary applied privately](14-tags-shared-vocabulary.md)
 - [15 - Learn whether a reader is tied to shows by cast or by crew, and name accordingly](15-connection-type-preference.md) *(amended 2026-08-30: the gate is a permutation test, not a threshold)*
 - [16 - Shipping the catalog is a merge, and spoken-for shows are undeletable](16-catalog-ships-as-a-merge.md)

@@ -1,15 +1,3 @@
----
-adr: 9
-title: "Side Quests: strong connections into genres a user has not rated highly"
-status: amended
-date: 2026-08-21
-tags:
-  - adr
-relates:
-  - "[[05-no-signal-fallback-ladder]]"
-  - "[[07-materialized-recommendations]]"
-  - "[[08-layer2-personalized-reranking]]"
----
 # 9. Side Quests: strong connections into genres a user has not rated highly
 
 **A side quest is a show a user would plausibly like but would not have reached for, and
@@ -44,7 +32,7 @@ for two reasons that only became visible with the row on the page.
 is a relation between a show and what someone expected, and a person who has rated nothing
 has demonstrated no expectation. What the cold-start row actually produced was one fixed
 list, identical for every visitor, with nothing in it derived from the person looking at it.
-That is the thing this project keeps refusing (ADR-05, ADR-07, ADR-08): not because it ranked
+That is the thing this project keeps refusing ([ADR-05](05-no-signal-fallback-ladder.md), [ADR-07](07-materialized-recommendations.md), [ADR-08](08-layer2-personalized-reranking.md)): not because it ranked
 by popularity, it did not, but because a single list served to everyone is a chart whatever
 it is sorted by.
 
@@ -130,7 +118,7 @@ in genres this user has never rated highly and that few of their favorites point
 parts, in the order the code applies them.
 
 **Seeds.** The shows the user rated at or above 4.0. That is the same "high" line the home page
-already uses to glow a favorite genre and that ADR-08 personalizes from, so every feature on
+already uses to glow a favorite genre and that [ADR-08](08-layer2-personalized-reranking.md) personalizes from, so every feature on
 the page agrees about what liking a show means.
 
 **The gate: three seeds, or the row stays locked.** Below three the row does not render at
@@ -142,7 +130,7 @@ Anonymous visitors get no row and no copy: they cannot rate anything without an 
 the unlock instruction would be a dead end.
 
 **The walk: the strong half of each seed's stored list, and then the strong half of the lists
-belonging to what that reached.** Ranks 0 through 5 of the 12 Layer 1 keeps per show (ADR-07),
+belonging to what that reached.** Ranks 0 through 5 of the 12 Layer 1 keeps per show ([ADR-07](07-materialized-recommendations.md)),
 followed one hop further out. The rank cap holds at every hop, because a side quest has to be a
 *confident* connection and the weak tail of a list is mostly coincidence, so a strange genre
 found down there is noise wearing a surprise costume. But one hop is exactly the seed's own
@@ -166,10 +154,10 @@ the pool win on strength alone, which is precisely how the row came to read as a
 recommendation list.
 
 The only new number is a multiplier on Layer 1's own score. Nothing scores a show twice and no
-second engine runs over the catalog, which keeps this inside ADR-08's rule that Layer 2
+second engine runs over the catalog, which keeps this inside [ADR-08](08-layer2-personalized-reranking.md)'s rule that Layer 2
 re-ranks rather than re-scores.
 
-Shows the user has already watched never appear, watched covering rated (ADR-08), and neither
+Shows the user has already watched never appear, watched covering rated ([ADR-08](08-layer2-personalized-reranking.md)), and neither
 does anything the home page has already used in Top Picks.
 
 **Three render states, and the third one matters.** Cards when the walk found something; the
@@ -201,14 +189,14 @@ Re-measuring against the current rule and the current catalog is worth doing bef
 
 ### Tags exist now, and would still sharpen this
 When this was written `Tag` and `ShowTag` held 0 rows, so genre was the only categorical
-signal. ADR-14 landed tags, which held 7 tags and 9 applications at the time,
+signal. [ADR-14](14-tags-shared-vocabulary.md) landed tags, which held 7 tags and 9 applications at the time,
 enough to exist and not enough to run novelty over. Genre remains coarse for this job. Once tags are populated, the same shape
 works with a finer vocabulary: novelty would run over tags as well as genres, letting the row
 tell "a workplace comedy you have not tried" from "a comedy". Still a later decision.
 
 ### One hazard this touched
 `Show.Meta.ordering` was `["-popularity"]` at the time, which meant any queryset that forgot
-an explicit `order_by` silently became the popularity ranking ADR-05 forbids. Every queryset
+an explicit `order_by` silently became the popularity ranking [ADR-05](05-no-signal-fallback-ladder.md) forbids. Every queryset
 on the Side Quests path is explicitly ordered and says so in a comment. The default has since
 changed to `["name"]`, deliberately; the comment on `Show.Meta` records the reasoning.
 
@@ -233,7 +221,6 @@ changed to `["name"]`, deliberately; the comment on `Show.Meta` records the reas
 - the surprise arithmetic appears once, written out against a known pick
 
 ## Note, 2026-08-26: the hop decay is tilted, and left alone
-**status: accepted 2026-09-04**
 
 [ADR-04](04-episode-weighted-people-recommender.md) raised each shared person's episode share to
 `INVOLVEMENT_EXPONENT = 1.375` before summing. That changes the input to `math.log1p(score)`,
@@ -259,7 +246,7 @@ The direction of the tilt is toward novelty, which is the axis this row exists t
 percentage points is not a regression. It is written down here so the next person to touch the
 constant knows part of the drift came from Layer 1 rather than from this row.
 
-`ADR-04` records the same measurement from the other side.
+`[ADR-04](04-episode-weighted-people-recommender.md)` records the same measurement from the other side.
 
 ## Amendment, 2026-08-27: the genre gate is graded, not binary
 

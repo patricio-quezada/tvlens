@@ -46,23 +46,24 @@ known password (see below).
 
 ## What is in this folder
 
-- `walkthrough.md` the script to read while showing the app
-- `screenshots/` PNGs captured as the live user:
-  - `01-home-full.png` the whole home page
-  - `02-row-watch-next.png`
-  - `03-row-top-picks.png`
-  - `04-row-recently-added.png`
-  - `05-row-side-quests.png`
-  - `06-row-browse-by-genre.png`
-  - `07-detail-game-of-thrones.png` a detail page with the graph explanations
+- `walkthrough.md` the script to read while showing the app, in story order
+- `screenshots/` PNGs captured as the live user, six frames telling one story
+  in order (a small caption strip with tvlens.org is burned into frames 1-5;
+  frame 6 is the end card, rendered by ffmpeg, not the browser):
+  - `01-top-picks.png` what test rated
+  - `02-watch-next.png` the answer
+  - `03-detail-hero.png` opens a pick, Game of Thrones
+  - `04-detail-why.png` the plain-language "why", shared people
+  - `05-side-quests.png` the surprise
+  - `06-end-card.png` tvlens.org in large text
 
 ## The social video
 
 `video/tvlens-demo.mp4` is a silent, text-captioned walkthrough for posting on
 social (autoplays muted, so the on-screen text carries it). 1920x1080, H.264,
-30fps, ~41 seconds, no audio track. It is real recorded browser motion: a title
-card, a scroll through the home rows, the Game of Thrones detail page with its
-plain-language "why" reasons, and a closing card.
+30fps, under a minute, no audio track. It is real recorded browser motion in
+story order (Top Picks, Watch Next, the Game of Thrones "why" reasons, Side
+Quests), title card first, closing card last with tvlens.org in large text.
 
 Rebuild it (server must be up on port 8011, wifi on so posters load):
 

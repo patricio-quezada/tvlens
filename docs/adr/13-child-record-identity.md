@@ -1,14 +1,3 @@
----
-adr: 13
-title: "Resolve seasons and episodes by two keys, because TMDb keeps neither stable"
-status: accepted
-date: 2026-08-24
-tags:
-  - adr
-relates:
-  - "[[03-identifiers]]"
-  - "[[02-aggregate-credits-ingest]]"
----
 # 13. Resolve seasons and episodes by two keys, because TMDb keeps neither stable
 
 **Season and Episode each carry a unique `tmdb_id` and a unique natural key, and TMDb honors
@@ -63,7 +52,7 @@ stopped acknowledging, and its only remaining function is to make the constraint
 generated hangs off a Season or an Episode, so the eviction costs metadata that the same ingest is
 about to rewrite.
 
-**ADR-03 is amended, not overturned.** Its claim holds for `Show`, where `tmdb_id` is genuinely
+**[ADR-03](03-identifiers.md) is amended, not overturned.** Its claim holds for `Show`, where `tmdb_id` is genuinely
 stable, because TMDb does not merge or renumber whole series the way it reorganizes their parts.
 The claim was written when only `Show` had been exercised against a real ingest.
 

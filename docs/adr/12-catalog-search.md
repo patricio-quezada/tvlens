@@ -1,14 +1,3 @@
----
-adr: 12
-title: "Catalog search: one query per branch, matched on word boundaries"
-status: amended
-date: 2026-08-24
-tags:
-  - adr
-relates:
-  - "[[05-no-signal-fallback-ladder]]"
-  - "[[06-sql-variable-ceiling]]"
----
 # 12. Catalog search: one query per branch, matched on word boundaries
 
 **Search never ORs two fan-out relations into a single `filter()`, because that query does not
@@ -58,7 +47,7 @@ match with the regex's answers. Word *prefixes* still match, so `break` finds Br
 re-evaluate the name predicate once per credit row, and the catalog holds 278,632 cast rows against
 154,699 people. Scanning people once and looking shows up by an indexed foreign key measured 59 ms
 against 9 ms for the same 26 results, and 64 ms against 25 ms for a surname matching 2,646 people.
-The id list is batched at 900 for the reason ADR-06 records.
+The id list is batched at 900 for the reason [ADR-06](06-sql-variable-ceiling.md) records.
 
 **No text index.** `LIKE '%x%'` is unanchored, so SQLite full-scans whatever index sits on the
 column; `db_index=True` would change nothing. FTS5 with the trigram tokenizer is available in this
@@ -111,7 +100,7 @@ The branch weights are a ranking decision with no evidence behind them yet. A ti
 fourth-billed actor is obviously right; whether an episode synopsis should outrank a season name is
 a guess, and the first real feedback should overturn it.
 
-Ranking never uses popularity, per ADR-05.
+Ranking never uses popularity, per [ADR-05](05-no-signal-fallback-ladder.md).
 
 ## Amendment, 2026-09-01: the episode branch reads FTS5, for bm25 more than speed
 

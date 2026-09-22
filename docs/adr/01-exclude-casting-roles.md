@@ -1,13 +1,3 @@
----
-adr: 1
-title: Exclude casting roles from crew matching
-status: amended
-date: 2026-08-11
-tags:
-  - adr
-relates:
-  - "[[04-episode-weighted-people-recommender]]"
----
 # 1. Exclude casting roles from crew matching
 
 **A casting office works across a studio's whole slate, so two shows sharing a casting director
@@ -53,7 +43,6 @@ The same exclusion carries into the full weighted recommender,
 [ADR-04](04-episode-weighted-people-recommender.md).
 
 ## Amendment, 2026-08-26: the argument covers more than casting
-**status: accepted 2026-09-04**
 
 The reasoning above is not really about casting. It is about a credit that ties two productions
 together without saying anything about the two shows, and casting was simply the first and most
@@ -117,7 +106,7 @@ The bare `Producer` row is the one to re-read before widening this list again. T
 of offenders named it the largest problem, and that was an artifact of classifying "below the
 line" as "absent from `MARQUEE_JOBS`", which is a naming list rather than a signal list.
 Re-derived properly, counting only pairs where the job is the person's sole credit on that show,
-`Producer` turned out to be carrying signal rather than noise. See ADR-04's correction note.
+`Producer` turned out to be carrying signal rather than noise. See [ADR-04](04-episode-weighted-people-recommender.md)'s correction note.
 
 ### The audit still applies
 

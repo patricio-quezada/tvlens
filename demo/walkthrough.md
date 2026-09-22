@@ -11,10 +11,10 @@
 > ignored by git; `shoot.py`, `record_walkthrough.py`, and `build_video.sh` are
 > the tooling and are tracked.
 
-A script to read while showing the app. Log in as the live user `test`, open the
-home page, and go row by row. Numbers below are the local catalog as of this
-build: 249 shows, 3,033 seasons, 164,360 episodes, and 2,893 stored connections
-between shows. The live user has rated 11 shows.
+A script to read while showing the app, in story order: one person deciding
+what to watch tonight. Log in as the live user `test`. Numbers below are the
+local catalog as of this build: 249 shows, 3,033 seasons, 164,360 episodes, and
+2,893 stored connections between shows. The live user has rated 11 shows.
 
 ## What TVLens is, in one line
 
@@ -22,51 +22,60 @@ TVLens recommends TV by who made the shows you already like, not by what is
 trending. You rate what you have seen, and it points you at what to watch next
 through the people and the taste those ratings reveal.
 
-## The home page, row by row
+## The story: what test rated, what it found, what surprised them
 
-The page renders five rows. The first two are built from you; the rest widen out.
+### 1. Top Picks for test
 
-### 1. Watch next
+*"The shows you rated furthest above the crowd."*
+
+Start with what the person told TVLens. Top Picks is a mirror: it is the shows
+*you* rated, ranked by how far above the global average you put each one, not by
+the raw star count. So a show you loved that most people are lukewarm on rises
+above a crowd-pleaser you also liked. Sons of Anarchy, Game of Thrones, House,
+Bluey, The Wire, Westworld. This is the raw material. Everything else on the page
+is built from it.
+
+### 2. Watch next
 
 *"Unwatched shows that share people with what you rated highly."*
 
-This is the row that answers the page's own question. It looks at the shows you
-rated 4 stars or higher, walks out along the people who made them (cast and crew),
-and surfaces shows you have not seen that share those people. Then it re-ranks
-that list toward your taste and drops anything you have already rated.
+This is the answer to the page's own question. It looks at the shows you rated 4
+stars or higher, walks out along the people who made them (cast and crew), and
+surfaces shows you have not seen that share those people. Then it re-ranks that
+list toward your taste and drops anything you have already rated.
 
 On this account it leads with Lost, Private Practice, How to Get Away with Murder,
 The Good Doctor, ER, and Scandal. That cluster is not an accident: the user rated
 Grey's Anatomy and House highly, and those two shows are dense with medical and
 Shondaland crews, so the graph reaches their neighbours first.
 
-### 2. Top Picks for test
+### 3. Open a pick and ask why
 
-*"The shows you rated furthest above the crowd."*
-
-This is a mirror. It is the shows *you* rated, but ranked by how far above the
-global average you put each one, not by the raw star count. So a show you loved
-that most people are lukewarm on rises above a crowd-pleaser you also liked.
-Sons of Anarchy, Game of Thrones, House, Bluey, The Wire, Westworld.
-
-### 3. Recently added
-
-The newest shows in the catalog. This one is not personalized. It is the shelf,
-the thing every other row is drawn from, shown newest first so the catalog never
-looks static.
+Click into Game of Thrones, one of the Top Picks. The detail page is where the
+answer stops being a black box. See "The detail page: why a show is recommended"
+below.
 
 ### 4. Side Quests
 
 *"Off your usual path, through people you already like."*
 
-This is the surprise row, and it is built to be the opposite of Watch Next. It
-only offers shows in genres you have *never* rated highly, reached through people
-you already like. So it is a stranger with a mutual friend, not more of the same.
-Futurama, Person of Interest, Criminal Minds, The Rookie, Psych, House of the
-Dragon. It stays locked until you have rated three shows 4 stars or higher,
-because there is no "usual path" to step off of before then.
+Back on the home page, this is the surprise row, and it is built to be the
+opposite of Watch Next. It only offers shows in genres you have *never* rated
+highly, reached through people you already like. So it is a stranger with a
+mutual friend, not more of the same. Futurama, Person of Interest, Criminal
+Minds, The Rookie, Psych, House of the Dragon. It stays locked until you have
+rated three shows 4 stars or higher, because there is no "usual path" to step
+off of before then.
 
-### 5. Browse by genre
+## The rest of the home page
+
+### Recently added
+
+The newest shows in the catalog. This one is not personalized. It is the shelf,
+the thing every other row is drawn from, shown newest first so the catalog never
+looks static.
+
+### Browse by genre
 
 Plain genre pills. The star marks the genres you rate highly, and the order is
 your learned affinity, not a size ranking. Before you have rated anything the

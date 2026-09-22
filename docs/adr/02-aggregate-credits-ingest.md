@@ -1,19 +1,9 @@
----
-adr: 2
-title: "Ingest per-episode credits, and record episode counts"
-status: accepted
-date: 2026-08-11
-tags:
-  - adr
-relates:
-  - "[[04-episode-weighted-people-recommender]]"
----
 # 2. Ingest per-episode credits, and record episode counts
 
 **The credits endpoint TVLens was reading returns only series-level billing, which left the
 catalog with 13 directors in total. Ingesting `aggregate_credits` alongside it, with an episode
 count on every row, gave the recommender the people it was missing, and immediately made the
-rankings worse, which is what forced the weighting in ADR-04.**
+rankings worse, which is what forced the weighting in [ADR-04](04-episode-weighted-people-recommender.md).**
 
 ## Context
 The whole 100-show catalog held 13 director rows. Not one of them connected two shows.

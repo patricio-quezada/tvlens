@@ -1,14 +1,3 @@
----
-adr: 7
-title: Precompute the Layer 1 ranking and serve it from a table
-status: amended
-date: 2026-08-17
-tags:
-  - adr
-relates:
-  - "[[05-no-signal-fallback-ladder]]"
-  - "[[06-sql-variable-ceiling]]"
----
 # 7. Precompute the Layer 1 ranking and serve it from a table
 
 **The shared-people ranking is the same for every visitor and only changes when an ingest
@@ -81,7 +70,7 @@ Two columns join `score`, `shared_people`, and `mode`: `cast_contribution` and
 each side.
 
 They are here for exactly the reason the rest of the row is. Layer 2's
-connection-type preference (ADR-15) needs the split per edge, and computing it
+connection-type preference ([ADR-15](15-connection-type-preference.md)) needs the split per edge, and computing it
 at request time meant a `role_indexes` pass over every show the reader had
 rated. Profiled on the real catalog that was **53% of the entire profile
 build**, spent re-deriving numbers that only change on ingest.
@@ -93,7 +82,7 @@ whole home page in **49ms across 22 queries**. Total SQL for that page went from
 109ms to 4.0ms with nothing above 2ms.
 
 It also removed the ceiling on how many edges Layer 2 may read, which is what
-made ADR-15's estimator work at all.
+made [ADR-15](15-connection-type-preference.md)'s estimator work at all.
 
 The cost is two floats per edge, written by `rebuild_similar_shows` in the same
 pass that already computes the ranking, and one full rebuild to backfill.
@@ -122,7 +111,6 @@ Provenance: issue #1 (Recommender scale hardening), problem 2, the caching follo
 [ADR-06](06-sql-variable-ceiling.md).
 
 ## Note, 2026-08-26: the review above is a measurement, not an invariant
-**status: accepted 2026-09-04**
 
 The After Action Review records "Better Call Saul 14.79, The Blacklist 1.09, CSI 0.19 in eighth"
 as Breaking Bad's preview, along with 1041 edges across 96 sources. Those numbers were true of

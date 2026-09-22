@@ -1,13 +1,3 @@
----
-adr: 16
-title: Shipping the catalog is a merge, and spoken-for shows are undeletable
-status: accepted
-date: 2026-09-01
-tags:
-  - adr
-relates:
-  - "[[03-identifiers]]"
----
 # 16. Shipping the catalog is a merge, and spoken-for shows are undeletable
 
 **A catalog update merges into the database the user already has, row by row, and no command
@@ -33,7 +23,7 @@ Patricio's requirement, verbatim: "the catalog changes should be unnoticeable by
 
 A catalog release is a merge run against the live database, using machinery that already
 existed: `refresh_catalog` re-hydrates stale shows and sweeps Discover, `ingest_show` is
-`update_or_create` on `tmdb_id` with the primary key pinned to it (ADR-03), so fresher data
+`update_or_create` on `tmdb_id` with the primary key pinned to it ([ADR-03](03-identifiers.md)), so fresher data
 lands in the same row every user row already points at. A fresh install ships the developer's
 catalog with empty user tables; a live install runs the same commands and keeps everything.
 

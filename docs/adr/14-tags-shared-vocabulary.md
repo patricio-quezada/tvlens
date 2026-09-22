@@ -1,14 +1,3 @@
----
-adr: 14
-title: "Tags are a shared vocabulary applied privately"
-status: accepted
-date: 2026-08-24
-tags:
-  - adr
-relates:
-  - "[[08-layer2-personalized-reranking]]"
-  - "[[12-catalog-search]]"
----
 # 14. Tags are a shared vocabulary applied privately
 
 **A `Tag` row is shared across every reader. The `ShowTag` row that applies it belongs to one
@@ -55,7 +44,7 @@ shows who called it that.
 
 **Tagging saves in place**, following [ADR-10](10-rating-saves-in-place.md). The first version
 redirected to `#tags` and threw the reader a third of the way down the page, which is the exact
-behavior ADR-10 was written to eliminate.
+behavior [ADR-10](10-rating-saves-in-place.md) was written to eliminate.
 
 Tags are searchable with `tag:` and ranked alongside genre and network in
 [ADR-12](12-catalog-search.md), because a tag is the same kind of claim about a show.
