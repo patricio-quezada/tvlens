@@ -31,19 +31,27 @@ guest counts for a sliver. Cast and crew merge into one ranked list. The whole g
 precomputed and served from a table, so each page load is a fast lookup rather than a live
 computation ([ADR-07](docs/adr/07-materialized-recommendations.md)).
 
-The significant, contested decisions each carry a short record:
+Sixteen significant, contested decisions each carry a short record, and
+[the index](docs/adr/README.md) is the only list of them. It is chronological,
+because the records are also the story of how TVLens changed its mind, and it
+opens with a reading order for someone arriving from another codebase:
 
-- [ADR-01, Exclude casting roles](docs/adr/01-exclude-casting-roles.md)
-- [ADR-02, Ingest aggregate_credits](docs/adr/02-aggregate-credits-ingest.md)
-- [ADR-03, Identifiers: pk, tmdb_id, slug](docs/adr/03-identifiers.md)
-- [ADR-04, Episode-weighted people recommender](docs/adr/04-episode-weighted-people-recommender.md)
-- [ADR-05, No-signal fallback ladder](docs/adr/05-no-signal-fallback-ladder.md)
-- [ADR-06, Lift the SQL variable ceiling](docs/adr/06-sql-variable-ceiling.md)
-- [ADR-07, Precompute the Layer 1 ranking](docs/adr/07-materialized-recommendations.md)
-- [ADR-08, Layer 2: personalized re-ranking](docs/adr/08-layer2-personalized-reranking.md)
-
-Later decisions (Side Quests, search, tags, how the catalog ships) live in
-[the full index](docs/adr/README.md).
+- **Patterns that are not about television at all**, the same decision in any app
+  that ingests a catalog from someone else's API and serves rankings off it:
+  identity ([03](docs/adr/03-identifiers.md) and
+  [13](docs/adr/13-child-record-identity.md)), precomputing a pure function
+  ([07](docs/adr/07-materialized-recommendations.md)), degrading down a ladder
+  ([05](docs/adr/05-no-signal-fallback-ladder.md)), and a shared vocabulary
+  applied privately ([14](docs/adr/14-tags-shared-vocabulary.md)).
+- **Shapes that transfer even though the subject does not**, about any graph
+  built from shared entities: weight an edge by how much two things share
+  ([04](docs/adr/04-episode-weighted-people-recommender.md)), exclude the
+  connections that link everything to everything
+  ([01](docs/adr/01-exclude-casting-roles.md)), personalize by re-ranking rather
+  than re-scoring ([08](docs/adr/08-layer2-personalized-reranking.md)), and
+  surprise needs an expectation to violate
+  ([09](docs/adr/09-side-quests-cross-genre-edges.md)).
+- **TVLens-only**, skippable unless you are working on this app.
 
 The recommender lives in [`shows/recommenders.py`](shows/recommenders.py); ingestion
 in [`shows/ingestion.py`](shows/ingestion.py); catalog search in
