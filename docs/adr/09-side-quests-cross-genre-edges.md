@@ -113,6 +113,9 @@ most of the row with that cluster. Genre affinity has more resolution than has-g
 has-not, and Layer 2 already keeps a signed number per genre.
 
 ## Decision
+
+> **Note, 2026-08-26.** ADR-04's rescoring tilted the hop decay toward novelty, and the constant stays at 0.5, see [The hop decay is tilted, and left alone](#the-hop-decay-is-tilted-and-left-alone).
+
 **A side quest is a strong Layer 1 connection, out of a show this user rated highly, that lands
 in genres this user has never rated highly and that few of their favorites point at.** Four
 parts, in the order the code applies them.
@@ -200,27 +203,7 @@ an explicit `order_by` silently became the popularity ranking [ADR-05](05-no-sig
 on the Side Quests path is explicitly ordered and says so in a comment. The default has since
 changed to `["name"]`, deliberately; the comment on `Show.Meta` records the reasoning.
 
-## After Action Review
-`shows/tests.py::SideQuestsTests` freezes the definition:
-
-- the row locks below three high ratings
-- anonymous visitors get neither the row nor the copy
-- every pick lands in a genre the user has never rated highly
-- the walk refuses the graph's strongest edge when it is more of the same
-- distance can beat a stronger edge and cannot win on its own
-- the walk covers only the strong half of a seed's list, and only the user's own favorites
-- an unlocked user with nothing new gets no section rather than the locked copy
-
-`SideQuestsRankingTests` freezes the second revision:
-
-- a blockbuster edge no longer outranks a novel one, while strength still separates two equally
-  novel shows
-- a show two hops out can be a pick, and loses to an identical show one hop in
-- a watched show is never a pick and still carries the walk
-- a show every seed reaches ranks below one that only a single seed found
-- the surprise arithmetic appears once, written out against a known pick
-
-## Note, 2026-08-26: the hop decay is tilted, and left alone
+### The hop decay is tilted, and left alone
 
 [ADR-04](04-episode-weighted-people-recommender.md) raised each shared person's episode share to
 `INVOLVEMENT_EXPONENT = 1.375` before summing. That changes the input to `math.log1p(score)`,
@@ -247,6 +230,26 @@ percentage points is not a regression. It is written down here so the next perso
 constant knows part of the drift came from Layer 1 rather than from this row.
 
 `[ADR-04](04-episode-weighted-people-recommender.md)` records the same measurement from the other side.
+
+## After Action Review
+`shows/tests.py::SideQuestsTests` freezes the definition:
+
+- the row locks below three high ratings
+- anonymous visitors get neither the row nor the copy
+- every pick lands in a genre the user has never rated highly
+- the walk refuses the graph's strongest edge when it is more of the same
+- distance can beat a stronger edge and cannot win on its own
+- the walk covers only the strong half of a seed's list, and only the user's own favorites
+- an unlocked user with nothing new gets no section rather than the locked copy
+
+`SideQuestsRankingTests` freezes the second revision:
+
+- a blockbuster edge no longer outranks a novel one, while strength still separates two equally
+  novel shows
+- a show two hops out can be a pick, and loses to an identical show one hop in
+- a watched show is never a pick and still carries the walk
+- a show every seed reaches ranks below one that only a single seed found
+- the surprise arithmetic appears once, written out against a known pick
 
 ## Amendment, 2026-08-27: the genre gate is graded, not binary
 

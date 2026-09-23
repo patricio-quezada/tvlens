@@ -29,6 +29,8 @@ three-letter query with garbage is worse than one that answers nothing.
 
 ## Decision
 
+> **Amended 2026-09-01.** The episode synopsis branch now reads an FTS5 index, chosen for bm25 ranking more than for speed, see [The episode branch reads FTS5, for bm25 more than speed](#the-episode-branch-reads-fts5-for-bm25-more-than-speed).
+
 **One query per branch, ids unioned in Python.** Nine branches, each touching one relation. The
 same search that would not return runs in 32 ms this way, 74 ms worst case, with identical results.
 `shows/search.py` holds them in `_branch`, and a test reads that function's source and fails if
@@ -65,44 +67,7 @@ to one branch. Someone typing two of them is narrowing, not widening, so they AN
 is typed but not understood is named on the page rather than silently treated as text: a filter the
 reader cannot see is a filter they cannot undo.
 
-## Consequences
-
-**Re-measured 2026-08-30**, on 248 shows and 164,176 episodes after the catalog was filtered and
-pruned. The original figure here was a single number for free text, which turned out to hide the
-only thing that matters.
-
-Scoped operator queries are **6 to 10 ms**. Free text is **48 to 235 ms**, and the spread is not
-noise: it is one branch, and it tracks how common the word is rather than how big the catalog is.
-
-| branch | "the" | "murder" | "zeppelin" |
-|---|---|---|---|
-| title | 0 ms | 0 ms | 0 ms |
-| show overview | 1 | 0 | 0 |
-| season name | 1 | 0 | 0 |
-| **episode synopsis** | **176** | **35** | **18** |
-| episode rows surviving LIKE | 76,882 | 4,024 | 4 |
-
-Every branch except episode synopsis is free at any term. The synopsis branch pays a floor of
-about 18 ms to scan, then roughly 2 microseconds for each row the `LIKE` lets through and the
-word-boundary regex has to re-test. A common word defeats the prefilter, so the regex runs on
-half the table.
-
-**The waste is worst where the result is least useful.** Searching "the" costs 235 ms to return
-the 120-show cap, which is not an answer to anything. A term matching half the corpus has no
-power to discriminate, so the branch could be skipped on exactly the terms that make it slow.
-That is a behavior change and belongs in a proposal, not here.
-
-**Cost scales with term frequency, not catalog size.** The catalog since shrank by 46% and the
-worst case got worse, because the pruned shows were low-signal ones whose synopses matched
-nothing. FTS5 remains the real answer whenever this stops being tolerable.
-
-The branch weights are a ranking decision with no evidence behind them yet. A title hit outranking a
-fourth-billed actor is obviously right; whether an episode synopsis should outrank a season name is
-a guess, and the first real feedback should overturn it.
-
-Ranking never uses popularity, per [ADR-05](05-no-signal-fallback-ladder.md).
-
-## Amendment, 2026-09-01: the episode branch reads FTS5, for bm25 more than speed
+### The episode branch reads FTS5, for bm25 more than speed
 
 The episode synopsis branch now queries an FTS5 index instead of scanning
 164,360 overviews with LIKE plus a regex. Every other branch is unchanged, and
@@ -146,3 +111,40 @@ pivot (#25, #26) becomes a change of SELECT column rather than an index
 rebuild. Tested in `FtsQueryEscapingTests`, `EpisodeFtsSearchTests` and
 `EpisodeFtsTriggerTests`. The Python-side early-exit fallback #29 kept in
 reserve was not needed.
+
+## Consequences
+
+**Re-measured 2026-08-30**, on 248 shows and 164,176 episodes after the catalog was filtered and
+pruned. The original figure here was a single number for free text, which turned out to hide the
+only thing that matters.
+
+Scoped operator queries are **6 to 10 ms**. Free text is **48 to 235 ms**, and the spread is not
+noise: it is one branch, and it tracks how common the word is rather than how big the catalog is.
+
+| branch | "the" | "murder" | "zeppelin" |
+|---|---|---|---|
+| title | 0 ms | 0 ms | 0 ms |
+| show overview | 1 | 0 | 0 |
+| season name | 1 | 0 | 0 |
+| **episode synopsis** | **176** | **35** | **18** |
+| episode rows surviving LIKE | 76,882 | 4,024 | 4 |
+
+Every branch except episode synopsis is free at any term. The synopsis branch pays a floor of
+about 18 ms to scan, then roughly 2 microseconds for each row the `LIKE` lets through and the
+word-boundary regex has to re-test. A common word defeats the prefilter, so the regex runs on
+half the table.
+
+**The waste is worst where the result is least useful.** Searching "the" costs 235 ms to return
+the 120-show cap, which is not an answer to anything. A term matching half the corpus has no
+power to discriminate, so the branch could be skipped on exactly the terms that make it slow.
+That is a behavior change and belongs in a proposal, not here.
+
+**Cost scales with term frequency, not catalog size.** The catalog since shrank by 46% and the
+worst case got worse, because the pruned shows were low-signal ones whose synopses matched
+nothing. FTS5 remains the real answer whenever this stops being tolerable.
+
+The branch weights are a ranking decision with no evidence behind them yet. A title hit outranking a
+fourth-billed actor is obviously right; whether an episode synopsis should outrank a season name is
+a guess, and the first real feedback should overturn it.
+
+Ranking never uses popularity, per [ADR-05](05-no-signal-fallback-ladder.md).

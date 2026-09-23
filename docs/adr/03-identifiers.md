@@ -12,6 +12,9 @@ The tempting move is one nice identifier doing all three. Something branded, lik
 `tvl-{tmdb_id}`, reads well in a URL and matches TMDb for free.
 
 ## Decision
+
+> **Amended 2026-08-30.** Show now sets its primary key to the tmdb_id, so two of the three identities share one number, see [The surrogate pk IS the tmdb_id for Show](#the-surrogate-pk-is-the-tmdb_id-for-show).
+
 Keep three identifiers, each with one job.
 
 - **`pk`, an auto-increment integer,** is the internal spine, the foreign-key target for every
@@ -25,7 +28,7 @@ Keep three identifiers, each with one job.
   for readability, and because slugs survive a database rebuild while pks do not. It arrived with
   the show detail page.
 
-## Amendment, 2026-08-30: the surrogate pk IS the tmdb_id for Show
+### The surrogate pk IS the tmdb_id for Show
 
 The three identities stand, but for Show two of them are now the same number.
 `Show.id` was a `BigAutoField`, which records the order rows happened to be

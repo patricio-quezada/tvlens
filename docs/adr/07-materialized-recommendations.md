@@ -18,6 +18,9 @@ follow-up, issue #1, problem 2: the pages run the recommenders on every request 
 caching.
 
 ## Decision
+
+> **Amended 2026-08-29.** Every edge now carries two more columns that split the score into cast and crew contributions, see [The cast/crew split rides on the edge](#the-castcrew-split-rides-on-the-edge).
+
 Precompute the whole Layer 1 ranking once and store it, then serve reads from the store.
 
 **A new table, `SimilarShow`, holds the graph.** One row is one edge: a `source` show, a
@@ -63,7 +66,7 @@ not, and it hides the graph inside a cache rather than making it a queryable tab
 layers and debugging can read directly. Precomputing everything up front is both simpler to
 reason about and uniformly fast to read.
 
-## Amendment, 2026-08-29: the cast/crew split rides on the edge
+### The cast/crew split rides on the edge
 
 Two columns join `score`, `shared_people`, and `mode`: `cast_contribution` and
 `crew_contribution`, the score split by what the shared people were doing on
@@ -88,6 +91,9 @@ The cost is two floats per edge, written by `rebuild_similar_shows` in the same
 pass that already computes the ranking, and one full rebuild to backfill.
 
 ## After Action Review
+
+> **Note, 2026-08-26.** The numbers below are dated measurements, and a management command now holds the live record, see [The review is a measurement, not an invariant](#the-review-is-a-measurement-not-an-invariant).
+
 The store holds the same graph the live recommender produced. Rebuilt against the real 100-show
 catalog it writes 1041 edges across 96 sources that have at least one similar show (4 shows
 share no one). A full comparison of `stored_similar` against a pre-rebuild snapshot of
@@ -110,9 +116,9 @@ them. That is a real piece of work, deliberately not attempted here.
 Provenance: issue #1 (Recommender scale hardening), problem 2, the caching follow-up named in
 [ADR-06](06-sql-variable-ceiling.md).
 
-## Note, 2026-08-26: the review above is a measurement, not an invariant
+### The review is a measurement, not an invariant
 
-The After Action Review records "Better Call Saul 14.79, The Blacklist 1.09, CSI 0.19 in eighth"
+The review above records "Better Call Saul 14.79, The Blacklist 1.09, CSI 0.19 in eighth"
 as Breaking Bad's preview, along with 1041 edges across 96 sources. Those numbers were true of
 the 100-show catalog they were measured on. They are left as written, because an After Action
 Review is a record of what was found at the time and rewriting it would destroy that.
