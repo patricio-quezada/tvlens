@@ -4,8 +4,14 @@
 <div class="page-header">
     <h1>{{ tag.name }}</h1>
     <p>
-        {{ shows|length }} show{{ shows|length|pluralize }}
-        {% if user.is_authenticated %}you have tagged{% else %}tagged with this{% endif %}.
+        {% if user.is_authenticated %}
+            {{ shows|length }} show{{ shows|length|pluralize }} you have tagged.
+        {% else %}
+            Tags are a shared vocabulary applied privately, so this shelf is
+            yours alone.
+            <a href="{% url 'login' %}?next={{ request.path }}">Log in</a>
+            to see what you have filed here.
+        {% endif %}
         <a href="{% url 'shows:index' %}">← All shows</a>
     </p>
 </div>

@@ -427,6 +427,9 @@ def search(request):
         min_votes=num("min_votes", int),
         language=language,
         main_cast_only=main_cast_only,
+        # The tag branch is the one branch that is not the same for everybody
+        # (ADR-14). Without this it searched every reader's applications.
+        user=request.user,
     )
 
     # Only offer filter values the catalog can actually satisfy. A dropdown
@@ -664,23 +667,29 @@ def remove_tag(request, slug):
 
 
 def tag(request, slug):
-    """Everything one reader has filed under a tag.
+    """Everything THIS reader has filed under a tag.
 
-    Anonymous readers get the tag's whole population, which is the only honest
-    answer when there is nobody to scope it to.
+    The Tag is shared vocabulary, so the page exists and names the word for
+    anybody. The ShowTag rows that apply it belong to one person, so the shelf
+    is always scoped to whoever is asking (ADR-14). An anonymous visitor gets
+    the word and an empty shelf: there is nobody to scope to, and the only
+    other answer available is handing them everyone else's applications, which
+    is exactly what ADR-14 says never happens. This used to do that, with a
+    docstring calling it the honest answer. It was not.
     """
     tag_obj = get_object_or_404(Tag, slug=slug)
-    links = ShowTag.objects.filter(tag=tag_obj).select_related("show")
-    if request.user.is_authenticated:
-        links = links.filter(user=request.user)
 
-    seen, shows = set(), []
-    for link in links:
-        if link.show_id in seen:
-            continue
-        seen.add(link.show_id)
-        shows.append(link.show)
-    shows.sort(key=lambda s: (-(s.vote_average or 0), s.name))
+    shows = []
+    if request.user.is_authenticated:
+        # (user, show, tag) is unique, so scoping to one reader and one tag
+        # already yields one row per show and there is nothing to dedupe.
+        shows = [
+            link.show
+            for link in ShowTag.objects.filter(tag=tag_obj, user=request.user).select_related(
+                "show"
+            )
+        ]
+        shows.sort(key=lambda s: (-(s.vote_average or 0), s.name))
 
     return render(request, "shows/tag.html", {"tag": tag_obj, "shows": shows})
 

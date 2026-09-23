@@ -3406,15 +3406,60 @@ class TaggingTests(TestCase):
 
     def test_a_tag_is_searchable(self):
         self.add("heist")
-        self.assertIn(self.show.name, {s.name for s in run_search("tag:heist")[0]})
+        names = {s.name for s in run_search("tag:heist", user=self.user)[0]}
+        self.assertIn(self.show.name, names)
 
     def test_a_tag_search_does_not_leak_another_readers_tags(self):
         """A tag someone else applied must not surface a show in your search."""
         tag = Tag.objects.create(name="secret", slug="secret")
         ShowTag.objects.create(user=self.other, show=self.other_show, tag=tag)
-        # The branch is user-blind today, which is a known limit worth freezing:
-        # if it ever becomes user-scoped, this test is the one that should fail.
-        self.assertIn(self.other_show.name, {s.name for s in run_search("tag:secret")[0]})
+        names = {s.name for s in run_search("tag:secret", user=self.user)[0]}
+        self.assertNotIn(self.other_show.name, names)
+
+    def test_a_tag_search_matches_the_word_and_the_owner_on_one_row(self):
+        """Both conditions must bind to the SAME ShowTag row.
+
+        Two separate filter() calls would join twice and ask only whether the
+        show carries *a* row with this word and *a* row of mine, which is true
+        of any show two readers have both tagged. Same show, my word and
+        theirs: searching for theirs must find nothing.
+        """
+        self.add("alpha")
+        ShowTag.objects.create(
+            user=self.other,
+            show=self.show,
+            tag=Tag.objects.create(name="beta", slug="beta"),
+        )
+        names = {s.name for s in run_search("tag:beta", user=self.user)[0]}
+        self.assertNotIn(self.show.name, names)
+
+    def test_a_tag_search_finds_nothing_for_an_anonymous_reader(self):
+        """There is nobody to scope to, so there is nothing honest to return."""
+        self.add("heist")
+        self.assertEqual(run_search("tag:heist")[0], [])
+        self.assertEqual(run_search("tag:heist", user=AnonymousUser())[0], [])
+
+    def test_free_text_does_not_reach_another_readers_tags(self):
+        """The tag branch runs in the free-text pass too, not only behind tag:."""
+        tag = Tag.objects.create(name="zeppelinesque", slug="zeppelinesque")
+        ShowTag.objects.create(user=self.other, show=self.other_show, tag=tag)
+        names = {s.name for s in run_search("zeppelinesque", user=self.user, fuzzy=False)[0]}
+        self.assertNotIn(self.other_show.name, names)
+
+    def test_the_tag_page_shows_an_anonymous_visitor_no_ones_shelf(self):
+        """The word is shared vocabulary; the shelf belongs to one person.
+
+        So the page still names the tag for a signed-out visitor and lists
+        nothing, rather than handing them every reader's applications.
+        """
+        self.add("mine")
+        tag = Tag.objects.get(slug="mine")
+        ShowTag.objects.create(user=self.other, show=self.other_show, tag=tag)
+        self.client.logout()
+        resp = self.client.get(reverse("shows:tag", args=["mine"]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(list(resp.context["shows"]), [])
+        self.assertEqual(resp.context["tag"].name, "mine")
 
 
 class RecommendationModelRemovedTests(TestCase):
@@ -3618,6 +3663,72 @@ class MyRatingsTagsTests(TestCase):
         self.client.login(username="stranger2", password="pw")
         resp = self.client.get(reverse("shows:my_ratings"))
         self.assertEqual(resp.status_code, 200)
+
+
+class TagPrivacyInRecommendationsTests(TestCase):
+    """One reader's tags must not move another reader's recommendations.
+
+    ADR-14: the Tag row is shared vocabulary, the ShowTag row that applies it
+    belongs to one person. personalization.py read ShowTag with no user filter
+    on both of its paths, unlike every Rating query beside it, so reader B's
+    private word shaped reader A's list. Each leak test has a same-reader
+    control, because a test that passes when the signal is simply absent
+    proves nothing.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        def make(tmdb_id, name, slug):
+            return Show.objects.create(
+                tmdb_id=tmdb_id,
+                name=name,
+                slug=slug,
+                overview="x",
+                first_air_date="2012-01-01",
+                vote_average=7.0,
+                vote_count=100,
+                number_of_episodes=10,
+            )
+
+        # No genres anywhere, so a candidate's preference is its tag term alone
+        # and an assertion of 0.0 is about tags rather than about genres.
+        cls.liked = make(9701, "Liked", "liked")
+        cls.candidate = make(9702, "Candidate", "candidate")
+        cls.alice = User.objects.create_user("alice-tags", password="pw")
+        cls.bob = User.objects.create_user("bob-tags", password="pw")
+        cls.word = Tag.objects.create(name="slow burn", slug="slow-burn")
+        Rating.objects.create(user=cls.alice, show=cls.liked, score=5.0)
+
+    def ranked(self):
+        self.candidate.score = 0.0
+        return RankedShows([self.candidate], mode="weighted")
+
+    def test_another_readers_tag_does_not_enter_your_profile(self):
+        ShowTag.objects.create(user=self.bob, show=self.liked, tag=self.word)
+        self.assertNotIn(self.word.id, build_profile(self.alice).learned_tag_weights)
+
+    def test_your_own_tag_does_enter_your_profile(self):
+        """The control: the same fixture with the row owned by alice."""
+        ShowTag.objects.create(user=self.alice, show=self.liked, tag=self.word)
+        self.assertIn(self.word.id, build_profile(self.alice).learned_tag_weights)
+
+    def test_another_readers_tag_on_a_candidate_does_not_rerank_it(self):
+        ShowTag.objects.create(user=self.alice, show=self.liked, tag=self.word)
+        ShowTag.objects.create(user=self.bob, show=self.candidate, tag=self.word)
+        reranked = rerank(self.alice, self.ranked())
+        self.assertEqual(reranked[0].preference, 0.0)
+
+    def test_your_own_tag_on_a_candidate_does_rerank_it(self):
+        """The control: alice has the affinity AND applied the word herself."""
+        ShowTag.objects.create(user=self.alice, show=self.liked, tag=self.word)
+        ShowTag.objects.create(user=self.alice, show=self.candidate, tag=self.word)
+        reranked = rerank(self.alice, self.ranked())
+        self.assertNotEqual(reranked[0].preference, 0.0)
+
+    def test_an_anonymous_reader_reads_nobodys_tags(self):
+        ShowTag.objects.create(user=self.bob, show=self.candidate, tag=self.word)
+        reranked = rerank(AnonymousUser(), self.ranked())
+        self.assertEqual(reranked[0].preference, 0.0)
 
 
 class SqliteWalTests(TestCase):

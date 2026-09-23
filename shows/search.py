@@ -358,7 +358,7 @@ def _shows_via_people(term, relation, extra=None):
     return found
 
 
-def _branch(name, term, main_cast_only=False):
+def _branch(name, term, main_cast_only=False, user=None):
     """Show ids matching `term` in one named branch. One query, one relation.
 
     Never OR two fan-out relations into one filter(). Cast and crew are reverse
@@ -387,9 +387,17 @@ def _branch(name, term, main_cast_only=False):
         # short, generic and mostly noise. Returns {show_id: bm25} so the
         # caller can order within the branch by match quality.
         "episode": lambda: _episode_fts(term),
-        # A reader's own vocabulary, not TMDb's. Ranked with genre and network
-        # because a tag is the same kind of claim about a show.
-        "tag": lambda: Show.objects.filter(_word("user_tags__tag__name", term)),
+        # A reader's OWN vocabulary, not TMDb's and not anyone else's. Ranked
+        # with genre and network because a tag is the same kind of claim about
+        # a show. Both conditions sit in one filter() so they bind to the same
+        # ShowTag row: the word has to match on a row this reader wrote
+        # (ADR-14). Signed out there is no reader to scope to, so the branch
+        # matches nothing rather than every reader's shelf.
+        "tag": lambda: (
+            Show.objects.filter(_word("user_tags__tag__name", term), user_tags__user=user)
+            if user is not None and user.is_authenticated
+            else Show.objects.none()
+        ),
     }
     result = queries[name]()
     # The episode branch hands back {show_id: bm25}, not a queryset.
@@ -476,6 +484,7 @@ def search(
     main_cast_only=False,
     limit=120,
     fuzzy=True,
+    user=None,
 ):
     """Run a catalog search and return (shows, parsed).
 
@@ -483,6 +492,11 @@ def search(
     together, because someone typing two of them is narrowing. Explicit
     arguments come from the advanced panel and lose to an operator typed in
     the box, on the principle that what you typed beats what a form remembered.
+
+    `user` scopes the tag branch and nothing else. Every other branch reads
+    catalog data that is the same for everybody; tags are one reader's
+    applications of a shared word (ADR-14), so they are only searchable by the
+    reader who wrote them. None means signed out, which finds no tags.
     """
     parsed = ParsedQuery(raw_query)
     parsed.suggestion = None
@@ -497,7 +511,7 @@ def search(
     term = parsed.searchable_text
     if term:
         for name, weight in BRANCH_WEIGHTS:
-            found = _branch(name, term, main_cast_only=main_cast_only)
+            found = _branch(name, term, main_cast_only=main_cast_only, user=user)
             if name == "episode":
                 episode_rank = found
             for show_id in found:
@@ -521,6 +535,7 @@ def search(
                         main_cast_only=main_cast_only,
                         limit=limit,
                         fuzzy=False,
+                        user=user,
                     )
                     if shows:
                         reparsed.suggestion = near
@@ -530,7 +545,7 @@ def search(
 
     # Operators intersect: actor:cranston genre:drama means both, not either.
     for name, value in parsed.fields:
-        found = _branch(name, value, main_cast_only=main_cast_only)
+        found = _branch(name, value, main_cast_only=main_cast_only, user=user)
         # An episode: operator's bm25 still orders its survivors, unless the
         # free-text pass already ran the branch and holds the ranking.
         if name == "episode" and not episode_rank:

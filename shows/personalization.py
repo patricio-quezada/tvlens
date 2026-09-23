@@ -427,9 +427,14 @@ def build_profile(user):
 
             # Tags weight their signal by relevance; the affinity is the
             # relevance-weighted mean, again bounded to about one rating's worth.
+            #
+            # Scoped to this user, like the Rating query above it. A ShowTag row
+            # belongs to one person (ADR-14), so somebody else's word on a show
+            # you rated is not evidence about YOUR vocabulary and must not be
+            # learned as if it were.
             t_sum, t_relsum = {}, {}
             for show_id, tag_id, relevance in ShowTag.objects.filter(
-                show_id__in=show_ids
+                user=user, show_id__in=show_ids
             ).values_list("show_id", "tag_id", "relevance"):
                 signal = signal_by_show[show_id]
                 t_sum[tag_id] = t_sum.get(tag_id, 0.0) + signal * relevance
@@ -524,10 +529,15 @@ def rerank(user, ranked, profile=None):
         profile = build_profile(user)
     n = len(ranked)
 
+    # Only this reader's own applications shape their order. The Tag is shared
+    # vocabulary, the ShowTag row is one person's (ADR-14). Unfiltered, one
+    # reader's private word on a candidate moved another reader's list, which
+    # is the leak ADR-14 exists to forbid. An anonymous reader has no rows, and
+    # no tag affinities either, so the branch is skipped rather than queried.
     tags_by_show = {}
-    if n:
+    if n and user is not None and user.is_authenticated:
         for show_id, tag_id, relevance in ShowTag.objects.filter(
-            show_id__in=[s.id for s in ranked]
+            user=user, show_id__in=[s.id for s in ranked]
         ).values_list("show_id", "tag_id", "relevance"):
             tags_by_show.setdefault(show_id, []).append((tag_id, relevance))
 
