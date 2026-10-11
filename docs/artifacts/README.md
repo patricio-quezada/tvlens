@@ -32,8 +32,8 @@ Twenty-one options across seven questions, and the numbering is the question:
 
 ## design-kit
 
-`01-BRIEF.md` and `02-STYLE.md` were written before the app had a visual
-identity of its own. `02-STYLE.md` points at `landing-page.html` as the style
+`01-BRIEF.txt` and `02-STYLE.txt` were written before the app had a visual
+identity of its own. `02-STYLE.txt` points at `landing-page.html` as the style
 anchor, which is the same instinct ADR-11 later made a rule: the identity is
 defined once, taken from the landing page, and everything else follows it.
 

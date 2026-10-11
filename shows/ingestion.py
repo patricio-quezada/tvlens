@@ -108,7 +108,7 @@ class Ingestor:
         # a catalog shipped into a database that already holds ratings from
         # silently re-pointing those ratings at other shows. Without this line
         # an autofield hands out a low integer that collides with a real
-        # tmdb_id. See match_show_ids and docs/adr/03-identifiers.md.
+        # tmdb_id. See match_show_ids and docs/adr/03-identifiers.txt.
         show, _ = Show.objects.update_or_create(
             tmdb_id=tmdb_id,
             defaults={
@@ -177,7 +177,7 @@ class Ingestor:
 
         Returns (cast_rows, crew_rows) touched.
 
-        See docs/adr/02-aggregate-credits-ingest.md.
+        See docs/adr/02-aggregate-credits-ingest.txt.
         """
         agg = self.client.get_tv_aggregate_credits(show.tmdb_id)
         if not agg:

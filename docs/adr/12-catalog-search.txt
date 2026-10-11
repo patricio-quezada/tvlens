@@ -49,7 +49,7 @@ match with the regex's answers. Word *prefixes* still match, so `break` finds Br
 re-evaluate the name predicate once per credit row, and the catalog holds 278,632 cast rows against
 154,699 people. Scanning people once and looking shows up by an indexed foreign key measured 59 ms
 against 9 ms for the same 26 results, and 64 ms against 25 ms for a surname matching 2,646 people.
-The id list is batched at 900 for the reason [ADR-06](06-sql-variable-ceiling.md) records.
+The id list is batched at 900 for the reason [ADR-06](06-sql-variable-ceiling.txt) records.
 
 **No text index.** `LIKE '%x%'` is unanchored, so SQLite full-scans whatever index sits on the
 column; `db_index=True` would change nothing. FTS5 with the trigram tokenizer is available in this
@@ -147,4 +147,4 @@ The branch weights are a ranking decision with no evidence behind them yet. A ti
 fourth-billed actor is obviously right; whether an episode synopsis should outrank a season name is
 a guess, and the first real feedback should overturn it.
 
-Ranking never uses popularity, per [ADR-05](05-no-signal-fallback-ladder.md).
+Ranking never uses popularity, per [ADR-05](05-no-signal-fallback-ladder.txt).

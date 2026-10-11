@@ -10,7 +10,7 @@ share a director, that is two. Rank by the count. It was the simplest thing that
 and for a while it did.
 
 Then the ingest pulled TMDb's full per-episode credits
-([ADR-02](02-aggregate-credits-ingest.md)) and 84% of the cast entries turned out to be for a
+([ADR-02](02-aggregate-credits-ingest.txt)) and 84% of the cast entries turned out to be for a
 single episode.
 
 Counting every shared person the same now meant two shows looked similar because they had
@@ -44,7 +44,7 @@ The smaller rules:
   show aired (595 on a 594-episode run), and no one is in more than all of a show.
 - **The ingest skips casting directors.** A studio hires a casting director, who then works on
   many unrelated shows at once, so two shows sharing one says nothing about whether they are
-  alike ([ADR-01](01-exclude-casting-roles.md)).
+  alike ([ADR-01](01-exclude-casting-roles.txt)).
 - **A person credited more than once on a show counts once,** at their highest episode count.
 - **The ranking sorts by score and shows the plain count of shared people** on the page, so it
   stays readable while the arithmetic does the ranking.
@@ -65,11 +65,11 @@ cannot quietly undo them.
 Two things I would improve. The code works the score out after pulling the rows from the
 database, because the per-show share does not fit neatly into a single query. That is fine at
 100 shows and does not scale; the answer is a table of connections computed ahead of time,
-which [ADR-07](07-materialized-recommendations.md) later builds.
+which [ADR-07](07-materialized-recommendations.txt) later builds.
 
 And the weighting does nothing at all for a show with no episodes recorded yet. Every score
 comes out zero, which needs its own answer:
-[ADR-05](05-no-signal-fallback-ladder.md).
+[ADR-05](05-no-signal-fallback-ladder.txt).
 
 ## Amendment, 2026-08-26: the weight is superlinear
 
@@ -88,7 +88,7 @@ score(A, B) = sum over shared people of
 ```
 
 with `INVOLVEMENT_EXPONENT = 1.375`. The same exponent applies to the `estimate` accumulator
-feeding [ADR-05](05-no-signal-fallback-ladder.md)'s middle rung, because that rung already
+feeding [ADR-05](05-no-signal-fallback-ladder.txt)'s middle rung, because that rung already
 claims to rank by how much of a show a person is, and weighting only the top rung would leave
 the two disagreeing about what involvement means. It also applies to `shared_connections`,
 which recomputes the same arithmetic for the callout.
@@ -97,7 +97,7 @@ which recomputes the same arithmetic for the callout.
 away thin shows, and hurting short-form content. A continuous reweighting does none of those:
 every shared person still contributes, and no edge is thrown away. Measured across all 37,950
 candidate edges in the catalog, not one reaches exactly 0.0, and the smallest is 9.6e-06, so
-[ADR-05](05-no-signal-fallback-ladder.md)'s requirement that the candidate set never change is untouched.
+[ADR-05](05-no-signal-fallback-ladder.txt)'s requirement that the candidate set never change is untouched.
 
 The shape follows `SIDE_QUEST_CENTRALITY_EXPONENT` in `personalization.py`, whose comment makes
 the same argument in the same form: being reached twice should cost something, but it should
@@ -142,13 +142,13 @@ differs between 1.375 and 1.5, about ten are better at 1.375 and one is better a
 ### What it moved
 
 On the 464-show catalog of the time, since pruned to 248 (see `MIN_VOTE_COUNT`), together with the widened `SERVICE_JOBS`
-([ADR-01](01-exclude-casting-roles.md), amended the same day): 4,014 edges become 4,013 across
+([ADR-01](01-exclude-casting-roles.txt), amended the same day): 4,014 edges become 4,013 across
 the same 409 sources, 304 of those sources reorder, and 76 change their top pick. The
 distribution goes from min 0.0001, max 33.376, mean 0.8388, median 0.4572 to min 0.0000039,
 max 28.278, mean 0.4612, median 0.1351. The mean barely moves and the median collapses, which
 is the intended shape: blowout edges survive, the indifferent tail flattens.
 
-Breaking Bad, which [ADR-07](07-materialized-recommendations.md)'s review recorded, now reads: Better Call Saul 9.7473, The Blacklist
+Breaking Bad, which [ADR-07](07-materialized-recommendations.txt)'s review recorded, now reads: Better Call Saul 9.7473, The Blacklist
 1.0204, Malcolm in the Middle 1.0133, Westworld 0.3775, The Mandalorian 0.3641, The Boys 0.3584,
 House of the Dragon 0.3552, Fargo 0.3418.
 
@@ -169,7 +169,7 @@ personalization while the tail reorders freely to taste". The median score falls
 than the linear weight did. Re-fitting `RANK_STEP` down would undo the improvement.
 
 `SIDE_QUEST_HOP_DECAY` is tilted but deliberately left alone; see
-[ADR-09](09-side-quests-cross-genre-edges.md).
+[ADR-09](09-side-quests-cross-genre-edges.txt).
 
 ### Correction to the record
 
@@ -182,7 +182,7 @@ re-derivation: bare `Producer` makes only four full-run pairs and every one of t
 (Star Trek: The Next Generation to Voyager and to the original series, Frieren to Hunter x
 Hunter), while excluding it would have dropped the person entirely on 45% of its credits. The
 corrected method, counting only pairs where the job is the person's sole credit on that show, is
-what the [ADR-01](01-exclude-casting-roles.md) amendment is built on.
+what the [ADR-01](01-exclude-casting-roles.txt) amendment is built on.
 
 ### Tests
 
@@ -199,4 +199,4 @@ measured plateau, so 1.5 fails it too.
 `check_ground_truth` is a new management command holding the catalog-dependent facts. They are
 not unit tests because the test database is empty and recreating Breaking Bad's 75 shared people
 as a fixture would freeze a copy of the data rather than the data, which is the failure mode it
-exists to prevent. See [ADR-07](07-materialized-recommendations.md).
+exists to prevent. See [ADR-07](07-materialized-recommendations.txt).

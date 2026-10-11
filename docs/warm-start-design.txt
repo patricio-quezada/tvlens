@@ -7,7 +7,7 @@ This is the platform-independent design, kept so it can be rebuilt natively.
 
 ## What it does
 
-1. Read `docs/day-plan.md` and find the first row matching `| <day> | #<issue> | queued`.
+1. Read `docs/day-plan.txt` and find the first row matching `| <day> | #<issue> | queued`.
 2. If a worktree for that issue already exists, **do nothing and exit.** This is
    deliberate: the job must never run ahead. The next issue is only staged once the
    current one ships and its plan row stops saying `queued`.

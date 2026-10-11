@@ -506,7 +506,7 @@ class SimilarShow(models.Model):
     this row, so they are computed once at rebuild and never at request time.
     Layer 2's connection-type preference is the only reader (ADR-15).
 
-    See docs/adr/07-materialized-recommendations.md.
+    See docs/adr/07-materialized-recommendations.txt.
     """
 
     source = models.ForeignKey(Show, on_delete=models.CASCADE, related_name="similar_edges")

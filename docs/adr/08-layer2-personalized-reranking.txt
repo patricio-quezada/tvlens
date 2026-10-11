@@ -7,9 +7,9 @@ the cold start.**
 
 ## Context
 Layer 1 is done. The shared-people graph is global, materialized
-([ADR-07](07-materialized-recommendations.md)), and identical for everyone. It answers "shows
+([ADR-07](07-materialized-recommendations.txt)), and identical for everyone. It answers "shows
 like this" from the data and deliberately ignores popularity
-([ADR-05](05-no-signal-fallback-ladder.md)).
+([ADR-05](05-no-signal-fallback-ladder.txt)).
 
 What it cannot do is tell two people apart. Open the same show as anyone else and the list is
 the same list.
@@ -34,7 +34,7 @@ never infers taste from something a user did not deliberately do.
 **It re-ranks the existing list rather than running a second engine.** Layer 1 stays exactly as
 it is. Layer 2 takes its list and re-orders it, instead of sending the request through a
 separate engine that scores every show from scratch. It nudges the order of something already
-computed and stored, and never recomputes the graph per user. That mirrors [ADR-07](07-materialized-recommendations.md)'s split: the
+computed and stored, and never recomputes the graph per user. That mirrors [ADR-07](07-materialized-recommendations.txt)'s split: the
 store holds what is the same for everyone, the request computes what depends on the viewer.
 
 **The profile is signed weights over genres and tags.** For each user the profile keeps an

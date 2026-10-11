@@ -1,6 +1,6 @@
 """Capture demo screenshots of TVLens as the live user `test`.
 
-Storytelling take (2026-09-20, demo/walkthrough.md decisions block): six
+Storytelling take (2026-09-20, demo/walkthrough.txt decisions block): six
 frames that follow one person deciding what to watch tonight, not a feature
 tour, in story order:
 

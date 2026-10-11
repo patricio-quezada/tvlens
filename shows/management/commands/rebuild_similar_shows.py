@@ -5,7 +5,7 @@ similar_by_people(show) is a pure function of the catalog, so its whole output
 is precomputed here and served from the table on every request. The rebuild is
 wholesale: delete every edge, recompute every source, write the new edges in one
 transaction. That is the invalidation strategy too, so ingest just calls this at
-the end of its run. See docs/adr/07-materialized-recommendations.md.
+the end of its run. See docs/adr/07-materialized-recommendations.txt.
 
 Usage:
     python manage.py rebuild_similar_shows
