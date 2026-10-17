@@ -203,3 +203,17 @@ BETA_INVITE_CODES = {c.strip() for c in os.getenv("BETA_INVITE_CODES", "").split
 LOGIN_URL = "/accounts/login/"
 LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/"
+
+# Logging: errors go to stdout, which is where Fly collects logs (`fly logs`).
+# Django's own default sends them to mail_admins only when DEBUG is off, and
+# there is no mail server and no ADMINS, so a crash in production would leave
+# no trace at all.
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {"console": {"class": "logging.StreamHandler"}},
+    "root": {"handlers": ["console"], "level": "WARNING"},
+    "loggers": {
+        "django": {"handlers": ["console"], "level": "INFO", "propagate": False},
+    },
+}
