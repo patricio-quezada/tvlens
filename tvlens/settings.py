@@ -8,17 +8,56 @@ import importlib.util
 import os
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = os.getenv("SECRET_KEY", "change-me-in-production")
+def env_bool(name, default):
+    return os.getenv(name, default).lower() in ("true", "1", "yes")
 
-DEBUG = os.getenv("DEBUG", "True").lower() in ("true", "1", "yes")
+
+# Off unless asked for. The old default was on, so a server that forgot to set
+# DEBUG would show tracebacks and settings to anyone. Development sets
+# DEBUG=True in .env; a deploy that sets nothing is safe by default.
+DEBUG = env_bool("DEBUG", "False")
+
+# A missing key in development falls back to a placeholder; in production it
+# refuses to start, because a known key lets anyone forge sessions.
+SECRET_KEY = os.getenv("SECRET_KEY", "")
+if not SECRET_KEY:
+    if not DEBUG:
+        raise ImproperlyConfigured("SECRET_KEY must be set when DEBUG is off.")
+    SECRET_KEY = "insecure-development-only-key"
 
 ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
+
+# The origins a form may be posted from, e.g. "https://app.tvlens.org".
+# Django 4+ checks them on every HTTPS POST.
+CSRF_TRUSTED_ORIGINS = [o for o in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",") if o]
+
+# HTTPS everywhere once DEBUG is off: redirect plain HTTP, and send the session
+# and CSRF cookies only over HTTPS so they can't be read off the wire.
+if not DEBUG:
+    SECURE_SSL_REDIRECT = env_bool("SECURE_SSL_REDIRECT", "True")
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    # HSTS tells browsers to refuse plain HTTP for this host. It is sticky:
+    # a browser that has seen it keeps it for the full duration, even if the
+    # site later needs HTTP. So it starts at one hour, covers only this host
+    # (not every subdomain of tvlens.org), and goes up once the deploy is
+    # proven. Raise SECURE_HSTS_SECONDS in the environment, not here.
+    SECURE_HSTS_SECONDS = int(os.getenv("SECURE_HSTS_SECONDS", "3600"))
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = False
+    SECURE_HSTS_PRELOAD = False
+
+# Behind a host's proxy, the app sees plain HTTP even when the visitor used
+# HTTPS, and SECURE_SSL_REDIRECT would loop forever. Hosts that terminate TLS
+# say so in this header; trust it only when the host is known to set it.
+if env_bool("TRUST_PROXY_SSL_HEADER", "False"):
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 # Application definition
 
