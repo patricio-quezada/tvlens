@@ -1,0 +1,33 @@
+# Fly.io settings for the TVLens app. Deploy with `fly deploy` from this folder.
+app = "tvlens"
+primary_region = "iad"
+
+[build]
+
+[env]
+  # The database lives on the volume mounted at /data, so it survives deploys
+  # and restarts. Everything else in the image is replaced on every deploy.
+  DB_NAME = "/data/db.sqlite3"
+  ALLOWED_HOSTS = "tvlens.fly.dev"
+  CSRF_TRUSTED_ORIGINS = "https://tvlens.fly.dev"
+  # Fly's proxy ends HTTPS and tells the app so in X-Forwarded-Proto.
+  TRUST_PROXY_SSL_HEADER = "True"
+
+[mounts]
+  source = "tvlens_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  # Stops the machine when nobody is visiting and starts it on the next
+  # request, so an idle month costs little. The first visit after a stop
+  # waits a second or two.
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1

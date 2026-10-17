@@ -82,6 +82,9 @@ if importlib.util.find_spec("django_extensions"):
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # Right after SecurityMiddleware, as whitenoise asks: static files are
+    # served before sessions or auth do any work for them.
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -154,6 +157,15 @@ USE_TZ = True
 STATIC_URL = "static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 STATIC_ROOT = BASE_DIR / "staticfiles"
+
+# In production, collectstatic writes hashed, compressed copies (style.3f2a.css)
+# so browsers can cache them forever and still see a change the moment it ships.
+# Development keeps the plain storage, which needs no collectstatic run.
+if not DEBUG:
+    STORAGES = {
+        "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+        "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
+    }
 
 # Media files
 

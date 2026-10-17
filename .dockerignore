@@ -1,0 +1,12 @@
+# Kept out of the image. The database lives on the Fly volume, never in the
+# image, and .env holds this machine's secrets.
+.git
+.venv
+.env
+db.sqlite3*
+staticfiles/
+media/
+demo/
+docs/
+__pycache__/
+*.py[cod]

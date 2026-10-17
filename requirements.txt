@@ -2,3 +2,7 @@
 Django>=6.1,<7.0
 python-dotenv>=1.0
 requests>=2.31
+# Production serving: gunicorn runs the app, whitenoise serves static files
+# from the same process so the host needs no separate web server.
+gunicorn>=26.2
+whitenoise>=6.12
