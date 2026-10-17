@@ -1,17 +1,29 @@
-# Nightly catalog refresh on the live app (Fly.io, app "tvlens").
+# Catalog refresh on the live app (Fly.io, app "tvlens").
 #
 # The app's machine sleeps when nobody visits, and a sleeping machine runs no
 # schedule of its own, so GitHub's clock drives it: wake the machine, keep it
 # awake while the job runs, and run refresh_catalog inside it over fly ssh.
-# --oldest 10 a night re-hydrates the whole ~250-show catalog about monthly;
-# --discover picks up shows that have newly crossed the vote floor.
+#
+# Two cadences, because the two halves cost very different amounts:
+#   nightly  --oldest 10: re-hydrates the 10 stalest shows, ~20 s. The whole
+#            ~250-show catalog comes round about monthly.
+#   Sundays  adds --discover --pages 1: finds shows newly above the vote
+#            floor. A new show is ingested whole, and a long-running one (a
+#            nightly talk show, thousands of episodes) takes minutes on its
+#            own; three pages ran past 20 minutes on the first try.
 
 name: Refresh catalog
 
 on:
   schedule:
-    - cron: "15 8 * * *"  # 08:15 UTC, 4:15 a.m. Eastern: nobody is browsing
-  workflow_dispatch:      # and a button to run it by hand
+    - cron: "15 8 * * *"  # nightly, 4:15 a.m. Eastern: nobody is browsing
+    - cron: "45 8 * * 0"  # Sundays, half an hour later, with Discover
+  workflow_dispatch:      # a button to run it by hand
+    inputs:
+      discover:
+        description: "Also sweep Discover for new shows (slow)"
+        type: boolean
+        default: false
 
 concurrency:
   group: refresh-catalog  # never two runs writing to SQLite at once
@@ -19,7 +31,7 @@ concurrency:
 jobs:
   refresh:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 90
     steps:
       - uses: superfly/flyctl-actions/setup-flyctl@master
 
@@ -29,9 +41,12 @@ jobs:
       - name: Refresh, keeping the machine awake meanwhile
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          DISCOVER: ${{ github.event.schedule == '45 8 * * 0' || inputs.discover }}
         run: |
+          args="--oldest 10"
+          if [ "$DISCOVER" = "true" ]; then args="$args --discover --pages 1"; fi
           # Fly stops an idle machine; an SSH session isn't traffic, so a
           # request every 30 seconds keeps it up until the job is done.
           ( while true; do curl --silent -o /dev/null https://app.tvlens.org/; sleep 30; done ) &
           trap 'kill $!' EXIT
-          flyctl ssh console -a tvlens -C "python manage.py refresh_catalog --discover --pages 3 --oldest 10"
+          flyctl ssh console -a tvlens -C "python manage.py refresh_catalog $args"
