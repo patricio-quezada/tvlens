@@ -3,6 +3,7 @@
 {% block content %}
 <div class="form-card">
     <h1>Create your account</h1>
+    <p>TVLens is in beta. Anyone can browse; an account needs an invite code.</p>
     <form method="post">{% csrf_token %}{{ form.as_p }}<button type="submit">Sign up</button></form>
     <p>Already have an account? <a href="{% url 'login' %}">Log in</a>.</p>
 </div>

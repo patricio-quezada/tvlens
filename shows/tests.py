@@ -4965,3 +4965,51 @@ class EpisodeFtsTriggerTests(TestCase):
         found = _episode_fts("quokka")
         self.assertIn(other.id, found)
         self.assertNotIn(self.show.id, found)
+
+
+@override_settings(BETA_INVITE_CODES={"FIRST-FEW", "SECOND"})
+class BetaInviteTests(TestCase):
+    """Browsing is open; an account needs an unspent invite code."""
+
+    def sign_up(self, code, username="viewer"):
+        return self.client.post(
+            reverse("register"),
+            {
+                "invite_code": code,
+                "username": username,
+                "email": f"{username}@example.com",
+                "password1": "a-long-test-passphrase",
+                "password2": "a-long-test-passphrase",
+            },
+        )
+
+    def test_a_valid_code_creates_the_account_and_spends_the_code(self):
+        response = self.sign_up("FIRST-FEW")
+        self.assertRedirects(response, reverse("shows:index"))
+        user = User.objects.get(username="viewer")
+        self.assertEqual(user.invite_use.code, "FIRST-FEW")
+
+    def test_a_spent_code_is_refused(self):
+        self.sign_up("FIRST-FEW")
+        self.client.logout()
+        response = self.sign_up("FIRST-FEW", username="second")
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(User.objects.filter(username="second").exists())
+
+    def test_an_unknown_code_is_refused(self):
+        response = self.sign_up("GUESS")
+        self.assertContains(response, "That invite code isn&#x27;t valid.")
+        self.assertFalse(User.objects.exists())
+
+    def test_surrounding_spaces_are_forgiven(self):
+        self.sign_up("  SECOND ")
+        self.assertTrue(User.objects.filter(username="viewer").exists())
+
+    @override_settings(BETA_INVITE_CODES=set())
+    def test_no_codes_means_sign_up_is_closed(self):
+        self.sign_up("FIRST-FEW")
+        self.assertFalse(User.objects.exists())
+
+    def test_browsing_needs_no_account(self):
+        self.assertEqual(self.client.get(reverse("shows:index")).status_code, 200)
+        self.assertContains(self.client.get(reverse("register")), "Invite code")

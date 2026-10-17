@@ -15,6 +15,7 @@ load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+
 def env_bool(name, default):
     return os.getenv(name, default).lower() in ("true", "1", "yes")
 
@@ -191,6 +192,11 @@ REVIEWS_PER_PAGE = 10
 
 EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "noreply@tvlens.org")
+
+# Beta invites: comma-separated codes, each good for one sign-up. Unset means
+# no codes, so sign-up is closed and browsing stays open. Set them on Fly with
+# `fly secrets set BETA_INVITE_CODES=...`.
+BETA_INVITE_CODES = {c.strip() for c in os.getenv("BETA_INVITE_CODES", "").split(",") if c.strip()}
 
 # Authentication
 
