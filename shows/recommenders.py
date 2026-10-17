@@ -11,12 +11,12 @@ production says something about the show. See SERVICE_JOBS below.
 The merged edge weights every shared person by episode share raised to
 INVOLVEMENT_EXPONENT, so a lead who carried a whole run outranks a crowd of
 one-episode guests instead of being buried by it. See similar_by_people and
-docs/adr/04-episode-weighted-people-recommender.txt for the decisions behind
+docs/adr/04-episode-weighted-people-recommender.md for the decisions behind
 it, and INVOLVEMENT_EXPONENT below for why the weight is not linear.
 
 Later layers stack genre and learned weights on top of these edges. Layer 2
 re-ranks this list per user rather than scoring shows a second time; see
-docs/adr/08-layer2-personalized-reranking.txt.
+docs/adr/08-layer2-personalized-reranking.md.
 """
 
 from collections import namedtuple
@@ -53,7 +53,7 @@ INVOLVEMENT_EXPONENT = 1.375
 # unrelated shows look related. On the 100-show catalog it linked The Boys to
 # Grey's Anatomy on four shared people, every one of them a casting director.
 # Excluding these costs two shows of coverage and removes thirteen false pairs.
-# See docs/adr/01-exclude-casting-roles.txt.
+# See docs/adr/01-exclude-casting-roles.md.
 #
 # Exact titles by choice (2026-08-06 review): the list is auditable, but a new
 # TMDb import can mint a variant that slips past it. When touching ingest,
@@ -216,7 +216,7 @@ RECOGNIZABLE_BILLING = 40
 
 # Largest person_id__in batch we bind at once, kept under SQLite's 999-variable
 # floor on older builds so a large person set never trips "too many SQL
-# variables". See docs/adr/06-sql-variable-ceiling.txt.
+# variables". See docs/adr/06-sql-variable-ceiling.md.
 SQLITE_MAX_VARS_SAFE = 900
 
 # What we know about one person on one show: enough to score them (best_count,
@@ -257,7 +257,7 @@ class RankedShows(list):
 def similar_by_people(show, limit=12):
     """Return shows ranked by episode-weighted shared people, cast and crew merged.
 
-    The rule, decided in ADR-04 (docs/adr/04-episode-weighted-people-recommender.txt):
+    The rule, decided in ADR-04 (docs/adr/04-episode-weighted-people-recommender.md):
 
         score(A, B) = sum over shared people of
             min(episode_count on A / A.number_of_episodes,
@@ -296,7 +296,7 @@ def similar_by_people(show, limit=12):
     That happens when the source show has no episodes recorded yet (TMDb
     "Planned" and "In Production" shows legitimately carry 0) or when every
     shared edge is a null-count series-level credit. Decided in ADR-05
-    (docs/adr/05-no-signal-fallback-ladder.txt)
+    (docs/adr/05-no-signal-fallback-ladder.md)
     and revised the same day (2026-08-07), the order falls down a ladder, and
     only the order, the candidate set never changes:
 
@@ -346,7 +346,7 @@ def similar_by_people(show, limit=12):
     #
     # This side keeps the materialised list: scoring needs each person's
     # episode_count in Python, so a subquery does not fit (see
-    # docs/adr/06-sql-variable-ceiling.txt). Instead the person set is chunked
+    # docs/adr/06-sql-variable-ceiling.md). Instead the person set is chunked
     # so a decades-long soap's tens of thousands of people never cross SQLite's
     # variable ceiling. fold_best merges across batches, so best_by_show is
     # identical to one unchunked query.
@@ -411,7 +411,7 @@ def stored_similar(show):
     but by reading precomputed edges in rank order instead of scoring the graph
     live. The store is rebuilt wholesale after every ingest, so for an unchanged
     catalog these two functions agree row for row. See
-    docs/adr/07-materialized-recommendations.txt.
+    docs/adr/07-materialized-recommendations.md.
 
     mode comes off the stored edges (every edge of one source carries the
     source's rung, so the first one decides). An empty store for this source
@@ -594,7 +594,7 @@ def shared_connections(source, source_index, candidate, candidate_index):
 
 # The two connection types a callout can lean toward, and the tilt a reader's
 # learned preference is allowed to apply to them. See
-# docs/adr/15-connection-type-preference.txt.
+# docs/adr/15-connection-type-preference.md.
 #
 # Layer 1 scores every shared person the same way whatever they did (ADR-04),
 # but a reader does not read them the same way: "they share three of the same
@@ -888,7 +888,7 @@ def compose_callout(source, candidate, connections, named, others, profile=None)
     insufficient signal, anonymous, and anyone whose two affinities landed
     within half a star of each other, has a lean of exactly 0.0 and gets cast
     first: the same default, reached by the same path, not a repaired version
-    of it. See docs/adr/15-connection-type-preference.txt.
+    of it. See docs/adr/15-connection-type-preference.md.
 
     Returns a dict for the template:
         segments  an ordered list of {"t": "text"|"name", "v": str}, so the
@@ -948,7 +948,7 @@ def similar_by_cast(show, limit=12):
     # join, never in Python, so pushing it into SQL removes both the extra query
     # and SQLite's per-person variable ceiling. An empty subquery yields no
     # rows, so the no-cast case still returns an empty queryset.
-    # See docs/adr/06-sql-variable-ceiling.txt.
+    # See docs/adr/06-sql-variable-ceiling.md.
     return (
         Show.objects.filter(
             cast__person_id__in=CastMember.objects.filter(show=show).values("person_id")
@@ -974,7 +974,7 @@ def similar_by_crew(show, limit=12):
     # per-person variable ceiling. The SERVICE_JOBS exclusion stays inside the
     # subquery so casting rows never seed the source set. An empty subquery
     # yields no rows, so the no-crew case still returns an empty queryset.
-    # See docs/adr/06-sql-variable-ceiling.txt.
+    # See docs/adr/06-sql-variable-ceiling.md.
     source_person_ids = (
         CrewMember.objects.filter(show=show).exclude(job__in=SERVICE_JOBS).values("person_id")
     )

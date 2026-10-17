@@ -49,7 +49,7 @@ So the code chunks it: split the person ids into batches of `SQLITE_MAX_VARS_SAF
 900 and comfortably under the oldest cap, run the candidate queries once per batch, and fold
 each batch into the same running totals. Because the fold keeps each person's best episode
 count, the accumulated result across batches is identical to one unchunked query. The scoring,
-the fallback ladder ([ADR-05](05-no-signal-fallback-ladder.txt)) and every recommendation are
+the fallback ladder ([ADR-05](05-no-signal-fallback-ladder.md)) and every recommendation are
 untouched. Only the number of variables per query changed.
 
 The issue offered a third option: pin a modern SQLite and document the ceiling. That is not a
@@ -73,6 +73,6 @@ and fine at any realistic size, and it is the reason the people path could not c
 clean as the other two.
 
 Still open and out of scope here: these pages run all three recommenders on every anonymous
-request with no caching. [ADR-07](07-materialized-recommendations.txt) is the follow-up.
+request with no caching. [ADR-07](07-materialized-recommendations.md) is the follow-up.
 
 Provenance: issue #1, Recommender scale hardening, migrated from Linear QUE-12.

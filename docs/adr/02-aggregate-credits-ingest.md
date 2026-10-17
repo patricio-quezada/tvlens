@@ -3,7 +3,7 @@
 **The credits endpoint TVLens was reading returns only series-level billing, which left the
 catalog with 13 directors in total. Ingesting `aggregate_credits` alongside it, with an episode
 count on every row, gave the recommender the people it was missing, and immediately made the
-rankings worse, which is what forced the weighting in [ADR-04](04-episode-weighted-people-recommender.txt).**
+rankings worse, which is what forced the weighting in [ADR-04](04-episode-weighted-people-recommender.md).**
 
 ## Context
 The whole 100-show catalog held 13 director rows. Not one of them connected two shows.
@@ -38,4 +38,4 @@ And the recommender got worse.
 Most of those new credits are single-episode appearances, so counting everyone equally buried
 the real matches under guest actors that two shows happened to share. Deeper data on its own
 made the product worse, which is what forced the episode weighting in
-[ADR-04](04-episode-weighted-people-recommender.txt). The two had to ship together.
+[ADR-04](04-episode-weighted-people-recommender.md). The two had to ship together.

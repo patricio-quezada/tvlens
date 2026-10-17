@@ -27,7 +27,7 @@ slips the list; a review on 2026-08-06 caught eight, including "Extras Casting" 
 
 I considered lowering casting's weight instead of removing it. It does not work. A casting
 director credited on 60 episodes still says nothing about the show, so the episode weighting in
-[ADR-04](04-episode-weighted-people-recommender.txt) cannot fix this one. It is a separate
+[ADR-04](04-episode-weighted-people-recommender.md) cannot fix this one. It is a separate
 problem and it needs a separate answer.
 
 ## After Action Review
@@ -40,14 +40,14 @@ The cost is that a couple of shows whose only link was a shared casting office n
 match at all. That is the honest answer, and a blank is better than a wrong one.
 
 The same exclusion carries into the full weighted recommender,
-[ADR-04](04-episode-weighted-people-recommender.txt).
+[ADR-04](04-episode-weighted-people-recommender.md).
 
 ## Amendment, 2026-08-26: the argument covers more than casting
 
 The reasoning above is not really about casting. It is about a credit that ties two productions
 together without saying anything about the two shows, and casting was simply the first and most
 obvious case. The involvement exponent in
-[ADR-04](04-episode-weighted-people-recommender.txt), amended the same day, made the rest of that
+[ADR-04](04-episode-weighted-people-recommender.md), amended the same day, made the rest of that
 class visible.
 
 The exponent makes a single full-run credit decisive. That is what it is for, and it works: a
@@ -106,7 +106,7 @@ The bare `Producer` row is the one to re-read before widening this list again. T
 of offenders named it the largest problem, and that was an artifact of classifying "below the
 line" as "absent from `MARQUEE_JOBS`", which is a naming list rather than a signal list.
 Re-derived properly, counting only pairs where the job is the person's sole credit on that show,
-`Producer` turned out to be carrying signal rather than noise. See [ADR-04](04-episode-weighted-people-recommender.txt)'s correction note.
+`Producer` turned out to be carrying signal rather than noise. See [ADR-04](04-episode-weighted-people-recommender.md)'s correction note.
 
 ### The audit still applies
 

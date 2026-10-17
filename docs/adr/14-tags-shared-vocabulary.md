@@ -42,12 +42,12 @@ frequency. Everything else is alphabetical.
 **Only names cross the boundary.** The suggestion strip shows what a show has been called. It never
 shows who called it that.
 
-**Tagging saves in place**, following [ADR-10](10-rating-saves-in-place.txt). The first version
+**Tagging saves in place**, following [ADR-10](10-rating-saves-in-place.md). The first version
 redirected to `#tags` and threw the reader a third of the way down the page, which is the exact
-behavior [ADR-10](10-rating-saves-in-place.txt) was written to eliminate.
+behavior [ADR-10](10-rating-saves-in-place.md) was written to eliminate.
 
 Tags are searchable with `tag:` and ranked alongside genre and network in
-[ADR-12](12-catalog-search.txt), because a tag is the same kind of claim about a show.
+[ADR-12](12-catalog-search.md), because a tag is the same kind of claim about a show.
 
 ## After Action Review
 Written on the same day as catalog search, and the two fit together better than either was designed
@@ -63,5 +63,5 @@ whether it should be derived from how many people applied the same tag, is undec
 so.
 
 The `Recommendation` model was deleted in the same commit. Nothing wrote it and nothing read it:
-[ADR-07](07-materialized-recommendations.txt) had materialized `SimilarShow` instead, leaving a table
+[ADR-07](07-materialized-recommendations.md) had materialized `SimilarShow` instead, leaving a table
 whose `reason` field was never going to hold anything.

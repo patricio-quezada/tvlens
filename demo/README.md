@@ -46,7 +46,7 @@ known password (see below).
 
 ## What is in this folder
 
-- `walkthrough.txt` the script to read while showing the app, in story order
+- `walkthrough.md` the script to read while showing the app, in story order
 - `screenshots/` PNGs captured as the live user, six frames telling one story
   in order (a small caption strip with tvlens.org is burned into frames 1-5;
   frame 6 is the end card, rendered by ffmpeg, not the browser):

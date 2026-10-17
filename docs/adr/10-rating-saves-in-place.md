@@ -8,8 +8,8 @@ fallback.**
 ## Context
 Rating a show is the one interaction the whole product rests on. It feeds Top Picks
 ([#15](https://github.com/patricio-quezada/tvlens/issues/15)), unlocks Side Quests
-([ADR-09](09-side-quests-cross-genre-edges.txt)), and is the cold-start data Layer 2 reads
-([ADR-08](08-layer2-personalized-reranking.txt)). Somebody rating is usually rating several
+([ADR-09](09-side-quests-cross-genre-edges.md)), and is the cold-start data Layer 2 reads
+([ADR-08](08-layer2-personalized-reranking.md)). Somebody rating is usually rating several
 shows in a sitting.
 
 Two fixes reached the widget in one day.
@@ -119,7 +119,7 @@ Still open. Four things are worth watching once this has been lived with for a w
   that would be easier with a little more will test it.
 
   2026-09-04: Answered by events. `detail.html` now holds four script blocks, and tagging
-  followed the same pattern ([ADR-14](14-tags-shared-vocabulary.txt)). The rating script stays inline until a build forces
+  followed the same pattern ([ADR-14](14-tags-shared-vocabulary.md)). The rating script stays inline until a build forces
   the split.
 - **The `X-Requested-With` convention.** Chosen because it is one header and needs no content
   negotiation. If a second endpoint ever needs this, decide then whether to keep the header or

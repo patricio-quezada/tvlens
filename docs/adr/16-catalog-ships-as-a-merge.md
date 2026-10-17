@@ -23,7 +23,7 @@ Patricio's requirement, verbatim: "the catalog changes should be unnoticeable by
 
 A catalog release is a merge run against the live database, using machinery that already
 existed: `refresh_catalog` re-hydrates stale shows and sweeps Discover, `ingest_show` is
-`update_or_create` on `tmdb_id` with the primary key pinned to it ([ADR-03](03-identifiers.txt)), so fresher data
+`update_or_create` on `tmdb_id` with the primary key pinned to it ([ADR-03](03-identifiers.md)), so fresher data
 lands in the same row every user row already points at. A fresh install ships the developer's
 catalog with empty user tables; a live install runs the same commands and keeps everything.
 

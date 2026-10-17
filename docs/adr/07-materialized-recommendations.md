@@ -13,7 +13,7 @@ Then the next visitor opens the same page, and it does all of it again.
 
 The list does not depend on who is looking. It only changes when an ingest changes the credits
 underneath it. So every page load after the first was paying full price for an answer TVLens
-already had, and [ADR-06](06-sql-variable-ceiling.txt) had already named it as the open
+already had, and [ADR-06](06-sql-variable-ceiling.md) had already named it as the open
 follow-up, issue #1, problem 2: the pages run the recommenders on every request with no
 caching.
 
@@ -33,7 +33,7 @@ rows in rank order and returns the same `RankedShows` shape the live function re
 views and templates downstream do not change.
 
 **Every edge carries the source's `mode`.** `mode` is the source's rung on the fallback ladder
-([ADR-05](05-no-signal-fallback-ladder.txt)): weighted, estimated, or rating. It belongs to the
+([ADR-05](05-no-signal-fallback-ladder.md)): weighted, estimated, or rating. It belongs to the
 source, not the edge, so every one of a source's edges carries the same value. Storing it per
 edge repeats one small string, but it keeps the whole graph in one table with no second lookup,
 which is the simplest thing that round-trips the `RankedShows` return value. A separate per-
@@ -55,7 +55,7 @@ global table. The rule is the split itself: store the part of the answer that is
 everyone, keep the part that depends on the viewer live.
 
 **`similar_by_cast` and `similar_by_crew` stay live.** They are single annotated subqueries
-([ADR-06](06-sql-variable-ceiling.txt)), cheap and not the scale risk, so materializing them
+([ADR-06](06-sql-variable-ceiling.md)), cheap and not the scale risk, so materializing them
 would add a table and an invalidation path for no gain. Only the Python-scored people graph,
 the expensive one, moves into the store.
 
@@ -73,7 +73,7 @@ Two columns join `score`, `shared_people`, and `mode`: `cast_contribution` and
 each side.
 
 They are here for exactly the reason the rest of the row is. Layer 2's
-connection-type preference ([ADR-15](15-connection-type-preference.txt)) needs the split per edge, and computing it
+connection-type preference ([ADR-15](15-connection-type-preference.md)) needs the split per edge, and computing it
 at request time meant a `role_indexes` pass over every show the reader had
 rated. Profiled on the real catalog that was **53% of the entire profile
 build**, spent re-deriving numbers that only change on ingest.
@@ -85,7 +85,7 @@ whole home page in **49ms across 22 queries**. Total SQL for that page went from
 109ms to 4.0ms with nothing above 2ms.
 
 It also removed the ceiling on how many edges Layer 2 may read, which is what
-made [ADR-15](15-connection-type-preference.txt)'s estimator work at all.
+made [ADR-15](15-connection-type-preference.md)'s estimator work at all.
 
 The cost is two floats per edge, written by `rebuild_similar_shows` in the same
 pass that already computes the ranking, and one full rebuild to backfill.
@@ -114,7 +114,7 @@ rebuild that recomputes only the shows an ingest actually affected, plus the sho
 them. That is a real piece of work, deliberately not attempted here.
 
 Provenance: issue #1 (Recommender scale hardening), problem 2, the caching follow-up named in
-[ADR-06](06-sql-variable-ceiling.txt).
+[ADR-06](06-sql-variable-ceiling.md).
 
 ### The review is a measurement, not an invariant
 
@@ -129,8 +129,8 @@ shows.** It is still in the catalog. Nothing failed, because a claim in prose ca
 the sentence sat here being wrong for months.
 
 On the 464-show catalog of the time, since pruned to 248 (see `MIN_VOTE_COUNT`), after the rescoring in
-[ADR-04](04-episode-weighted-people-recommender.txt) and the widened `SERVICE_JOBS` in
-[ADR-01](01-exclude-casting-roles.txt), the store holds **4,013 edges across 409 sources**, and
+[ADR-04](04-episode-weighted-people-recommender.md) and the widened `SERVICE_JOBS` in
+[ADR-01](01-exclude-casting-roles.md), the store holds **4,013 edges across 409 sources**, and
 Breaking Bad reads:
 
 | # | show | score |
@@ -150,5 +150,5 @@ it after every rebuild. It is a management command rather than a unit test on pu
 database is empty, and recreating Breaking Bad's 75 shared people as a fixture would freeze a
 copy of the data rather than the data, which is exactly the failure this note is about.
 
-Numbers quoted in this file, or in `docs/artifacts/design-kit/03-sample-data.txt`, should be
+Numbers quoted in this file, or in `docs/artifacts/design-kit/03-sample-data.md`, should be
 treated as dated measurements. The command is the live record.

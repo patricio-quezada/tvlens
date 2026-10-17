@@ -5,7 +5,7 @@ and identical for everyone (ADR-07). Layer 2 takes one of those stored lists and
 re-orders it to fit the signed-in user. It never rebuilds the graph and never
 re-counts people: Layer 1 owns people, Layer 2 owns genre and tag preference, so
 the same signal is never counted twice. See
-docs/adr/08-layer2-personalized-reranking.txt.
+docs/adr/08-layer2-personalized-reranking.md.
 
 The whole layer is one linear, inspectable model. For each user we keep a signed
 affinity per genre and per tag: a rating above neutral lifts that show's genres
@@ -24,7 +24,7 @@ This module also builds the two personal home-page rows, because both answer
 "what should this particular user see": Top Picks, the user's own ratings ranked
 by lift over a global baseline (#15), and Side Quests, strong Layer 1 edges out
 of the user's own favorites that land in genres they have not shown they like
-(ADR-09, docs/adr/09-side-quests-cross-genre-edges.txt). Neither is a chart: no
+(ADR-09, docs/adr/09-side-quests-cross-genre-edges.md). Neither is a chart: no
 row ever ranks by popularity, no row ever shows a user what other users are
 watching, and neither row exists at all for a user who has rated nothing.
 """
@@ -76,7 +76,7 @@ PREFERENCE_WEIGHT = 1.0
 
 # ── The connection-type dimension (issue #7) ──────────────────────────────────
 #
-# See docs/adr/15-connection-type-preference.txt for why this exists and what it
+# See docs/adr/15-connection-type-preference.md for why this exists and what it
 # is forbidden to do: it orders the people a callout names, it never ranks a
 # show, and it never reads another user's ratings.
 #
@@ -188,7 +188,7 @@ class PreferenceProfile:
     connection_type_lean is the signed difference, cast-positive, and 0.0
     whenever the weights are unearned. It does NOT rank shows and is never
     added to score_for: it orders the people named in a callout, nothing else.
-    See docs/adr/15-connection-type-preference.txt.
+    See docs/adr/15-connection-type-preference.md.
     """
 
     def __init__(
@@ -291,7 +291,7 @@ def _connection_type_weights(signal_by_show):
 
     Returns {"cast": affinity, "crew": affinity}, or {} when the gates above are
     not met. Layer 1 is only READ here; nothing is scored a second time (ADR-08).
-    See docs/adr/15-connection-type-preference.txt.
+    See docs/adr/15-connection-type-preference.md.
     """
     show_ids = list(signal_by_show)
     if len(show_ids) < 2:
