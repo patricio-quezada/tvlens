@@ -206,6 +206,10 @@ DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "noreply@tvlens.org")
 EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.mx.cloudflare.net")
 EMAIL_PORT = int(os.getenv("EMAIL_PORT", "465"))
 EMAIL_USE_SSL = env_bool("EMAIL_USE_SSL", "True")
+# iCloud Mail (his custom domain) takes STARTTLS on 587 instead: set
+# EMAIL_HOST=smtp.mail.me.com, EMAIL_PORT=587, EMAIL_USE_SSL=False,
+# EMAIL_USE_TLS=True, and sign in with the Apple ID and an app-specific password.
+EMAIL_USE_TLS = env_bool("EMAIL_USE_TLS", "False")
 EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "api_token")
 EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
 EMAIL_TIMEOUT = 10  # a stalled mail server must not hold a request forever
