@@ -159,6 +159,11 @@ STATIC_URL = "static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
+# Files browsers and crawlers ask for at the site root, not under /static/:
+# favicon.ico, apple-touch-icon.png, robots.txt. WhiteNoise serves this folder
+# at "/" as-is, without hashed names, because those URLs are fixed.
+WHITENOISE_ROOT = BASE_DIR / "public"
+
 # In production, collectstatic writes hashed, compressed copies (style.3f2a.css)
 # so browsers can cache them forever and still see a change the moment it ships.
 # Development keeps the plain storage, which needs no collectstatic run.
@@ -192,6 +197,18 @@ REVIEWS_PER_PAGE = 10
 
 EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "noreply@tvlens.org")
+
+# Production mail goes through Cloudflare Email Service over SMTP: set
+# EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend and put a
+# Cloudflare API token with "Email Sending: Edit" in EMAIL_HOST_PASSWORD (a Fly
+# secret). The username is the literal string "api_token". Port 465 is
+# implicit TLS, hence USE_SSL rather than USE_TLS.
+EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.mx.cloudflare.net")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", "465"))
+EMAIL_USE_SSL = env_bool("EMAIL_USE_SSL", "True")
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "api_token")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+EMAIL_TIMEOUT = 10  # a stalled mail server must not hold a request forever
 
 # Beta invites: comma-separated codes, each good for one sign-up. Unset means
 # no codes, so sign-up is closed and browsing stays open. Set them on Fly with

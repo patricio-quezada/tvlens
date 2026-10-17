@@ -1,0 +1,5 @@
+# Browsing is public; account pages are not worth crawling.
+User-agent: *
+Disallow: /accounts/
+Disallow: /my-ratings/
+Disallow: /admin/
