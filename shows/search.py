@@ -269,6 +269,38 @@ def _word(field, term):
     return Q(**{f"{field}__icontains": term, f"{field}__iregex": pattern})
 
 
+def _title_key(text):
+    """Lowercase letters and digits only: "Baby-Sitters" and "baby sitters" agree."""
+    return re.sub(r"[\W_]+", "", text.lower())
+
+
+def _title_ids(term):
+    """Shows whose name or original name matches `term`, spacing and punctuation aside.
+
+    A reader types what they remember, and they rarely remember the hyphen:
+    "baby sitters" and "babysitters" both mean The Baby-Sitters Club, which
+    the phrase match missed. So both sides drop everything but letters and
+    digits, and the match still has to start at a word of the title, which
+    keeps _word's rule that "hbo" must not find a neighbour.
+
+    This reads every title into Python rather than asking SQL, because no
+    LIKE pattern can ignore separators the reader left out. Two short strings
+    per show is cheap at today's catalog size; if the catalog grows into the
+    tens of thousands, store the key in a column and index it.
+    """
+    key = _title_key(term)
+    if not key:
+        return set()
+    found = set()
+    for show_id, *names in Show.objects.values_list("id", "name", "original_name"):
+        for name in names:
+            words = re.findall(r"[^\W_]+", (name or "").lower())
+            if any("".join(words[i:]).startswith(key) for i in range(len(words))):
+                found.add(show_id)
+                break
+    return found
+
+
 def _fts_query(term):
     """Turn a raw user term into an FTS5 prefix query, or None.
 
@@ -371,7 +403,7 @@ def _branch(name, term, main_cast_only=False, user=None):
     """
     lead = {"cast__order__lt": 10} if main_cast_only else {}
     queries = {
-        "title": lambda: Show.objects.filter(_word("name", term) | _word("original_name", term)),
+        "title": lambda: _title_ids(term),
         "cast": lambda: _shows_via_people(term, "cast", lead),
         "crew": lambda: _shows_via_people(term, "crew"),
         "character": lambda: Show.objects.filter(_word("cast__character", term), **lead),

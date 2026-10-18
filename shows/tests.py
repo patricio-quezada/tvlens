@@ -2907,6 +2907,25 @@ class SearchTests(TestCase):
             )
 
 
+class SearchTitleSpacingTests(TestCase):
+    """A title matches however the reader spaces or hyphenates it."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.bsc = Show.objects.create(tmdb_id=100412, name="The Baby-Sitters Club", vote_count=506)
+        cls.other = Show.objects.create(tmdb_id=1, name="Neighbours", vote_count=10)
+
+    def names(self, q):
+        return {s.name for s in run_search(q)[0]}
+
+    def test_spaces_hyphens_and_run_together_words_all_find_it(self):
+        for q in ("baby sitters", "babysitters", "Baby-Sitters Club", "sitters club"):
+            self.assertIn("The Baby-Sitters Club", self.names(q), q)
+
+    def test_a_match_still_has_to_start_at_a_word(self):
+        self.assertNotIn("Neighbours", self.names("bours"))
+
+
 class SearchViewTests(TestCase):
     def test_the_page_renders_without_a_query(self):
         self.assertEqual(self.client.get(reverse("shows:search")).status_code, 200)
