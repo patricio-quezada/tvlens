@@ -14,6 +14,9 @@ target-version = "py312"
 # Breaking fifty readable lines to satisfy a style rule is the churn, not the fix.
 line-length = 100
 
+# The demo recording scripts embed long JavaScript strings and never ship.
+extend-exclude = ["demo"]
+
 exclude = ["migrations", "venv"]
 
 [lint]
