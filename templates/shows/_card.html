@@ -23,6 +23,9 @@
                 <span class="card-genre">{{ g.name }}</span>
                 {% endfor %}
             </div>
+            {% if show.requested_by_you %}
+            <span class="card-flag card-flag-requested">You requested this</span>
+            {% endif %}
             {% if show.episode_only_match %}
             <span class="card-flag">matches episode descriptions</span>
             {% endif %}

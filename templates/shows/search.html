@@ -63,7 +63,7 @@
         {% if parsed.status %}<span class="chip">status {{ parsed.status }}</span>{% endif %}
         {% if parsed.min_score %}<span class="chip">score ≥ {{ parsed.min_score }}</span>{% endif %}
         {% if parsed.min_votes %}<span class="chip">votes ≥ {{ parsed.min_votes }}</span>{% endif %}
-        {% if parsed.text %}<span class="chip-note">searching “{{ parsed.text }}”</span>{% endif %}
+        {% if parsed.text and not parsed.network_from_text %}<span class="chip-note">searching “{{ parsed.text }}”</span>{% endif %}
         {% comment %}An operator that was typed but not understood has to be
            said out loud. Silently treating it as text is how a reader ends up
            trusting a filter that never ran.{% endcomment %}
@@ -80,11 +80,17 @@
 {% if q %}
 {% comment %}A correction the reader cannot see is a lie about what they asked
    for. Name the term actually searched, and offer the original back.{% endcomment %}
-{% if parsed.network_from_text and not parsed.suggestion %}
-{% comment %}The chips above already say "network: paramount" and what was
-   searched. This only offers the words back as typed.{% endcomment %}
-<p class="did-you-mean">
-    <a href="{% url 'shows:search' %}?q={{ q|urlencode }}&amp;exact=1">Search instead for “{{ q }}”</a>
+{% comment %}"halo paramount" is a title or Halo on Paramount+. Say which one
+   ran, and make the other one tap away, so nobody has to know network:.{% endcomment %}
+{% if parsed.network_from_text or parsed.network_option %}
+<p class="reading">
+    {% if parsed.network_from_text %}
+    <span class="reading-choice is-on" aria-current="true"><strong>{{ parsed.searchable_text }}</strong> on {{ parsed.network_from_text }}</span>
+    <a class="reading-choice" href="?{{ read_typed_query }}">“{{ q }}” as a title</a>
+    {% else %}
+    <span class="reading-choice is-on" aria-current="true">“{{ q }}” as a title</span>
+    <a class="reading-choice" href="?{{ read_service_query }}"><strong>{{ parsed.network_option.0 }}</strong> on {{ parsed.network_option.1 }}</a>
+    {% endif %}
 </p>
 {% endif %}
 {% if parsed.suggestion %}
@@ -106,7 +112,7 @@
 </p>
 {% else %}
 <p class="empty">
-    Nothing in the catalog matched “{{ q }}”. Search covers titles, cast, crew,
+    Nothing in the catalog matched {% if parsed.network_from_text %}“{{ parsed.searchable_text }}” on {{ parsed.network_from_text }}{% else %}“{{ q }}”{% endif %}. Search covers titles, cast, crew,
     characters, genres, networks, season names and episode synopses.
 </p>
 {% endif %}
@@ -258,5 +264,15 @@ Nothing here is ingested; a reader's request is, nightly.{% endcomment %}
         font-size: 0.92rem;
     }
     .did-you-mean a { margin-left: 0.6rem; font-size: 0.85rem; }
+    .reading {
+        max-width: 640px; margin: 1rem auto 0; display: flex; flex-wrap: wrap;
+        justify-content: center; gap: 0.5rem; font-size: 0.88rem;
+    }
+    .reading-choice {
+        padding: 0.3rem 0.8rem; border: 1px solid var(--border);
+        border-radius: 999px; color: var(--text-secondary); text-decoration: none;
+    }
+    a.reading-choice:hover { border-color: var(--accent); color: var(--accent); }
+    .reading-choice.is-on { border-color: var(--accent); color: var(--accent); background: var(--surface); }
 </style>
 {% endblock %}

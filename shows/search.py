@@ -283,19 +283,22 @@ def _split_network(raw_query, term):
     "the" mean The CW and "a" mean ABC. What is left must still be text worth
     searching, or "x paramount" lists every Paramount+ show.
 
-    Returns (rewritten query, network words), or None.
+    Returns (rewritten query, title words, network name as the catalog
+    spells it, network words as typed), or None.
     """
     words = term.split()
     if len(words) < 2:
         return None
-    keys = {_title_key(name) for name in Network.objects.values_list("name", flat=True)}
+    names = {}
+    for full in Network.objects.values_list("name", flat=True).order_by("tmdb_id"):
+        names.setdefault(_title_key(full), full)
     for n in range(len(words) - 1, 0, -1):
         for rest, network, leading in (
             (words[:-n], words[-n:], False),
             (words[n:], words[:n], True),
         ):
             name = " ".join(network)
-            if len(" ".join(rest)) < MIN_TERM or '"' in name or _title_key(name) not in keys:
+            if len(" ".join(rest)) < MIN_TERM or '"' in name or _title_key(name) not in names:
                 continue
             # Cut the words out of what was typed, not out of `term`: term has
             # its spacing collapsed and its operators and years taken out, so
@@ -306,7 +309,12 @@ def _split_network(raw_query, term):
                 continue
             cut = found[0] if leading else found[-1]
             rewritten = raw_query[: cut.start()] + raw_query[cut.end() :]
-            return f'{" ".join(rewritten.split())} network:"{name}"', name
+            return (
+                f'{" ".join(rewritten.split())} network:"{name}"',
+                " ".join(rest),
+                names[_title_key(name)],
+                name,
+            )
     return None
 
 
@@ -558,6 +566,7 @@ def search(
     limit=120,
     fuzzy=True,
     user=None,
+    reading="auto",
     _split=True,
 ):
     """Run a catalog search and return (shows, parsed).
@@ -574,7 +583,8 @@ def search(
     """
     parsed = ParsedQuery(raw_query)
     parsed.suggestion = None
-    parsed.network_from_text = None
+    parsed.network_from_text = None  # network name, when the words were read as one
+    parsed.network_option = None  # (title words, network name) offered, not applied
 
     if parsed.is_empty or parsed.too_short:
         return [], parsed
@@ -593,31 +603,37 @@ def search(
                 if ranks.get(show_id, 0) < weight:
                     ranks[show_id] = weight
         matched = set(ranks)
-        if not matched and fuzzy and _split:
-            # A service named in plain words narrows, the way network: does.
-            # Before the spelling fallback, which would otherwise swap
-            # "paramount" for a near title; the rerun keeps that fallback for
-            # the title words. It runs once (_split=False), since a rewrite is
-            # a different query and could otherwise split again forever. The
-            # page names the reading, and exact=1 turns it off.
-            split = _split_network(raw_query, term)
-            if split:
-                rewritten, network = split
-                shows, reparsed = search(
-                    rewritten,
-                    status=status,
-                    min_score=min_score,
-                    min_votes=min_votes,
-                    language=language,
-                    main_cast_only=main_cast_only,
-                    limit=limit,
-                    fuzzy=fuzzy,
-                    user=user,
-                    _split=False,
-                )
-                reparsed.network_from_text = network
-                reparsed.raw = raw_query
-                return shows, reparsed
+        # "halo paramount" can be a title or Halo on Paramount+. Words that
+        # match as typed keep their reading, and the service reading is
+        # offered; words that match nothing are read as the service, and the
+        # typed reading is offered. `reading` is the reader picking one. The
+        # rerun is a different query, so it never splits again
+        # (_split=False). exact=1 (fuzzy off) means the words as typed.
+        split = _split_network(raw_query, term) if (_split and fuzzy) else None
+        if split and reading != "typed" and (reading == "service" or not matched):
+            rewritten, title_words, network, typed = split
+            shows, reparsed = search(
+                rewritten,
+                status=status,
+                min_score=min_score,
+                min_votes=min_votes,
+                language=language,
+                main_cast_only=main_cast_only,
+                limit=limit,
+                fuzzy=fuzzy,
+                user=user,
+                _split=False,
+            )
+            reparsed.network_from_text = network
+            # Drop the field the rewrite added (the last one, since it was
+            # appended) once it has run: the reading line names it, and a chip
+            # for it would say it twice. Filters the reader typed keep theirs.
+            last = len(reparsed.fields) - 1 - reparsed.fields[::-1].index(("network", typed))
+            del reparsed.fields[last]
+            reparsed.raw = raw_query
+            return shows, reparsed
+        if split:
+            parsed.network_option = (split[1], split[2])
         if not matched:
             # Nothing matched exactly. Try once more against the closest real
             # name in the catalog, and say so rather than silently swapping
@@ -640,6 +656,7 @@ def search(
                     if shows:
                         reparsed.suggestion = near
                         reparsed.raw = raw_query
+                        reparsed.network_option = parsed.network_option
                         return shows, reparsed
             return [], parsed
 

@@ -2,6 +2,7 @@
 
 import logging
 import time
+from datetime import timedelta
 
 from django.contrib import messages
 from django.contrib.auth import login
@@ -11,6 +12,7 @@ from django.http import HttpResponseBadRequest, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.text import slugify
 from django.views.decorators.http import require_POST
@@ -161,6 +163,18 @@ def favorite_genre_ids_for(user, minimum=2):
     )
 
 
+def _with_reading(request, reading):
+    params = request.GET.copy()
+    params["read"] = reading
+    params.pop("exact", None)
+    return params.urlencode()
+
+
+# How long a requested show keeps its "You requested this" flag on the home
+# page after it arrives, if the reader has not rated or watched it first.
+REQUEST_NOTICE_DAYS = 14
+
+
 def index(request):
     base_qs = Show.objects.prefetch_related("genres")
 
@@ -183,6 +197,28 @@ def index(request):
         # pills and cards so the page shows what it thinks the user likes.
         favorite_genre_ids = favorite_genre_ids_for(request.user)
 
+    # A show this reader asked for from search, now in the catalog, leads
+    # Recently Added with a "You requested this" flag. That is the whole
+    # notice: no email, and nothing to dismiss. It stays until they rate or
+    # watch it, or for REQUEST_NOTICE_DAYS after it arrived. It claims its
+    # show ahead of every other row, since a reader who asked for a show and
+    # then finds it under Watch Next has not been told it came.
+    requested: list = []
+    if request.user.is_authenticated:
+        requested = list(
+            base_qs.filter(
+                tmdb_id__in=ShowRequest.objects.filter(user=request.user, failed=False).values(
+                    "tmdb_id"
+                ),
+                created_at__gte=timezone.now() - timedelta(days=REQUEST_NOTICE_DAYS),
+            )
+            .exclude(pk__in=Show.objects.watched_by(request.user).values("pk"))
+            .order_by("-created_at")[:12]
+        )
+        for show in requested:
+            show.requested_by_you = True
+    requested_ids = {s.pk for s in requested}
+
     # One show, one row. The exclusion chain runs Top Picks > Side Quests >
     # Recently Added, and that priority is by how PERSONAL a row is, not by
     # where it sits on the page: Side Quests renders below Recently Added but
@@ -195,7 +231,7 @@ def index(request):
     # to show in the meantime. It returns an empty, locked list for everyone
     # below that line. Called outside the is_authenticated block only because
     # it handles the anonymous case itself, in one place.
-    quests = side_quests(request.user, exclude_ids=pick_ids)
+    quests = side_quests(request.user, exclude_ids=pick_ids | requested_ids)
     quest_ids = {s.pk for s in quests}
     # Watch Next is the page's answer to "what should I watch next" (#24). It
     # RENDERS first, above Top Picks, because Top Picks is a mirror -- shows the
@@ -211,11 +247,15 @@ def index(request):
     #
     # It handles the anonymous and no-seed cases itself, so it is called outside
     # the is_authenticated block.
-    next_up = watch_next(request.user, exclude_ids=pick_ids | quest_ids, profile=profile)
+    next_up = watch_next(
+        request.user, exclude_ids=pick_ids | quest_ids | requested_ids, profile=profile
+    )
     next_ids = {s.pk for s in next_up}
-    recently_added = base_qs.exclude(pk__in=pick_ids | next_ids | quest_ids).order_by(
-        "-created_at"
-    )[:12]
+    recently_added = requested + list(
+        base_qs.exclude(pk__in=pick_ids | next_ids | quest_ids | requested_ids).order_by(
+            "-created_at"
+        )[: max(12 - len(requested), 0)]
+    )
     # Browse by genre, ordered by the same cold-start ladder the rest of the
     # recommender uses (ADR-05, ADR-08). A user with no ratings has told us
     # nothing, so the row leads with the genres whose shows TMDb rates highest
@@ -445,6 +485,7 @@ def search(request):
     shows, parsed = run_search(
         raw,
         fuzzy=request.GET.get("exact") != "1",
+        reading=request.GET.get("read", "auto"),
         status=status,
         min_score=num("min_score", float),
         min_votes=num("min_votes", int),
@@ -537,6 +578,10 @@ def search(request):
         {
             "q": raw,
             "parsed": parsed,
+            # The two reading links keep every other filter on the page: only
+            # the reading changes, so a min score set in Advanced survives.
+            "read_typed_query": _with_reading(request, "typed"),
+            "read_service_query": _with_reading(request, "service"),
             "elsewhere": elsewhere,
             "requested_ids": requested_ids,
             # The page already carries a search box front and centre. A second

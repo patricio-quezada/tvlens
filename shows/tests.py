@@ -5266,7 +5266,7 @@ class NetworkInPlainWordsTests(TestCase):
     def test_trailing_service_narrows_to_that_network(self):
         shows, parsed = run_search("yellowstone paramount")
         self.assertEqual([s.name for s in shows], ["Yellowstone"])
-        self.assertEqual(parsed.network_from_text, "paramount")
+        self.assertEqual(parsed.network_from_text, "Paramount+")
         self.assertEqual(parsed.raw, "yellowstone paramount")
 
     def test_leading_service_narrows_too(self):
@@ -5301,8 +5301,9 @@ class NetworkInPlainWordsTests(TestCase):
         ) as mocked:
             resp = self.client.get(reverse("shows:search"), {"q": "halo paramount"})
         mocked.assert_called_once_with("halo")
-        self.assertContains(resp, "network: paramount")
-        self.assertContains(resp, "Search instead for “halo paramount”")
+        self.assertContains(resp, "<strong>halo</strong> on Paramount+")
+        self.assertContains(resp, "read=typed")
+        self.assertNotContains(resp, "network: paramount")
         self.assertContains(resp, "Halo")
 
     def test_spacing_operators_and_years_do_not_loop(self):
@@ -5314,7 +5315,7 @@ class NetworkInPlainWordsTests(TestCase):
         ):
             with self.subTest(q=q):
                 shows, parsed = run_search(q)
-                self.assertEqual(parsed.network_from_text, "paramount")
+                self.assertEqual(parsed.network_from_text, "Paramount+")
 
     def test_a_prefix_of_a_network_name_is_not_a_network(self):
         Network.objects.create(tmdb_id=71, name="The CW")
@@ -5329,4 +5330,86 @@ class NetworkInPlainWordsTests(TestCase):
     def test_misspelled_title_still_gets_its_correction(self):
         shows, parsed = run_search("yelowstone paramount")
         self.assertEqual([s.name for s in shows], ["Yellowstone"])
-        self.assertEqual(parsed.network_from_text, "paramount")
+        self.assertEqual(parsed.network_from_text, "Paramount+")
+
+    def test_words_that_match_as_typed_keep_that_reading_and_offer_the_service(self):
+        Show.objects.create(
+            tmdb_id=73588,
+            name="Yellowstone Paramount Story",
+            slug="yellowstone-paramount-story",
+            first_air_date="2020-01-01",
+            vote_average=6.0,
+            vote_count=150,
+            original_language="en",
+            status="Ended",
+        )
+        shows, parsed = run_search("yellowstone paramount")
+        self.assertEqual([s.name for s in shows], ["Yellowstone Paramount Story"])
+        self.assertIsNone(parsed.network_from_text)
+        self.assertEqual(parsed.network_option, ("yellowstone", "Paramount+"))
+        resp = self.client.get(reverse("shows:search"), {"q": "yellowstone paramount"})
+        self.assertContains(resp, "read=service")
+
+        shows, parsed = run_search("yellowstone paramount", reading="service")
+        self.assertEqual([s.name for s in shows], ["Yellowstone"])
+        self.assertEqual(parsed.network_from_text, "Paramount+")
+
+    def test_reading_typed_turns_the_service_reading_off(self):
+        shows, parsed = run_search("yellowstone paramount", reading="typed")
+        self.assertIsNone(parsed.network_from_text)
+        self.assertEqual(parsed.network_option, ("yellowstone", "Paramount+"))
+
+    def test_other_filters_keep_their_chips_and_survive_the_switch(self):
+        resp = self.client.get(
+            reverse("shows:search"),
+            {"q": "yellowstone genre:drama network:hbo paramount", "min_score": "8"},
+        )
+        self.assertContains(resp, "genre: drama")
+        self.assertContains(resp, "network: hbo")
+        self.assertNotContains(resp, "network: paramount")
+        self.assertContains(resp, "min_score=8&amp;read=typed")
+
+
+class RequestedShowNoticeTests(TestCase):
+    """A reader who requested a show from search learns it arrived: it leads
+    Recently Added on their home page, flagged, until they rate it."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.asker = User.objects.create_user("asker", "asker@example.com", "pw-12345-long")
+        cls.other = User.objects.create_user("other", "other@example.com", "pw-12345-long")
+        cls.halo = Show.objects.create(
+            tmdb_id=52814,
+            name="Halo",
+            slug="halo",
+            first_air_date="2022-03-24",
+            vote_average=8.2,
+            vote_count=3300,
+            original_language="en",
+            status="Ended",
+        )
+        ShowRequest.objects.create(tmdb_id=52814, name="Halo", year="2022", user=cls.asker)
+
+    def home(self, user):
+        self.client.force_login(user)
+        return self.client.get(reverse("shows:index"))
+
+    def test_the_asker_sees_it_first_and_flagged(self):
+        resp = self.home(self.asker)
+        self.assertEqual(resp.context["recently_added"][0], self.halo)
+        self.assertContains(resp, "You requested this")
+
+    def test_nobody_else_sees_the_flag(self):
+        self.assertNotContains(self.home(self.other), "You requested this")
+
+    def test_rating_it_ends_the_notice(self):
+        Rating.objects.create(user=self.asker, show=self.halo, score=4.0)
+        self.assertNotContains(self.home(self.asker), "You requested this")
+
+    def test_the_notice_expires(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        Show.objects.filter(pk=self.halo.pk).update(created_at=timezone.now() - timedelta(days=15))
+        self.assertNotContains(self.home(self.asker), "You requested this")
