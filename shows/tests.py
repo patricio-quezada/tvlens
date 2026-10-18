@@ -9,6 +9,7 @@ import math
 from io import StringIO
 
 from django.contrib.auth.models import AnonymousUser, User
+from django.core import mail
 from django.core.management import call_command
 from django.db.models import Max
 from django.test import TestCase, override_settings
@@ -3329,6 +3330,11 @@ class SearchElsewhereHintTests(TestCase):
             resp = self.client.get(reverse("shows:search"), {"q": "severance"})
         mocked.assert_called_once()
         self.assertTrue(resp.context["elsewhere"])
+        # The page, not only the context: the hint sat inside the template's
+        # "nothing matched" branch, so episode-only results hid it (Halo,
+        # 2026-10-18) while this context check still passed.
+        self.assertContains(resp, "Office Games")
+        self.assertContains(resp, "On TMDb, but not in TVLens yet")
 
 
 class MobileNavSearchTests(TestCase):
@@ -5195,3 +5201,132 @@ class ShowRequestTests(TestCase):
             body = self.client.get(reverse("shows:search"), {"q": "severance"}).content.decode()
         self.assertNotIn("Request it", body)
         self.assertIn("Too few TMDb votes to add", body)
+
+
+class PasswordResetMailFailureTests(TestCase):
+    """A failed reset email looks the same as a sent one, so the reset page
+    never reveals which addresses have accounts. Django's PasswordResetForm
+    catches and logs the send error itself; this holds it to that."""
+
+    def setUp(self):
+        User.objects.create_user("reader", "reader@example.com", "pw-12345-long")
+
+    def test_smtp_failure_still_redirects_to_done(self):
+        from unittest import mock
+
+        with (
+            mock.patch(
+                "django.core.mail.backends.locmem.EmailBackend.send_messages",
+                side_effect=OSError("smtp down"),
+            ),
+            self.assertLogs("django.contrib.auth", level="ERROR"),
+        ):
+            response = self.client.post(
+                "/accounts/password_reset/", {"email": "reader@example.com"}
+            )
+        self.assertRedirects(response, "/accounts/password_reset/done/")
+
+    def test_reset_email_still_sends(self):
+        self.client.post("/accounts/password_reset/", {"email": "reader@example.com"})
+        self.assertEqual(len(mail.outbox), 1)
+
+
+class NetworkInPlainWordsTests(TestCase):
+    """ "halo paramount" is a title and a service. As one phrase it matched
+    nothing here and nothing on TMDb (2026-10-18). The service words narrow
+    the way network: does, and TMDb gets the title alone."""
+
+    @classmethod
+    def setUpTestData(cls):
+        paramount = Network.objects.create(tmdb_id=4330, name="Paramount+")
+        hbo = Network.objects.create(tmdb_id=49, name="HBO")
+        cls.yellowstone = Show.objects.create(
+            tmdb_id=73586,
+            name="Yellowstone",
+            slug="yellowstone",
+            first_air_date="2018-06-20",
+            vote_average=8.2,
+            vote_count=3000,
+            original_language="en",
+            status="Ended",
+        )
+        cls.yellowstone.networks.add(paramount)
+        cls.other = Show.objects.create(
+            tmdb_id=73587,
+            name="Yellowstone Wildlife",
+            slug="yellowstone-wildlife",
+            first_air_date="2019-01-01",
+            vote_average=7.0,
+            vote_count=200,
+            original_language="en",
+            status="Ended",
+        )
+        cls.other.networks.add(hbo)
+
+    def test_trailing_service_narrows_to_that_network(self):
+        shows, parsed = run_search("yellowstone paramount")
+        self.assertEqual([s.name for s in shows], ["Yellowstone"])
+        self.assertEqual(parsed.network_from_text, "paramount")
+        self.assertEqual(parsed.raw, "yellowstone paramount")
+
+    def test_leading_service_narrows_too(self):
+        shows, parsed = run_search("hbo yellowstone")
+        self.assertEqual([s.name for s in shows], ["Yellowstone Wildlife"])
+
+    def test_exact_turns_the_reading_off(self):
+        shows, parsed = run_search("yellowstone paramount", fuzzy=False)
+        self.assertEqual(shows, [])
+        self.assertIsNone(parsed.network_from_text)
+
+    def test_a_title_match_is_never_reread(self):
+        shows, parsed = run_search("yellowstone")
+        self.assertIsNone(parsed.network_from_text)
+        self.assertEqual(len(shows), 2)
+
+    def test_tmdb_gets_the_title_alone_and_the_page_names_the_reading(self):
+        from unittest.mock import patch
+
+        with patch(
+            "shows.views.TMDBClient.search_tv",
+            return_value=[
+                {
+                    "id": 52814,
+                    "name": "Halo",
+                    "first_air_date": "2022-03-24",
+                    "vote_count": 3300,
+                    "vote_average": 8.2,
+                    "overview": "",
+                }
+            ],
+        ) as mocked:
+            resp = self.client.get(reverse("shows:search"), {"q": "halo paramount"})
+        mocked.assert_called_once_with("halo")
+        self.assertContains(resp, "network: paramount")
+        self.assertContains(resp, "Search instead for “halo paramount”")
+        self.assertContains(resp, "Halo")
+
+    def test_spacing_operators_and_years_do_not_loop(self):
+        for q in (
+            "yellowstone  paramount",
+            "yellowstone 2020 paramount",
+            "yellowstone genre:drama paramount",
+            "yellowstone paramount paramount",
+        ):
+            with self.subTest(q=q):
+                shows, parsed = run_search(q)
+                self.assertEqual(parsed.network_from_text, "paramount")
+
+    def test_a_prefix_of_a_network_name_is_not_a_network(self):
+        Network.objects.create(tmdb_id=71, name="The CW")
+        shows, parsed = run_search("the yellowstonee")
+        self.assertIsNone(parsed.network_from_text)
+
+    def test_a_one_letter_title_does_not_list_the_network(self):
+        shows, parsed = run_search("x paramount")
+        self.assertIsNone(parsed.network_from_text)
+        self.assertEqual(shows, [])
+
+    def test_misspelled_title_still_gets_its_correction(self):
+        shows, parsed = run_search("yelowstone paramount")
+        self.assertEqual([s.name for s in shows], ["Yellowstone"])
+        self.assertEqual(parsed.network_from_text, "paramount")

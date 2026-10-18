@@ -12,6 +12,15 @@ primary_region = "iad"
   CSRF_TRUSTED_ORIGINS = "https://app.tvlens.org,https://tvlens.fly.dev"
   # Fly's proxy ends HTTPS and tells the app so in X-Forwarded-Proto.
   TRUST_PROXY_SSL_HEADER = "True"
+  # Password reset mail goes through iCloud custom domain mail. The Apple ID
+  # and its app-specific password are Fly secrets (EMAIL_HOST_USER and
+  # EMAIL_HOST_PASSWORD).
+  EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+  EMAIL_HOST = "smtp.mail.me.com"
+  EMAIL_PORT = "587"
+  EMAIL_USE_SSL = "False"
+  EMAIL_USE_TLS = "True"
+  DEFAULT_FROM_EMAIL = "support@tvlens.org"
 
 [mounts]
   source = "tvlens_data"

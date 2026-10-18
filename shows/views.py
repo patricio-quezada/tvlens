@@ -493,6 +493,10 @@ def search(request):
         for bad in parsed.unknown:
             tmdb_query = tmdb_query.replace(bad, "", 1)
         tmdb_query = " ".join(tmdb_query.split())
+        # "halo paramount" was read as Halo on Paramount. TMDb searches titles,
+        # so it gets the title alone.
+        if parsed.network_from_text:
+            tmdb_query = parsed.searchable_text
         if tmdb_query:
             try:
                 have = set(Show.objects.values_list("tmdb_id", flat=True))

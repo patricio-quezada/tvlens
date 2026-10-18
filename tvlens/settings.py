@@ -198,21 +198,20 @@ REVIEWS_PER_PAGE = 10
 EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "noreply@tvlens.org")
 
-# Production mail goes through Cloudflare Email Service over SMTP: set
-# EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend and put a
-# Cloudflare API token with "Email Sending: Edit" in EMAIL_HOST_PASSWORD (a Fly
-# secret). The username is the literal string "api_token". Port 465 is
-# implicit TLS, hence USE_SSL rather than USE_TLS.
+# Production mail goes through iCloud custom domain mail (STARTTLS on 587); the
+# settings are in fly.toml and the Apple ID and its app-specific password are
+# Fly secrets. Cloudflare Email Service is the later path: port 465 with
+# USE_SSL, user "api_token", and an API token with "Email Sending: Edit" as the
+# password.
 EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.mx.cloudflare.net")
 EMAIL_PORT = int(os.getenv("EMAIL_PORT", "465"))
 EMAIL_USE_SSL = env_bool("EMAIL_USE_SSL", "True")
-# iCloud Mail (his custom domain) takes STARTTLS on 587 instead: set
-# EMAIL_HOST=smtp.mail.me.com, EMAIL_PORT=587, EMAIL_USE_SSL=False,
-# EMAIL_USE_TLS=True, and sign in with the Apple ID and an app-specific password.
 EMAIL_USE_TLS = env_bool("EMAIL_USE_TLS", "False")
 EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "api_token")
 EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
-EMAIL_TIMEOUT = 10  # a stalled mail server must not hold a request forever
+# A stalled mail server must not hold a request: each of the five SMTP steps
+# can wait this long, and gunicorn kills a worker at 30s.
+EMAIL_TIMEOUT = 5
 
 # Beta invites: comma-separated codes, each good for one sign-up. Unset means
 # no codes, so sign-up is closed and browsing stays open. Set them on Fly with

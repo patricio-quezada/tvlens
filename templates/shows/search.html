@@ -80,6 +80,13 @@
 {% if q %}
 {% comment %}A correction the reader cannot see is a lie about what they asked
    for. Name the term actually searched, and offer the original back.{% endcomment %}
+{% if parsed.network_from_text and not parsed.suggestion %}
+{% comment %}The chips above already say "network: paramount" and what was
+   searched. This only offers the words back as typed.{% endcomment %}
+<p class="did-you-mean">
+    <a href="{% url 'shows:search' %}?q={{ q|urlencode }}&amp;exact=1">Search instead for “{{ q }}”</a>
+</p>
+{% endif %}
 {% if parsed.suggestion %}
 <p class="did-you-mean">
     Showing results for <strong>{{ parsed.suggestion }}</strong>.
@@ -102,11 +109,13 @@
     Nothing in the catalog matched “{{ q }}”. Search covers titles, cast, crew,
     characters, genres, networks, season names and episode synopses.
 </p>
+{% endif %}
 {% comment %}The catalog is the most popular N shows, not every show that
 exists, so a reader can search something real and get nothing. Saying "we know
 about this one, we just do not have it" is the difference between a small
-catalog and broken search. Nothing here is ingested; adding a show is
-deliberate, via manage.py ingest_show.{% endcomment %}
+catalog and broken search. It shows next to results too: a search that only
+matched episode synopses (Halo, 2026-10-18) is still a show we do not have.
+Nothing here is ingested; a reader's request is, nightly.{% endcomment %}
 {% if elsewhere %}
 <div class="elsewhere">
     <h2>On TMDb, but not in TVLens yet</h2>
@@ -143,7 +152,6 @@ deliberate, via manage.py ingest_show.{% endcomment %}
         to request one.{% endif %}
     </p>
 </div>
-{% endif %}
 {% endif %}
 {% else %}
 <div class="search-hint">

@@ -35,7 +35,7 @@ from difflib import SequenceMatcher, get_close_matches
 from django.db import connection
 from django.db.models import Q
 
-from .models import Person, Show
+from .models import Network, Person, Show
 from .recommenders import SQLITE_MAX_VARS_SAFE
 
 # Rank buckets. A show's score is the best bucket that matched it, so a title
@@ -267,6 +267,47 @@ def _word(field, term):
     """
     pattern = r"\b" + re.escape(term)
     return Q(**{f"{field}__icontains": term, f"{field}__iregex": pattern})
+
+
+def _split_network(raw_query, term):
+    """Rewrite "halo paramount" as `halo network:"paramount"` when the trailing
+    words name a network the catalog holds, or the leading ones do.
+
+    Readers type the service after the title. As free text the whole string
+    is one phrase, so it matched nothing, and TMDb, which searches titles,
+    found nothing either. Longest run first, so "criminal minds paramount+"
+    keeps "paramount+" whole.
+
+    The words must be a network's whole name, spacing and punctuation aside
+    ("paramount" is Paramount+, "hbo max" is HBO Max). A prefix would let
+    "the" mean The CW and "a" mean ABC. What is left must still be text worth
+    searching, or "x paramount" lists every Paramount+ show.
+
+    Returns (rewritten query, network words), or None.
+    """
+    words = term.split()
+    if len(words) < 2:
+        return None
+    keys = {_title_key(name) for name in Network.objects.values_list("name", flat=True)}
+    for n in range(len(words) - 1, 0, -1):
+        for rest, network, leading in (
+            (words[:-n], words[-n:], False),
+            (words[n:], words[:n], True),
+        ):
+            name = " ".join(network)
+            if len(" ".join(rest)) < MIN_TERM or '"' in name or _title_key(name) not in keys:
+                continue
+            # Cut the words out of what was typed, not out of `term`: term has
+            # its spacing collapsed and its operators and years taken out, so
+            # it need not appear in the raw query at all.
+            pattern = r"(?<!\S)" + r"\s+".join(map(re.escape, network)) + r"(?!\S)"
+            found = list(re.finditer(pattern, raw_query, re.IGNORECASE))
+            if not found:
+                continue
+            cut = found[0] if leading else found[-1]
+            rewritten = raw_query[: cut.start()] + raw_query[cut.end() :]
+            return f'{" ".join(rewritten.split())} network:"{name}"', name
+    return None
 
 
 def _title_key(text):
@@ -517,6 +558,7 @@ def search(
     limit=120,
     fuzzy=True,
     user=None,
+    _split=True,
 ):
     """Run a catalog search and return (shows, parsed).
 
@@ -532,6 +574,7 @@ def search(
     """
     parsed = ParsedQuery(raw_query)
     parsed.suggestion = None
+    parsed.network_from_text = None
 
     if parsed.is_empty or parsed.too_short:
         return [], parsed
@@ -550,6 +593,31 @@ def search(
                 if ranks.get(show_id, 0) < weight:
                     ranks[show_id] = weight
         matched = set(ranks)
+        if not matched and fuzzy and _split:
+            # A service named in plain words narrows, the way network: does.
+            # Before the spelling fallback, which would otherwise swap
+            # "paramount" for a near title; the rerun keeps that fallback for
+            # the title words. It runs once (_split=False), since a rewrite is
+            # a different query and could otherwise split again forever. The
+            # page names the reading, and exact=1 turns it off.
+            split = _split_network(raw_query, term)
+            if split:
+                rewritten, network = split
+                shows, reparsed = search(
+                    rewritten,
+                    status=status,
+                    min_score=min_score,
+                    min_votes=min_votes,
+                    language=language,
+                    main_cast_only=main_cast_only,
+                    limit=limit,
+                    fuzzy=fuzzy,
+                    user=user,
+                    _split=False,
+                )
+                reparsed.network_from_text = network
+                reparsed.raw = raw_query
+                return shows, reparsed
         if not matched:
             # Nothing matched exactly. Try once more against the closest real
             # name in the catalog, and say so rather than silently swapping
