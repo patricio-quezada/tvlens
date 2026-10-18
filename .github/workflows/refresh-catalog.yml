@@ -50,6 +50,8 @@ jobs:
           ( while true; do curl --silent -o /dev/null https://app.tvlens.org/; sleep 30; done ) &
           trap 'kill $!' EXIT
           # Readers' requests first, without a rebuild: refresh_catalog
-          # rebuilds the graph once for both.
-          flyctl ssh console -a tvlens -C "python manage.py ingest_requests --skip-rebuild"
+          # rebuilds the graph once for both. Never fatal: a failed request
+          # step must not cost the night's refresh.
+          flyctl ssh console -a tvlens -C "python manage.py ingest_requests --skip-rebuild" \
+            || echo "::warning::ingest_requests failed; refreshing anyway"
           flyctl ssh console -a tvlens -C "python manage.py refresh_catalog $args"

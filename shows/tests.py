@@ -5116,30 +5116,82 @@ class ShowRequestTests(TestCase):
         response = self.post(next="https://evil.example/")
         self.assertEqual(response["Location"], reverse("shows:search"))
 
-    def test_the_nightly_job_ingests_each_pending_show_once(self):
+    def run_nightly(self, statuses, ingest=None):
+        """Run ingest_requests against a fake TMDb: {tmdb_id: (status, votes)}."""
+        from types import SimpleNamespace
         from unittest.mock import patch
 
+        def fake_get(url, timeout):
+            status, votes = statuses[int(url.rsplit("/", 1)[1])]
+            return SimpleNamespace(
+                status_code=status, ok=status < 400, json=lambda: {"vote_count": votes}
+            )
+
+        def fake_init(ingestor):
+            ingestor.client = SimpleNamespace(
+                base_url="https://tmdb", session=SimpleNamespace(get=fake_get)
+            )
+
+        def fake_ingest(_self, tmdb_id):
+            return Show.objects.create(tmdb_id=tmdb_id, name=f"Show {tmdb_id}")
+
+        with (
+            patch.object(Ingestor, "__init__", fake_init),
+            patch.object(Ingestor, "ingest_show", ingest or fake_ingest) as mocked,
+        ):
+            call_command("ingest_requests", "--skip-rebuild", stdout=StringIO())
+        return mocked
+
+    def test_the_nightly_job_ingests_each_pending_show_once(self):
         other = User.objects.create_user("other", password="pw-other-9")
         ShowRequest.objects.create(user=self.user, tmdb_id=555555, name="Severance")
         ShowRequest.objects.create(user=other, tmdb_id=555555, name="Severance")
-        ShowRequest.objects.create(user=self.user, tmdb_id=777, name="Gone")
+        self.run_nightly({555555: (200, 5000)})
+        self.assertEqual(Show.objects.filter(tmdb_id=555555).count(), 1)
 
-        def fake_ingest(_self, tmdb_id):
-            if tmdb_id == 777:
-                return None
-            return Show.objects.create(tmdb_id=tmdb_id, name="Severance")
+        from unittest.mock import MagicMock
 
-        with (
-            patch.object(Ingestor, "__init__", return_value=None),
-            patch.object(Ingestor, "ingest_show", fake_ingest),
-        ):
-            call_command("ingest_requests", "--skip-rebuild", stdout=StringIO())
-        self.assertTrue(Show.objects.filter(tmdb_id=555555).exists())
-        self.assertTrue(ShowRequest.objects.get(tmdb_id=777).failed)
-
-        with (
-            patch.object(Ingestor, "__init__", return_value=None),
-            patch.object(Ingestor, "ingest_show") as again,
-        ):
-            call_command("ingest_requests", "--skip-rebuild", stdout=StringIO())
+        again = MagicMock()
+        self.run_nightly({555555: (200, 5000)}, ingest=again)
         again.assert_not_called()
+
+    def test_only_a_final_answer_marks_a_request_failed(self):
+        for tmdb_id in (404, 503, 50):
+            ShowRequest.objects.create(user=self.user, tmdb_id=tmdb_id, name=str(tmdb_id))
+        self.run_nightly({404: (404, 0), 503: (503, 0), 50: (200, 50)})
+        failed = set(ShowRequest.objects.filter(failed=True).values_list("tmdb_id", flat=True))
+        # Missing and under the vote floor are final; a 503 waits for tomorrow.
+        self.assertEqual(failed, {404, 50})
+        self.assertFalse(Show.objects.exists())
+
+    def test_one_show_raising_does_not_stop_the_rest(self):
+        ShowRequest.objects.create(user=self.user, tmdb_id=1, name="Bad")
+        ShowRequest.objects.create(user=self.user, tmdb_id=2, name="Good")
+
+        def flaky(_self, tmdb_id):
+            if tmdb_id == 1:
+                raise RuntimeError("database is locked")
+            return Show.objects.create(tmdb_id=tmdb_id, name="Good")
+
+        self.run_nightly({1: (200, 500), 2: (200, 500)}, ingest=flaky)
+        self.assertTrue(Show.objects.filter(tmdb_id=2).exists())
+        self.assertFalse(ShowRequest.objects.get(tmdb_id=1).failed)
+
+    def test_a_reader_can_have_at_most_twenty_open_requests(self):
+        from .views import MAX_OPEN_REQUESTS
+
+        for i in range(MAX_OPEN_REQUESTS):
+            ShowRequest.objects.create(user=self.user, tmdb_id=1000 + i, name=str(i))
+        self.client.force_login(self.user)
+        self.post()
+        self.assertFalse(ShowRequest.objects.filter(tmdb_id=555555).exists())
+
+    def test_shows_under_the_vote_floor_get_no_button(self):
+        from unittest.mock import patch
+
+        few = [dict(self.TMDB_ONLY[0], vote_count=12)]
+        self.client.force_login(self.user)
+        with patch("shows.views.TMDBClient.search_tv", return_value=few):
+            body = self.client.get(reverse("shows:search"), {"q": "severance"}).content.decode()
+        self.assertNotIn("Request it", body)
+        self.assertIn("Too few TMDb votes to add", body)

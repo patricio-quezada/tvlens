@@ -16,6 +16,7 @@ from django.utils.text import slugify
 from django.views.decorators.http import require_POST
 
 from .forms import RegistrationForm
+from .ingestion import MIN_VOTE_COUNT
 from .models import Genre, Rating, Show, ShowRequest, ShowTag, Tag
 from .personalization import (
     build_profile,
@@ -503,6 +504,7 @@ def search(request):
                         "votes": r.get("vote_count") or 0,
                         "score": r.get("vote_average") or 0,
                         "overview": (r.get("overview") or "")[:180],
+                        "requestable": (r.get("vote_count") or 0) >= MIN_VOTE_COUNT,
                     }
                     for r in TMDBClient().search_tv(tmdb_query)
                     if r.get("id") not in have and (r.get("vote_count") or 0) > 0
@@ -775,6 +777,9 @@ def my_ratings(request):
     )
 
 
+MAX_OPEN_REQUESTS = 20
+
+
 @login_required
 @require_POST
 def request_show(request):
@@ -794,6 +799,20 @@ def request_show(request):
     name = request.POST.get("name", "").strip()[:300] or f"TMDb {tmdb_id}"
     if Show.objects.filter(tmdb_id=tmdb_id).exists():
         messages.info(request, f"{name} is already in TVLens.")
+        return redirect(back)
+    have = Show.objects.values("tmdb_id")
+    open_requests = (
+        ShowRequest.objects.filter(user=request.user, failed=False)
+        .exclude(tmdb_id__in=have)
+        .exclude(tmdb_id=tmdb_id)
+    )
+    # One reader cannot fill the queue: it drains 10 a night, oldest first.
+    if open_requests.count() >= MAX_OPEN_REQUESTS:
+        messages.error(
+            request,
+            f"You have {MAX_OPEN_REQUESTS} requests waiting. They're added nightly; "
+            "try again once some arrive.",
+        )
         return redirect(back)
     ShowRequest.objects.get_or_create(
         user=request.user,

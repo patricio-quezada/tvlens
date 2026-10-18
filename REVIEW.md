@@ -20,6 +20,13 @@ For the stack and the commands, see `CLAUDE.md`.
   HTTPS, or secrets.
 - **Sign-up that gets around the invite codes**, or an invite code that works twice.
 - **Open redirects** through `next`.
+- **A brief TMDb outage treated as a final answer.** `TMDBClient._get` returns
+  None for a timeout, a 5xx, and a 404 alike. Only a 404 means the show
+  doesn't exist.
+- **A nightly step that can cost the night's refresh.** Every step before
+  `refresh_catalog` must be non-fatal and bounded in time.
+- **Input from readers with no cap.** Anything a reader can queue needs a
+  per-reader limit and the vote floor (`MIN_VOTE_COUNT`).
 
 ## Skip
 - `demo/`, `docs/artifacts/`, `staticfiles/`, and generated migrations, unless

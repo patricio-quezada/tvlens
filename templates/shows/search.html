@@ -117,7 +117,9 @@ deliberate, via manage.py ingest_show.{% endcomment %}
             <span class="elsewhere-year">{{ s.year }}</span>{% endif %}
             <span class="elsewhere-votes">{{ s.score|floatformat:1 }} · {{ s.votes }} votes</span>
             {% if user.is_authenticated %}
-            {% if s.tmdb_id in requested_ids %}
+            {% if not s.requestable %}
+            <span class="elsewhere-requested muted">Too few TMDb votes to add</span>
+            {% elif s.tmdb_id in requested_ids %}
             <span class="elsewhere-requested">Requested</span>
             {% else %}
             <form class="elsewhere-request" method="post" action="{% url 'shows:request_show' %}">
@@ -226,6 +228,7 @@ deliberate, via manage.py ingest_show.{% endcomment %}
                                 border: 1px solid var(--accent); color: var(--accent);
                                 background: transparent; border-radius: 4px; }
     .elsewhere-requested { margin-left: .6rem; font-size: .82rem; color: var(--accent); }
+    .elsewhere-requested.muted { color: inherit; opacity: .6; }
     .elsewhere-note { margin: 1.4rem 0 0; opacity: .6; font-size: .88rem; }
     .did-you-mean, .search-count, .empty, .search-hint { max-width: 640px; margin-left: auto; margin-right: auto; }
     .search-count { margin-top: 1.5rem; margin-bottom: 1rem; color: var(--text-secondary); font-size: 0.9rem; }

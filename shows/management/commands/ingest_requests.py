@@ -4,8 +4,14 @@ Ingest the shows readers asked for from search (ShowRequest).
 Run nightly by the refresh-catalog GitHub Action, before refresh_catalog.
 Each requested TMDb id is ingested once, oldest request first, however many
 readers asked for it. A request is done once its show exists, so there is no
-status to update on success; an id TMDb returns nothing for is marked failed
-so it is not retried every night.
+status to update on success.
+
+A request is marked failed, and never retried, only when TMDb gives a final
+answer: a 404, or a show under MIN_VOTE_COUNT. Shows under the floor are the
+soaps and nightly bulletins that take minutes to ingest and that
+prune_low_signal deletes again, which would bring the request back every
+night. A timeout or a 5xx is not an answer, so the request just waits for the
+next night. One show raising an error never stops the rest.
 
 Usage:
     python manage.py ingest_requests
@@ -15,7 +21,7 @@ Usage:
 from django.core.management import call_command
 from django.core.management.base import BaseCommand
 
-from shows.ingestion import Ingestor
+from shows.ingestion import MIN_VOTE_COUNT, Ingestor
 from shows.models import Show, ShowRequest
 
 
@@ -47,16 +53,37 @@ class Command(BaseCommand):
             return
 
         ingestor = Ingestor()
+        client = ingestor.client
         added = 0
         for tmdb_id in pending:
-            show = ingestor.ingest_show(tmdb_id)
+            try:
+                resp = client.session.get(f"{client.base_url}/tv/{tmdb_id}", timeout=15)
+            except Exception as exc:
+                self.stdout.write(self.style.WARNING(f"TMDb unreachable for {tmdb_id}: {exc}"))
+                continue
+            if resp.status_code == 404:
+                self.fail(tmdb_id, "TMDb has no such show")
+                continue
+            if not resp.ok:
+                self.stdout.write(self.style.WARNING(f"TMDb {resp.status_code} for {tmdb_id}"))
+                continue
+            votes = resp.json().get("vote_count") or 0
+            if votes < MIN_VOTE_COUNT:
+                self.fail(tmdb_id, f"{votes} votes, under the floor of {MIN_VOTE_COUNT}")
+                continue
+            try:
+                show = ingestor.ingest_show(tmdb_id)
+            except Exception as exc:
+                self.stdout.write(self.style.WARNING(f"Ingest failed for {tmdb_id}: {exc}"))
+                continue
             if show:
                 added += 1
                 self.stdout.write(self.style.SUCCESS(f"Ingested {show.name} ({tmdb_id})"))
-            else:
-                ShowRequest.objects.filter(tmdb_id=tmdb_id).update(failed=True)
-                self.stdout.write(self.style.WARNING(f"TMDb returned nothing for {tmdb_id}"))
 
         if added and not options["skip_rebuild"]:
             self.stdout.write("\nRebuilding the Layer 1 graph (ADR-07) ...")
             call_command("rebuild_similar_shows")
+
+    def fail(self, tmdb_id, reason):
+        ShowRequest.objects.filter(tmdb_id=tmdb_id).update(failed=True)
+        self.stdout.write(self.style.WARNING(f"Not adding {tmdb_id}: {reason}"))
