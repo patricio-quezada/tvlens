@@ -128,9 +128,10 @@ Nothing here is ingested; a reader's request is, nightly.{% endcomment %}
     <ul>
         {% for s in elsewhere %}
         <li>
+            <div class="elsewhere-head">
             <span class="elsewhere-name">{{ s.name }}</span>{% if s.year %}
             <span class="elsewhere-year">{{ s.year }}</span>{% endif %}
-            <span class="elsewhere-votes">{{ s.score|floatformat:1 }} · {{ s.votes }} votes</span>
+            <span class="elsewhere-votes">{{ s.score|floatformat:1 }} · {{ s.votes }} vote{{ s.votes|pluralize }}</span>
             {% if user.is_authenticated %}
             {% if s.tmdb_id in requested_ids %}
             <span class="elsewhere-requested">Requested</span>
@@ -145,6 +146,7 @@ Nothing here is ingested; a reader's request is, nightly.{% endcomment %}
             </form>
             {% endif %}
             {% endif %}
+            </div>
             {% if s.overview %}<p class="elsewhere-overview">{{ s.overview }}</p>{% endif %}
         </li>
         {% endfor %}
@@ -233,14 +235,16 @@ Nothing here is ingested; a reader's request is, nightly.{% endcomment %}
     .elsewhere ul { list-style: none; margin: 0; padding: 0;
                     display: flex; flex-direction: column; gap: 1.1rem; }
     .elsewhere-name { font-weight: 600; }
-    .elsewhere-year, .elsewhere-votes { opacity: .6; font-size: .9rem; margin-left: .4rem; }
+    /* One wrapping row, so a long title pushes the button onto its own line
+       flush left under the name, not indented by a leftover margin. */
+    .elsewhere-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: .2rem .5rem; }
+    .elsewhere-year, .elsewhere-votes { opacity: .6; font-size: .9rem; }
     .elsewhere-overview { margin: .25rem 0 0; opacity: .75; font-size: .92rem; }
-    .elsewhere-request { display: inline; margin-left: .6rem; }
+    .elsewhere-request { display: inline; }
     .elsewhere-request button { font: inherit; font-size: .82rem; padding: .15rem .6rem; cursor: pointer;
                                 border: 1px solid var(--accent); color: var(--accent);
                                 background: transparent; border-radius: 4px; }
-    .elsewhere-requested { margin-left: .6rem; font-size: .82rem; color: var(--accent); }
-    .elsewhere-requested.muted { color: inherit; opacity: .6; }
+    .elsewhere-requested { font-size: .82rem; color: var(--accent); }
     .elsewhere-note { margin: 1.4rem 0 0; opacity: .6; font-size: .88rem; }
     .did-you-mean, .search-count, .empty, .search-hint { max-width: 640px; margin-left: auto; margin-right: auto; }
     .search-count { margin-top: 1.5rem; margin-bottom: 1rem; color: var(--text-secondary); font-size: 0.9rem; }
