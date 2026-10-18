@@ -6,7 +6,7 @@ import time
 from django.contrib import messages
 from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
-from django.db.models import Count
+from django.db.models import Count, OuterRef, Subquery
 from django.http import HttpResponseBadRequest, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -258,7 +258,13 @@ def index(request):
 
 
 def genre(request, pk):
-    """All shows in one genre, best-rated first. Powers the home 'Browse by genre' pills."""
+    """All shows in one genre, best-rated first. Powers the home 'Browse by genre' pills.
+
+    A signed-in reader browses for something to watch, so the shows they have
+    already seen are left out by default, the same rule the recommendation rows
+    follow (#27). `?seen=1` puts them back, each card carrying the reader's own
+    rating instead of TMDb's, so a browse can also answer "did I rate this?".
+    """
     genre = get_object_or_404(Genre, pk=pk)
     shows = (
         Show.objects.filter(genres=genre)
@@ -266,12 +272,27 @@ def genre(request, pk):
         .order_by("-vote_average", "name")
     )
     favorite_genre_ids: set = set()
+    include_seen = request.GET.get("seen") == "1"
+    seen_count = 0
     if request.user.is_authenticated:
         favorite_genre_ids = favorite_genre_ids_for(request.user)
+        seen = Show.objects.watched_by(request.user).filter(genres=genre).values("id")
+        seen_count = seen.count()
+        if include_seen:
+            own = Rating.objects.filter(user=request.user, show=OuterRef("pk"))
+            shows = shows.annotate(user_score=Subquery(own.values("score")[:1]))
+        else:
+            shows = shows.exclude(id__in=seen)
     return render(
         request,
         "shows/genre.html",
-        {"genre": genre, "shows": shows, "favorite_genre_ids": favorite_genre_ids},
+        {
+            "genre": genre,
+            "shows": shows,
+            "favorite_genre_ids": favorite_genre_ids,
+            "include_seen": include_seen,
+            "seen_count": seen_count,
+        },
     )
 
 

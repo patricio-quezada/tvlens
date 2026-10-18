@@ -2338,6 +2338,29 @@ class GenrePageTests(TestCase):
             self.assertIn(f"Drama {i}", body)
         self.assertNotIn("A Comedy", body)
 
+    def test_a_show_the_reader_rated_is_hidden_from_their_genre_page(self):
+        Rating.objects.create(user=self.user, show=self.drama0, score=4.5)
+        self.client.force_login(self.user)
+        body = self.client.get(reverse("shows:genre", args=[self.drama.id])).content.decode()
+        self.assertNotIn("Drama 0", body)
+        self.assertIn("Drama 1", body)
+        self.assertIn("1 you've seen is hidden", body)
+
+    def test_seen_1_brings_rated_shows_back_with_the_readers_own_score(self):
+        Rating.objects.create(user=self.user, show=self.drama0, score=4.5)
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("shows:genre", args=[self.drama.id]), {"seen": "1"})
+        by_name = {s.name: s for s in response.context["shows"]}
+        self.assertEqual(by_name["Drama 0"].user_score, 4.5)
+        self.assertIsNone(by_name["Drama 1"].user_score)
+        self.assertIn("poster-rating yours", response.content.decode())
+
+    def test_an_anonymous_visitor_sees_every_show_in_the_genre(self):
+        Rating.objects.create(user=self.user, show=self.drama0, score=4.5)
+        body = self.client.get(reverse("shows:genre", args=[self.drama.id])).content.decode()
+        self.assertIn("Drama 0", body)
+        self.assertNotIn("you've seen", body)
+
     def test_visiting_a_genre_leaves_no_trace_on_the_home_page(self):
         # The reported "stuck genre". No view reads a session, a cookie or a
         # query string, so the home page cannot remember a visit: rendered

@@ -5,6 +5,14 @@
     <h1>{{ genre.name }}</h1>
     <p>
         {{ shows|length }} show{{ shows|length|pluralize }}, best-rated first.
+        {% if seen_count %}
+        {% if include_seen %}
+        Your ratings are in amber. <a href="{{ request.path }}">Hide the {{ seen_count }} you've seen</a>
+        {% else %}
+        {{ seen_count }} you've seen {{ seen_count|pluralize:"is,are" }} hidden. <a href="?seen=1">Show them</a>
+        {% endif %}
+        &middot;
+        {% endif %}
         <a href="{% url 'shows:index' %}">← All shows</a>
     </p>
 </div>
