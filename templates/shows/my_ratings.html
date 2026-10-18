@@ -22,7 +22,6 @@
     <p>
         {% if rating_count %}
         {{ rating_count }} show{{ rating_count|pluralize }} rated, averaging ★ {{ average_score|floatformat:1 }}. Most recently rated first.
-        <a href="{% url 'shows:index' %}">← All shows</a>
         {% else %}
         Nothing rated yet.
         {% endif %}

@@ -12,7 +12,7 @@
             <a href="{% url 'login' %}?next={{ request.path }}">Log in</a>
             to see what you have filed here.
         {% endif %}
-        <a href="{% url 'shows:index' %}">← All shows</a>
+        <a href="{% url 'shows:index' %}">← Home</a>
     </p>
 </div>
 {% include "shows/_grid.html" %}
