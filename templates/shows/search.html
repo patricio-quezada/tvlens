@@ -132,9 +132,7 @@ Nothing here is ingested; a reader's request is, nightly.{% endcomment %}
             <span class="elsewhere-year">{{ s.year }}</span>{% endif %}
             <span class="elsewhere-votes">{{ s.score|floatformat:1 }} · {{ s.votes }} votes</span>
             {% if user.is_authenticated %}
-            {% if not s.requestable %}
-            <span class="elsewhere-requested muted">Too few TMDb votes to add</span>
-            {% elif s.tmdb_id in requested_ids %}
+            {% if s.tmdb_id in requested_ids %}
             <span class="elsewhere-requested">Requested</span>
             {% else %}
             <form class="elsewhere-request" method="post" action="{% url 'shows:request_show' %}">

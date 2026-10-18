@@ -26,7 +26,11 @@ For the stack and the commands, see `CLAUDE.md`.
 - **A nightly step that can cost the night's refresh.** Every step before
   `refresh_catalog` must be non-fatal and bounded in time.
 - **Input from readers with no cap.** Anything a reader can queue needs a
-  per-reader limit and the vote floor (`MIN_VOTE_COUNT`).
+  per-reader limit and a bound on what one item can cost (requests: the open
+  request cap, the nightly `--limit`, and no long low-vote shows).
+- **One reader's request ranking for everyone.** Requested shows skip the vote
+  floor, so a catalog sort on `vote_average` alone lets a 10.0 on three votes
+  lead. Sort by `weighted_rating` instead.
 
 ## Skip
 - `demo/`, `docs/artifacts/`, `staticfiles/`, and generated migrations, unless

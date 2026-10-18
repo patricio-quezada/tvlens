@@ -7,11 +7,14 @@ readers asked for it. A request is done once its show exists, so there is no
 status to update on success.
 
 A request is marked failed, and never retried, only when TMDb gives a final
-answer: a 404, or a show under MIN_VOTE_COUNT. Shows under the floor are the
-soaps and nightly bulletins that take minutes to ingest and that
-prune_low_signal deletes again, which would bring the request back every
-night. A timeout or a 5xx is not an answer, so the request just waits for the
-next night. One show raising an error never stops the rest.
+answer: a 404, or a daily soap or news bulletin. MIN_VOTE_COUNT is the floor
+for bulk ingest, not for requests (his call, 2026-10-18): a reader asking for
+a show by name is the signal the floor stands in for, and Halo: Nightfall has
+97 votes. What the floor was really keeping out are the shows under it with
+thousands of episodes, which take minutes to ingest and connect to nothing, so
+only those (over MAX_LOW_VOTE_EPISODES) are refused. A timeout or a 5xx is not
+an answer, so the request just waits for the next night. One show raising an
+error never stops the rest. prune_low_signal spares requested shows.
 
 Usage:
     python manage.py ingest_requests
@@ -23,6 +26,10 @@ from django.core.management.base import BaseCommand
 
 from shows.ingestion import MIN_VOTE_COUNT, Ingestor
 from shows.models import Show, ShowRequest
+
+# A requested show under the bulk floor is refused only when it is this long:
+# the daily soaps and news bulletins the floor was built to keep out.
+MAX_LOW_VOTE_EPISODES = 1000
 
 
 class Command(BaseCommand):
@@ -67,9 +74,14 @@ class Command(BaseCommand):
             if not resp.ok:
                 self.stdout.write(self.style.WARNING(f"TMDb {resp.status_code} for {tmdb_id}"))
                 continue
-            votes = resp.json().get("vote_count") or 0
-            if votes < MIN_VOTE_COUNT:
-                self.fail(tmdb_id, f"{votes} votes, under the floor of {MIN_VOTE_COUNT}")
+            data = resp.json()
+            votes = data.get("vote_count") or 0
+            episodes = data.get("number_of_episodes") or 0
+            if votes < MIN_VOTE_COUNT and episodes > MAX_LOW_VOTE_EPISODES:
+                self.fail(
+                    tmdb_id,
+                    f"{episodes} episodes on {votes} votes: a soap or bulletin, not added",
+                )
                 continue
             try:
                 show = ingestor.ingest_show(tmdb_id)

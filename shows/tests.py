@@ -4714,6 +4714,7 @@ class CatalogShipTests(TestCase):
         cls.listed = make(9003, "Watchlisted but unpopular")
         cls.tagged = make(9004, "Tagged but unpopular")
         cls.unloved = make(9005, "Unloved and unpopular")
+        cls.requested = make(9007, "Requested and unpopular")
         cls.healthy = Show.objects.create(
             tmdb_id=9006, id=9006, name="Healthy", vote_count=5000, number_of_episodes=8
         )
@@ -4723,6 +4724,7 @@ class CatalogShipTests(TestCase):
         Watchlist.objects.create(user=cls.alice, show=cls.listed)
         cozy = Tag.objects.create(name="cozy", slug="cozy")
         ShowTag.objects.create(user=cls.alice, show=cls.tagged, tag=cozy)
+        ShowRequest.objects.create(user=cls.alice, tmdb_id=9007, name="Requested")
 
     def test_prune_spares_every_spoken_for_kind(self):
         # Losing someone's 5.0 because a show got less popular is the one
@@ -4733,7 +4735,7 @@ class CatalogShipTests(TestCase):
 
         survivors = set(Show.objects.values_list("tmdb_id", flat=True))
         self.assertNotIn(9005, survivors)  # nothing spoke for it
-        for spared in (9001, 9002, 9003, 9004, 9006):
+        for spared in (9001, 9002, 9003, 9004, 9006, 9007):
             self.assertIn(spared, survivors)
 
         self.assertEqual(Rating.objects.count(), 1)
@@ -5123,15 +5125,15 @@ class ShowRequestTests(TestCase):
         self.assertEqual(response["Location"], reverse("shows:search"))
 
     def run_nightly(self, statuses, ingest=None):
-        """Run ingest_requests against a fake TMDb: {tmdb_id: (status, votes)}."""
+        """Run ingest_requests against a fake TMDb:
+        {tmdb_id: (status, votes)} or {tmdb_id: (status, votes, episodes)}."""
         from types import SimpleNamespace
         from unittest.mock import patch
 
         def fake_get(url, timeout):
-            status, votes = statuses[int(url.rsplit("/", 1)[1])]
-            return SimpleNamespace(
-                status_code=status, ok=status < 400, json=lambda: {"vote_count": votes}
-            )
+            status, votes, *rest = statuses[int(url.rsplit("/", 1)[1])]
+            body = {"vote_count": votes, "number_of_episodes": rest[0] if rest else 10}
+            return SimpleNamespace(status_code=status, ok=status < 400, json=lambda: body)
 
         def fake_init(ingestor):
             ingestor.client = SimpleNamespace(
@@ -5162,13 +5164,16 @@ class ShowRequestTests(TestCase):
         again.assert_not_called()
 
     def test_only_a_final_answer_marks_a_request_failed(self):
-        for tmdb_id in (404, 503, 50):
+        for tmdb_id in (404, 503, 50, 97):
             ShowRequest.objects.create(user=self.user, tmdb_id=tmdb_id, name=str(tmdb_id))
-        self.run_nightly({404: (404, 0), 503: (503, 0), 50: (200, 50)})
+        self.run_nightly({404: (404, 0), 503: (503, 0), 50: (200, 50, 4000), 97: (200, 97, 10)})
         failed = set(ShowRequest.objects.filter(failed=True).values_list("tmdb_id", flat=True))
-        # Missing and under the vote floor are final; a 503 waits for tomorrow.
+        # Missing, and a soap or bulletin (few votes, thousands of episodes),
+        # are final; a 503 waits for tomorrow.
         self.assertEqual(failed, {404, 50})
-        self.assertFalse(Show.objects.exists())
+        # Under the bulk vote floor is fine for a show a reader asked for by
+        # name (Halo: Nightfall has 97 votes).
+        self.assertEqual(list(Show.objects.values_list("tmdb_id", flat=True)), [97])
 
     def test_one_show_raising_does_not_stop_the_rest(self):
         ShowRequest.objects.create(user=self.user, tmdb_id=1, name="Bad")
@@ -5192,15 +5197,15 @@ class ShowRequestTests(TestCase):
         self.post()
         self.assertFalse(ShowRequest.objects.filter(tmdb_id=555555).exists())
 
-    def test_shows_under_the_vote_floor_get_no_button(self):
+    def test_shows_under_the_bulk_vote_floor_can_be_requested(self):
         from unittest.mock import patch
 
         few = [dict(self.TMDB_ONLY[0], vote_count=12)]
         self.client.force_login(self.user)
         with patch("shows.views.TMDBClient.search_tv", return_value=few):
             body = self.client.get(reverse("shows:search"), {"q": "severance"}).content.decode()
-        self.assertNotIn("Request it", body)
-        self.assertIn("Too few TMDb votes to add", body)
+        self.assertIn("Request it", body)
+        self.assertNotIn("Too few TMDb votes", body)
 
 
 class PasswordResetMailFailureTests(TestCase):
@@ -5413,3 +5418,40 @@ class RequestedShowNoticeTests(TestCase):
 
         Show.objects.filter(pk=self.halo.pk).update(created_at=timezone.now() - timedelta(days=15))
         self.assertNotContains(self.home(self.asker), "You requested this")
+
+
+class WeightedRatingTests(TestCase):
+    """A requested show can sit under the old vote floor, so a 10.0 on three
+    votes must not outrank an 8.9 on thousands (2026-10-18)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.drama = Genre.objects.create(tmdb_id=18, name="Drama")
+        cls.few = Show.objects.create(
+            tmdb_id=1, name="Three Votes", slug="three-votes", vote_average=10.0, vote_count=3
+        )
+        cls.many = Show.objects.create(
+            tmdb_id=2, name="Many Votes", slug="many-votes", vote_average=8.9, vote_count=9000
+        )
+        for show in (cls.few, cls.many):
+            show.genres.add(cls.drama)
+        # A real catalog averages about 7.5; two high scorers alone would make
+        # the mean they are pulled toward 9.5.
+        for i in range(10):
+            Show.objects.create(
+                tmdb_id=100 + i,
+                name=f"Filler {i}",
+                slug=f"filler-{i}",
+                vote_average=7.2,
+                vote_count=800,
+            )
+
+    def test_genre_page_puts_the_well_attested_show_first(self):
+        resp = self.client.get(reverse("shows:genre", args=[self.drama.pk]))
+        self.assertEqual([s.name for s in resp.context["shows"]][:2], ["Many Votes", "Three Votes"])
+
+    def test_weighted_rating_pulls_few_votes_toward_the_mean(self):
+        from .recommenders import catalog_mean_rating, weighted_rating
+
+        mean = catalog_mean_rating()
+        self.assertLess(weighted_rating(self.few, mean), weighted_rating(self.many, mean))

@@ -22,7 +22,7 @@ docs/adr/08-layer2-personalized-reranking.md.
 from collections import namedtuple
 from itertools import batched
 
-from django.db.models import Count, Q
+from django.db.models import Avg, Count, ExpressionWrapper, F, FloatField, Q, Value
 
 from .models import CastMember, CrewMember, Show, SimilarShow
 
@@ -254,6 +254,34 @@ class RankedShows(list):
         self.mode = mode
 
 
+# How many votes a TMDb rating needs before it is taken at face value. Fewer
+# than this and it is pulled toward the catalog mean, the IMDb Top 250 formula:
+# (v * R + m * C) / (v + m). It used to be safe to sort on vote_average alone
+# because nothing under MIN_VOTE_COUNT (100) was ingested; readers can now
+# request any show (2026-10-18), and a 10.0 on three votes would otherwise top
+# a genre page for everybody. The same 100, so a show at the old floor counts
+# half its own rating and half the catalog's.
+PRIOR_VOTES = 100
+
+
+def catalog_mean_rating():
+    return Show.objects.aggregate(a=Avg("vote_average"))["a"] or 0.0
+
+
+def weighted_rating(show, mean):
+    v = show.vote_count or 0
+    return (v * (show.vote_average or 0.0) + PRIOR_VOTES * mean) / (v + PRIOR_VOTES)
+
+
+def weighted_rating_expression(mean):
+    """weighted_rating() for order_by, so a page can sort in SQL."""
+    return ExpressionWrapper(
+        (F("vote_count") * F("vote_average") + Value(PRIOR_VOTES * mean))
+        / (F("vote_count") + Value(float(PRIOR_VOTES))),
+        output_field=FloatField(),
+    )
+
+
 def similar_by_people(show, limit=12):
     """Return shows ranked by episode-weighted shared people, cast and crew merged.
 
@@ -310,7 +338,7 @@ def similar_by_people(show, limit=12):
                       claim, so both rungs have to mean the same thing by
                       "involvement" or they disagree about what they rank.
         3. rating     nothing measurable on any edge, so rank by TMDb rating,
-                      vote_average then vote_count so a 10.0 on three votes
+                      vote-weighted (weighted_rating) so a 10.0 on three votes
                       cannot beat an 8.9 on ten thousand. Rating is a quality
                       signal; popularity is the engagement metric this
                       recommender exists to avoid, and it is never used here.
@@ -396,10 +424,12 @@ def similar_by_people(show, limit=12):
         results.sort(key=lambda s: (-s.score, -s.popularity))
     elif any(s.estimate > 0.0 for s in results):
         mode = "estimated"
-        results.sort(key=lambda s: (-s.estimate, -s.vote_average, -s.vote_count))
+        mean = catalog_mean_rating()
+        results.sort(key=lambda s: (-s.estimate, -weighted_rating(s, mean), -s.vote_count))
     else:
         mode = "rating"
-        results.sort(key=lambda s: (-s.vote_average, -s.vote_count))
+        mean = catalog_mean_rating()
+        results.sort(key=lambda s: (-weighted_rating(s, mean), -s.vote_count))
     return RankedShows(results[:limit], mode=mode)
 
 

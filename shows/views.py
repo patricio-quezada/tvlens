@@ -18,7 +18,6 @@ from django.utils.text import slugify
 from django.views.decorators.http import require_POST
 
 from .forms import RegistrationForm
-from .ingestion import MIN_VOTE_COUNT
 from .models import Genre, Rating, Show, ShowRequest, ShowTag, Tag
 from .personalization import (
     build_profile,
@@ -31,11 +30,13 @@ from .personalization import (
     without_watched,
 )
 from .recommenders import (
+    catalog_mean_rating,
     compose_callout,
     name_connections,
     role_indexes,
     shared_connections,
     stored_similar,
+    weighted_rating_expression,
 )
 from .search import VALID_OPERATORS, W_TITLE
 from .search import search as run_search
@@ -300,7 +301,8 @@ def index(request):
 
 
 def genre(request, pk):
-    """All shows in one genre, best-rated first. Powers the home 'Browse by genre' pills.
+    """All shows in one genre, best-rated first (vote-weighted). Powers the home
+    'Browse by genre' pills.
 
     A signed-in reader browses for something to watch, so the shows they have
     already seen are left out by default, the same rule the recommendation rows
@@ -311,7 +313,10 @@ def genre(request, pk):
     shows = (
         Show.objects.filter(genres=genre)
         .prefetch_related("genres")
-        .order_by("-vote_average", "name")
+        # Vote-weighted, not vote_average alone: a requested show on a handful
+        # of votes must not top the page for everybody (see PRIOR_VOTES).
+        .annotate(weighted=weighted_rating_expression(catalog_mean_rating()))
+        .order_by("-weighted", "name")
     )
     favorite_genre_ids: set = set()
     include_seen = request.GET.get("seen") == "1"
@@ -549,7 +554,6 @@ def search(request):
                         "votes": r.get("vote_count") or 0,
                         "score": r.get("vote_average") or 0,
                         "overview": (r.get("overview") or "")[:180],
-                        "requestable": (r.get("vote_count") or 0) >= MIN_VOTE_COUNT,
                     }
                     for r in TMDBClient().search_tv(tmdb_query)
                     if r.get("id") not in have and (r.get("vote_count") or 0) > 0

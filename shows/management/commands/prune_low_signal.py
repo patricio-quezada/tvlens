@@ -1,8 +1,9 @@
 """
 Remove shows the people graph cannot use, and the rows hanging off them.
 
-ingest_discover now filters at the API (see MIN_VOTE_COUNT), so nothing below
-the floor arrives any more. This is the one-time catch-up for a catalog ingested
+ingest_discover now filters at the API (see MIN_VOTE_COUNT), so bulk ingest
+brings nothing below the floor. Shows readers request can be under it on
+purpose, and are spared. This is the one-time catch-up for a catalog ingested
 before that filter existed.
 
 What it removes is specific: news bulletins, soaps and game shows. On the first
@@ -36,6 +37,7 @@ from shows.models import (
     Rating,
     Review,
     Show,
+    ShowRequest,
     ShowTag,
     SimilarShow,
     Watchlist,
@@ -77,6 +79,12 @@ class Command(BaseCommand):
             | set(Review.objects.values_list("show_id", flat=True))
             | set(Watchlist.objects.values_list("show_id", flat=True))
             | set(ShowTag.objects.values_list("show_id", flat=True))
+            # A show a reader asked for by name is under the floor on purpose.
+            | set(
+                Show.objects.filter(tmdb_id__in=ShowRequest.objects.values("tmdb_id")).values_list(
+                    "id", flat=True
+                )
+            )
         )
         doomed = Show.objects.filter(vote_count__lt=floor).exclude(id__in=spoken_for)
         spared = Show.objects.filter(vote_count__lt=floor, id__in=spoken_for).count()
@@ -84,7 +92,7 @@ class Command(BaseCommand):
             self.stdout.write(
                 self.style.WARNING(
                     f"Sparing {spared} show(s) below the floor that someone has rated, "
-                    "reviewed, listed or tagged."
+                    "reviewed, listed, tagged or requested."
                 )
             )
         if not doomed.exists():
