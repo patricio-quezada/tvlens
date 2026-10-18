@@ -13,6 +13,7 @@ from .models import (
     Review,
     Season,
     Show,
+    ShowRequest,
     ShowTag,
     Tag,
     UserProfile,
@@ -153,3 +154,9 @@ class UserProfileAdmin(admin.ModelAdmin):
     list_display = ("user", "joined_at")
     search_fields = ("user__username",)
     readonly_fields = ("joined_at",)
+
+
+@admin.register(ShowRequest)
+class ShowRequestAdmin(admin.ModelAdmin):
+    list_display = ("name", "year", "tmdb_id", "user", "created_at", "failed")
+    list_filter = ("failed",)

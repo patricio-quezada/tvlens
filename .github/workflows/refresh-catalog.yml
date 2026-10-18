@@ -49,4 +49,7 @@ jobs:
           # request every 30 seconds keeps it up until the job is done.
           ( while true; do curl --silent -o /dev/null https://app.tvlens.org/; sleep 30; done ) &
           trap 'kill $!' EXIT
+          # Readers' requests first, without a rebuild: refresh_catalog
+          # rebuilds the graph once for both.
+          flyctl ssh console -a tvlens -C "python manage.py ingest_requests --skip-rebuild"
           flyctl ssh console -a tvlens -C "python manage.py refresh_catalog $args"

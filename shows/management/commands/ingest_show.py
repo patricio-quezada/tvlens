@@ -54,7 +54,7 @@ class Command(BaseCommand):
             if not results:
                 self.stdout.write(self.style.WARNING("Nothing found."))
                 return
-            have = set(Show.objects.values_list("id", flat=True))
+            have = set(Show.objects.values_list("tmdb_id", flat=True))
             for s in results:
                 mark = "in catalog" if s["id"] in have else ""
                 year = (s.get("first_air_date") or "")[:4]
@@ -70,8 +70,8 @@ class Command(BaseCommand):
             self.stdout.write(self.style.ERROR("Pass a TMDb id, or --search to find one."))
             return
 
-        if Show.objects.filter(id=tmdb_id).exists():
-            show = Show.objects.get(id=tmdb_id)
+        if Show.objects.filter(tmdb_id=tmdb_id).exists():
+            show = Show.objects.get(tmdb_id=tmdb_id)
             self.stdout.write(f"Already in the catalog: {show.name}. Re-ingesting to refresh it.")
 
         show = ingestor.ingest_show(tmdb_id)

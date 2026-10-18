@@ -26,6 +26,7 @@ from .models import (
     Review,
     Season,
     Show,
+    ShowRequest,
     ShowTag,
     SimilarShow,
     Tag,
@@ -5055,3 +5056,90 @@ class BetaInviteTests(TestCase):
     def test_browsing_needs_no_account(self):
         self.assertEqual(self.client.get(reverse("shows:index")).status_code, 200)
         self.assertContains(self.client.get(reverse("register")), "Invite code")
+
+
+class ShowRequestTests(TestCase):
+    """A reader can ask for a TMDb-only show, and the nightly job pulls it in."""
+
+    TMDB_ONLY = [
+        {
+            "id": 555555,
+            "name": "Severance",
+            "first_air_date": "2022-02-01",
+            "vote_count": 5000,
+            "vote_average": 8.7,
+            "overview": "A TMDb-only show.",
+        }
+    ]
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user("asker", password="pw-asker-9")
+
+    def post(self, **extra):
+        data = {"tmdb_id": "555555", "name": "Severance", "year": "2022", "next": "/search/?q=sev"}
+        data.update(extra)
+        return self.client.post(reverse("shows:request_show"), data)
+
+    def test_the_button_shows_for_a_signed_in_reader(self):
+        from unittest.mock import patch
+
+        self.client.force_login(self.user)
+        with patch("shows.views.TMDBClient.search_tv", return_value=self.TMDB_ONLY):
+            body = self.client.get(reverse("shows:search"), {"q": "severance"}).content.decode()
+        self.assertIn("Request it", body)
+
+    def test_a_signed_out_visitor_is_asked_to_log_in(self):
+        from unittest.mock import patch
+
+        with patch("shows.views.TMDBClient.search_tv", return_value=self.TMDB_ONLY):
+            body = self.client.get(reverse("shows:search"), {"q": "severance"}).content.decode()
+        self.assertNotIn("Request it", body)
+        self.assertIn("to request one", body)
+        self.assertEqual(self.post().status_code, 302)
+        self.assertFalse(ShowRequest.objects.exists())
+
+    def test_requesting_twice_keeps_one_row_and_marks_it_requested(self):
+        from unittest.mock import patch
+
+        self.client.force_login(self.user)
+        self.assertRedirects(self.post(), "/search/?q=sev", fetch_redirect_response=False)
+        self.post()
+        self.assertEqual(ShowRequest.objects.count(), 1)
+        with patch("shows.views.TMDBClient.search_tv", return_value=self.TMDB_ONLY):
+            body = self.client.get(reverse("shows:search"), {"q": "severance"}).content.decode()
+        self.assertIn("Requested", body)
+        self.assertNotIn("Request it", body)
+
+    def test_next_cannot_send_the_reader_off_site(self):
+        self.client.force_login(self.user)
+        response = self.post(next="https://evil.example/")
+        self.assertEqual(response["Location"], reverse("shows:search"))
+
+    def test_the_nightly_job_ingests_each_pending_show_once(self):
+        from unittest.mock import patch
+
+        other = User.objects.create_user("other", password="pw-other-9")
+        ShowRequest.objects.create(user=self.user, tmdb_id=555555, name="Severance")
+        ShowRequest.objects.create(user=other, tmdb_id=555555, name="Severance")
+        ShowRequest.objects.create(user=self.user, tmdb_id=777, name="Gone")
+
+        def fake_ingest(_self, tmdb_id):
+            if tmdb_id == 777:
+                return None
+            return Show.objects.create(tmdb_id=tmdb_id, name="Severance")
+
+        with (
+            patch.object(Ingestor, "__init__", return_value=None),
+            patch.object(Ingestor, "ingest_show", fake_ingest),
+        ):
+            call_command("ingest_requests", "--skip-rebuild", stdout=StringIO())
+        self.assertTrue(Show.objects.filter(tmdb_id=555555).exists())
+        self.assertTrue(ShowRequest.objects.get(tmdb_id=777).failed)
+
+        with (
+            patch.object(Ingestor, "__init__", return_value=None),
+            patch.object(Ingestor, "ingest_show") as again,
+        ):
+            call_command("ingest_requests", "--skip-rebuild", stdout=StringIO())
+        again.assert_not_called()

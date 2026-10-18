@@ -116,13 +116,29 @@ deliberate, via manage.py ingest_show.{% endcomment %}
             <span class="elsewhere-name">{{ s.name }}</span>{% if s.year %}
             <span class="elsewhere-year">{{ s.year }}</span>{% endif %}
             <span class="elsewhere-votes">{{ s.score|floatformat:1 }} · {{ s.votes }} votes</span>
+            {% if user.is_authenticated %}
+            {% if s.tmdb_id in requested_ids %}
+            <span class="elsewhere-requested">Requested</span>
+            {% else %}
+            <form class="elsewhere-request" method="post" action="{% url 'shows:request_show' %}">
+                {% csrf_token %}
+                <input type="hidden" name="tmdb_id" value="{{ s.tmdb_id }}">
+                <input type="hidden" name="name" value="{{ s.name }}">
+                <input type="hidden" name="year" value="{{ s.year }}">
+                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                <button type="submit">Request it</button>
+            </form>
+            {% endif %}
+            {% endif %}
             {% if s.overview %}<p class="elsewhere-overview">{{ s.overview }}</p>{% endif %}
         </li>
         {% endfor %}
     </ul>
     <p class="elsewhere-note">
         TVLens holds the shows its recommendation graph can connect. These are
-        not in it yet.
+        not in it yet. {% if user.is_authenticated %}Request one and it's added
+        in the nightly update.{% else %}<a href="{% url 'login' %}?next={{ request.get_full_path|urlencode }}">Log in</a>
+        to request one.{% endif %}
     </p>
 </div>
 {% endif %}
@@ -205,6 +221,11 @@ deliberate, via manage.py ingest_show.{% endcomment %}
     .elsewhere-name { font-weight: 600; }
     .elsewhere-year, .elsewhere-votes { opacity: .6; font-size: .9rem; margin-left: .4rem; }
     .elsewhere-overview { margin: .25rem 0 0; opacity: .75; font-size: .92rem; }
+    .elsewhere-request { display: inline; margin-left: .6rem; }
+    .elsewhere-request button { font: inherit; font-size: .82rem; padding: .15rem .6rem; cursor: pointer;
+                                border: 1px solid var(--accent); color: var(--accent);
+                                background: transparent; border-radius: 4px; }
+    .elsewhere-requested { margin-left: .6rem; font-size: .82rem; color: var(--accent); }
     .elsewhere-note { margin: 1.4rem 0 0; opacity: .6; font-size: .88rem; }
     .did-you-mean, .search-count, .empty, .search-hint { max-width: 640px; margin-left: auto; margin-right: auto; }
     .search-count { margin-top: 1.5rem; margin-bottom: 1rem; color: var(--text-secondary); font-size: 0.9rem; }

@@ -9,6 +9,7 @@ app_name = "shows"
 urlpatterns = [
     path("", views.index, name="index"),
     path("search/", views.search, name="search"),
+    path("search/request/", views.request_show, name="request_show"),
     path("genre/<int:pk>/", views.genre, name="genre"),
     path("my-ratings/", views.my_ratings, name="my_ratings"),
     path("shows/<slug:slug>/", views.detail, name="detail"),

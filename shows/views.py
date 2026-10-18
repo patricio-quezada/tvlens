@@ -11,11 +11,12 @@ from django.http import HttpResponseBadRequest, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.text import slugify
 from django.views.decorators.http import require_POST
 
 from .forms import RegistrationForm
-from .models import Genre, Rating, Show, ShowTag, Tag
+from .models import Genre, Rating, Show, ShowRequest, ShowTag, Tag
 from .personalization import (
     build_profile,
     genre_quality,
@@ -493,7 +494,7 @@ def search(request):
         tmdb_query = " ".join(tmdb_query.split())
         if tmdb_query:
             try:
-                have = set(Show.objects.values_list("id", flat=True))
+                have = set(Show.objects.values_list("tmdb_id", flat=True))
                 elsewhere = [
                     {
                         "tmdb_id": r["id"],
@@ -516,6 +517,14 @@ def search(request):
     # under-reported exactly the request that most needed an honest number.
     elapsed_ms = (time.perf_counter() - started) * 1000
 
+    requested_ids = set()
+    if elsewhere and request.user.is_authenticated:
+        requested_ids = set(
+            ShowRequest.objects.filter(
+                user=request.user, tmdb_id__in=[e["tmdb_id"] for e in elsewhere]
+            ).values_list("tmdb_id", flat=True)
+        )
+
     return render(
         request,
         "shows/search.html",
@@ -523,6 +532,7 @@ def search(request):
             "q": raw,
             "parsed": parsed,
             "elsewhere": elsewhere,
+            "requested_ids": requested_ids,
             # The page already carries a search box front and centre. A second
             # one in the bar is a duplicate control competing with it.
             "hide_nav_search": True,
@@ -763,6 +773,35 @@ def my_ratings(request):
             .count(),
         },
     )
+
+
+@login_required
+@require_POST
+def request_show(request):
+    """Queue a show from TMDb for the nightly import (see ShowRequest).
+
+    Asking twice is harmless: one row per reader per show. Nothing is fetched
+    here; the nightly job does that, because adding a show means rebuilding
+    the whole graph (ADR-07) and a request should not wait on that.
+    """
+    back = request.POST.get("next", "")
+    if not url_has_allowed_host_and_scheme(back, allowed_hosts={request.get_host()}):
+        back = reverse("shows:search")
+    try:
+        tmdb_id = int(request.POST.get("tmdb_id", ""))
+    except ValueError:
+        return HttpResponseBadRequest("tmdb_id must be a number")
+    name = request.POST.get("name", "").strip()[:300] or f"TMDb {tmdb_id}"
+    if Show.objects.filter(tmdb_id=tmdb_id).exists():
+        messages.info(request, f"{name} is already in TVLens.")
+        return redirect(back)
+    ShowRequest.objects.get_or_create(
+        user=request.user,
+        tmdb_id=tmdb_id,
+        defaults={"name": name, "year": request.POST.get("year", "").strip()[:4]},
+    )
+    messages.success(request, f"Requested {name}. It's added in the nightly update.")
+    return redirect(back)
 
 
 @login_required

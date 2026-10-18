@@ -554,3 +554,34 @@ class InviteUse(models.Model):
 
     def __str__(self):
         return f"{self.code} -> {self.user.username}"
+
+
+class ShowRequest(models.Model):
+    """
+    A reader asking for a show TMDb has and TVLens does not.
+
+    Search lists those shows under "On TMDb, but not in TVLens yet"; this row
+    is the button next to one. The nightly job (`ingest_requests`) pulls the
+    asked-for shows in, so the catalog grows toward what readers look for
+    rather than toward whatever Discover ranks popular.
+
+    Pending is derived, not stored: a request is done once a Show with its
+    tmdb_id exists. Only a failure is recorded, so a TMDb id that returns
+    nothing is not retried every night.
+    """
+
+    tmdb_id = models.IntegerField(db_index=True)
+    name = models.CharField(max_length=300)
+    year = models.CharField(max_length=4, blank=True)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="show_requests"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    failed = models.BooleanField(default=False)
+
+    class Meta:
+        unique_together = ["user", "tmdb_id"]
+        ordering = ["created_at"]
+
+    def __str__(self):
+        return f"{self.name} ({self.tmdb_id}) for {self.user.username}"
