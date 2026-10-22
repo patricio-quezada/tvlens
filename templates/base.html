@@ -170,6 +170,9 @@
                take a full nav gap of its own. */
             margin-left: -0.9rem;
         }
+        /* The badge links to the changelog, but it is a label, not running
+           text: no underline inside the pill. */
+        .beta-badge:hover { text-decoration: none; }
         .sr-only {
             position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
             overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
@@ -345,7 +348,9 @@
                 <circle cx="60" cy="47" r="6.5" fill="#e89b2d"/>
             </svg><span aria-hidden="true">LENS</span><span class="sr-only">TVLens</span>
         </a>
-        <span class="beta-badge">Beta</span>
+        {% comment %}The badge says what stage the app is at, so it opens the record of
+           what changed in each release.{% endcomment %}
+        <a href="{% url 'shows:changelog' %}" class="beta-badge" title="What's changed">Beta</a>
         {% comment %}Search belongs in the bar, not behind a link: it is the
            fastest way into a catalog and every page should offer it.{% endcomment %}
         {% if not hide_nav_search %}

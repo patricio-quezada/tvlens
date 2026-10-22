@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Changelog · TVLens{% endblock %}
+{% block extra_head %}
+<style>
+    /* One reading column: a changelog is read top to bottom, not scanned
+       across like the catalog. */
+    .changelog { max-width: 42rem; margin: 0 auto; }
+    .release { margin-bottom: 3rem; }
+    .release h2 {
+        font-family: 'Bebas Neue', sans-serif; font-weight: 400;
+        font-size: 1.9rem; letter-spacing: 0.06em; color: var(--text-primary);
+        border-bottom: 1px solid var(--surface); padding-bottom: 0.35rem;
+        margin-bottom: 1rem;
+    }
+    .release h3 {
+        font-size: 0.75rem; font-weight: 600; letter-spacing: 0.1em;
+        text-transform: uppercase; color: var(--accent);
+        margin: 1.25rem 0 0.4rem;
+    }
+    .release ul { padding-left: 1.2rem; color: var(--text-secondary); }
+    .release li { margin-bottom: 0.4rem; }
+    .release li strong { color: var(--text-primary); }
+</style>
+{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <h1>Changelog</h1>
+    <p>What changed in each release, newest first.</p>
+</div>
+
+<div class="changelog">
+    {% for release in releases %}
+    <section class="release">
+        <h2>{{ release.title }}</h2>
+        {% for section in release.sections %}
+        <h3>{{ section.name }}</h3>
+        <ul>
+            {% for item in section.items %}<li>{{ item }}</li>{% endfor %}
+        </ul>
+        {% endfor %}
+    </section>
+    {% empty %}
+    <p class="empty">No releases yet.</p>
+    {% endfor %}
+</div>
+
+{% endblock %}

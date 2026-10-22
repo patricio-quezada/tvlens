@@ -8,6 +8,7 @@ app_name = "shows"
 
 urlpatterns = [
     path("", views.index, name="index"),
+    path("changelog/", views.changelog, name="changelog"),
     path("search/", views.search, name="search"),
     path("search/request/", views.request_show, name="request_show"),
     path("genre/<int:pk>/", views.genre, name="genre"),

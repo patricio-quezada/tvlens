@@ -5480,3 +5480,60 @@ class CanonicalHostTests(TestCase):
     def test_no_redirect_hosts_means_no_redirects(self):
         response = self.client.get("/", HTTP_HOST="app.tvlens.org")
         self.assertEqual(response.status_code, 200)
+
+
+class ChangelogTests(TestCase):
+    def test_parse_reads_releases_sections_and_items(self):
+        from .changelog import parse
+
+        releases = parse(
+            "# Changelog\n\nIntro.\n\n"
+            "## v0.2.0: Oct 18, 2026\n**New**\n- One **bold** and *why* and `code`.\n\n"
+            "**Known issues**\n- Live at https://app.tvlens.org.\n\n"
+            "## v0.1.0 (Beta): Oct 16, 2026\n**Highlights**\n- First.\n"
+        )
+        self.assertEqual(
+            [r["title"] for r in releases],
+            ["v0.2.0: Oct 18, 2026", "v0.1.0 (Beta): Oct 16, 2026"],
+        )
+        new, known = releases[0]["sections"]
+        self.assertEqual(new["name"], "New")
+        self.assertEqual(
+            new["items"][0],
+            "One <strong>bold</strong> and <em>why</em> and <code>code</code>.",
+        )
+        self.assertEqual(
+            known["items"][0],
+            'Live at <a href="https://app.tvlens.org">https://app.tvlens.org</a>.',
+        )
+
+    def test_parse_escapes_html(self):
+        from .changelog import parse
+
+        releases = parse('## v1\n**New**\n- <script>alert("x")</script>\n')
+        item = releases[0]["sections"][0]["items"][0]
+        self.assertNotIn("<script>", item)
+        self.assertIn("&lt;script&gt;", item)
+
+    def test_links_stop_before_quotes_and_sentence_punctuation(self):
+        from .changelog import _inline
+
+        html = _inline('See "https://app.tvlens.org".')
+        self.assertIn('href="https://app.tvlens.org"', html)
+        self.assertTrue(html.endswith("&quot;."))
+        html = _inline("(https://en.wikipedia.org/wiki/X_(y))")
+        self.assertIn('href="https://en.wikipedia.org/wiki/X_(y)"', html)
+        self.assertTrue(html.endswith("</a>)"))
+
+    def test_markup_does_not_reach_into_code_or_cross_tags(self):
+        from .changelog import _inline
+
+        self.assertEqual(_inline("`*args*`"), "<code>*args*</code>")
+        self.assertEqual(_inline("`**a` and `b**`"), "<code>**a</code> and <code>b**</code>")
+        self.assertEqual(_inline("**a *b** c*"), "<strong>a *b</strong> c*")
+
+    def test_page_is_public_and_lists_the_real_file(self):
+        response = self.client.get(reverse("shows:changelog"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "v0.1.0 (Beta): Oct 16, 2026")
+        self.assertContains(response, "Known issues")

@@ -17,6 +17,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.text import slugify
 from django.views.decorators.http import require_POST
 
+from . import changelog as changelog_file
 from .forms import RegistrationForm
 from .models import Genre, Rating, Show, ShowRequest, ShowTag, Tag
 from .personalization import (
@@ -174,6 +175,11 @@ def _with_reading(request, reading):
 # How long a requested show keeps its "You requested this" flag on the home
 # page after it arrives, if the reader has not rated or watched it first.
 REQUEST_NOTICE_DAYS = 14
+
+
+def changelog(request):
+    """What changed in each release, from CHANGELOG.md. Public, like browsing."""
+    return render(request, "shows/changelog.html", {"releases": changelog_file.releases()})
 
 
 def index(request):
