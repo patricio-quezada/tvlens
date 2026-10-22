@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Terms · TVLens{% endblock %}
+{% block og_title %}Terms · TVLens{% endblock %}
+{% block description %}The rules for using TVLens.{% endblock %}
+{% block og_description %}The rules for using TVLens.{% endblock %}
+{% block extra_head %}{% include "shows/_legal_style.html" %}{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <h1>Terms</h1>
+    <p>The rules for using TVLens.</p>
+</div>
+
+<div class="legal">
+    <p class="updated">Last updated October 22, 2026.</p>
+
+    <p>By using TVLens, you agree to these terms. If you do not agree, please do not use it.</p>
+
+    <h2>A beta</h2>
+    <p>TVLens is a free, invite-only beta. Features will change, and some will break. I may pause or end the beta at any time.</p>
+
+    <h2>Your account</h2>
+    <ul>
+        <li>One person per account. Keep your password to yourself.</li>
+        <li>Each invite code works once.</li>
+        <li>You are responsible for what happens under your account.</li>
+    </ul>
+
+    <h2>What you add</h2>
+    <p>Your ratings and tags are yours. You give TVLens permission to store them and use them to run the service, including the averages and the shared tag words that other readers see without your name. Keep tags free of abuse, hate, and anything illegal. I may remove a tag that breaks this rule.</p>
+
+    <h2>Fair use</h2>
+    <p>Do not scrape TVLens, overload it, break into it, or create accounts with a script. I may suspend or delete an account that breaks these terms.</p>
+
+    <h2>Show data</h2>
+    <p>Show details, images, cast, and crew come from TMDB. They may be wrong or out of date. Recommendations are suggestions, not promises.</p>
+
+    <h2>No warranty</h2>
+    <p>TVLens comes as it is, with no warranty of any kind. As far as the law allows, I am not liable for any loss that comes from using it.</p>
+
+    <h2>Governing law</h2>
+    <p>The laws of the State of Maryland govern these terms.</p>
+
+    <h2>The code</h2>
+    <p>The TVLens source code is open under the MIT License on <a href="https://github.com/patricio-quezada/tvlens">GitHub</a>. The license covers the code, not the TMDB data or images.</p>
+
+    <h2>Changes</h2>
+    <p>When these terms change, I will update this page and its date and note the change in the <a href="{% url 'shows:changelog' %}">changelog</a>.</p>
+
+    <h2>Questions</h2>
+    <p>Email <a href="mailto:support@tvlens.org">support@tvlens.org</a>.</p>
+</div>
+
+{% endblock %}

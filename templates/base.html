@@ -6,6 +6,19 @@
     <title>{% block title %}TVLens{% endblock %}</title>
     <link rel="icon" href="{% static 'favicon.svg' %}" type="image/svg+xml">
     <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    {% comment %}Link previews. Django renders a block once, so the preview title
+       is its own block beside <title>; pages that name themselves set both.{% endcomment %}
+    <meta name="description" content="{% block description %}TVLens: watch what fits you, not just what is popular.{% endblock %}">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="TVLens">
+    <meta property="og:url" content="{{ request.build_absolute_uri }}">
+    <meta property="og:title" content="{% block og_title %}TVLens{% endblock %}">
+    <meta property="og:description" content="{% block og_description %}TVLens: watch what fits you, not just what is popular.{% endblock %}">
+    <meta property="og:image" content="{{ request.scheme }}://{{ request.get_host }}{% static 'img/og-image.png' %}">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="TVLens">
+    <meta name="twitter:card" content="summary_large_image">
     <style>
         /* Bebas Neue and DM Sans, served from this origin instead of Google's
            CDN (ADR-11). Self-hosting is what actually makes the type identical
@@ -202,6 +215,18 @@
 
         main { max-width: 1200px; margin: 0 auto; padding: 2rem; position: relative; z-index: 1; }
 
+        /* TMDB's API terms require its logo and notice in the app, and the
+           logo must stay less prominent than the TVLens mark. */
+        .site-footer {
+            max-width: 1200px; margin: 2rem auto 0; padding: 1.5rem 2rem 2.5rem;
+            border-top: 1px solid var(--border); position: relative; z-index: 1;
+            display: flex; flex-wrap: wrap; gap: 0.75rem 2rem; align-items: center;
+            font-size: 0.8rem; color: var(--text-secondary);
+        }
+        .site-footer .footer-links { display: flex; gap: 1.25rem; }
+        .site-footer .tmdb { margin: 0; display: flex; align-items: center; gap: 0.75rem; flex: 1 1 22rem; }
+        .site-footer .tmdb img { height: 0.75rem; width: auto; flex: none; }
+
         .form-card { max-width: 400px; margin: 2rem auto; }
         .form-card h1 { font-family: 'Bebas Neue', sans-serif; font-weight: 400; font-size: 2rem; letter-spacing: 0.06em; margin-bottom: 1rem; }
         .form-card p { margin-top: 0.75rem; }
@@ -376,5 +401,16 @@
         {% endif %}
         {% block content %}{% endblock %}
     </main>
+    <footer class="site-footer">
+        <div class="footer-links">
+            <a href="{% url 'shows:privacy' %}">Privacy</a>
+            <a href="{% url 'shows:terms' %}">Terms</a>
+            <a href="{% url 'shows:credits' %}">Credits</a>
+        </div>
+        <p class="tmdb">
+            <a href="https://www.themoviedb.org/"><img src="{% static 'img/tmdb-logo.svg' %}" alt="TMDB"></a>
+            <span>{% include "shows/_tmdb_notice.html" %}</span>
+        </p>
+    </footer>
 </body>
 </html>

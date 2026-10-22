@@ -1,6 +1,9 @@
 {% extends "base.html" %}
 {% load humanize %}
 {% block title %}{{ show.name }} · TVLens{% endblock %}
+{% block og_title %}{{ show.name }} · TVLens{% endblock %}
+{% block description %}{{ show.overview|default:"TVLens: watch what fits you, not just what is popular."|truncatechars:200 }}{% endblock %}
+{% block og_description %}{{ show.overview|default:"TVLens: watch what fits you, not just what is popular."|truncatechars:200 }}{% endblock %}
 
 {% block body_class %}detail{% endblock %}
 

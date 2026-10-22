@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Privacy · TVLens{% endblock %}
+{% block og_title %}Privacy · TVLens{% endblock %}
+{% block description %}What TVLens collects, why, and who else sees it.{% endblock %}
+{% block og_description %}What TVLens collects, why, and who else sees it.{% endblock %}
+{% block extra_head %}{% include "shows/_legal_style.html" %}{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <h1>Privacy</h1>
+    <p>What TVLens collects, why, and who else sees it.</p>
+</div>
+
+<div class="legal">
+    <p class="updated">Last updated October 22, 2026.</p>
+
+    <p>Patricio Quezada builds and runs TVLens. It is an invite-only beta. You can browse it without an account. You need an account and an invite code to rate shows.</p>
+
+    <h2>What TVLens stores</h2>
+    <ul>
+        <li><strong>Your account:</strong> your username, your email address, and your password. TVLens stores the password as a one-way hash, so no one can read it, including me.</li>
+        <li><strong>Your invite code:</strong> which code you used, so each code works once.</li>
+        <li><strong>What you add:</strong> your ratings, your tags, and the shows you request.</li>
+    </ul>
+
+    <h2>How TVLens uses it</h2>
+    <ul>
+        <li>Your ratings and tags shape your own recommendations.</li>
+        <li>Your email address receives password reset emails, and nothing else. TVLens sends no newsletters and no marketing.</li>
+        <li>Other readers never see your username next to a rating or a tag. They see only averages across all readers and the tag words people use, with no names attached.</li>
+    </ul>
+    <p>TVLens does not sell your data, share it with advertisers, or show ads.</p>
+
+    <h2>Cookies</h2>
+    <p>TVLens sets up to three cookies. One keeps you signed in. One protects forms from forgery. One carries a short notice to the next page, such as the note that you rated a show. TVLens uses no analytics and no tracking cookies.</p>
+
+    <h2>Other services</h2>
+    <ul>
+        <li><strong>Fly.io</strong> hosts the app and its database in the United States (northern Virginia). Its server logs record each request, including the page and the browser, and may include your IP address.</li>
+        <li><strong>Fly.io volume snapshots</strong> keep a copy of the database for five days.</li>
+        <li><strong>Cloudflare</strong> runs the tvlens.org domain and passes your requests to Fly.io, so it sees your IP address.</li>
+        <li><strong>iCloud Mail</strong> sends password reset emails from support@tvlens.org.</li>
+        <li><strong>TMDB</strong> serves the posters and images. Your browser loads them from TMDB directly, so TMDB sees your IP address.</li>
+        <li><strong>YouTube</strong> plays trailers through its privacy-enhanced mode. Nothing loads from YouTube until you press play.</li>
+    </ul>
+
+    <h2>Deleting your account</h2>
+    <p>Email <a href="mailto:support@tvlens.org">support@tvlens.org</a> from the address on your account. I will delete your account and everything tied to it: your ratings, tags, and requests. Copies leave the database snapshots within five days.</p>
+
+    <h2>Children</h2>
+    <p>TVLens is not for children under 13.</p>
+
+    <h2>Changes</h2>
+    <p>When this policy changes, I will update this page and its date and note the change in the <a href="{% url 'shows:changelog' %}">changelog</a>.</p>
+
+    <h2>Questions</h2>
+    <p>Email <a href="mailto:support@tvlens.org">support@tvlens.org</a>.</p>
+</div>
+
+{% endblock %}

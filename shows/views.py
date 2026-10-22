@@ -182,6 +182,19 @@ def changelog(request):
     return render(request, "shows/changelog.html", {"releases": changelog_file.releases()})
 
 
+def privacy(request):
+    return render(request, "shows/privacy.html")
+
+
+def terms(request):
+    return render(request, "shows/terms.html")
+
+
+def credits(request):
+    """Who the data and type come from. TMDB's terms require its logo and notice."""
+    return render(request, "shows/credits.html")
+
+
 def index(request):
     base_qs = Show.objects.prefetch_related("genres")
 

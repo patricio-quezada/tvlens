@@ -4,6 +4,12 @@ What changed in TVLens, newest first. One entry per release, with a version,
 date, and short highlights. Sections, as they apply: Highlights, New,
 Improved, Infrastructure, Known issues, Incidents.
 
+## v0.3.1: Oct 22, 2026
+**New**
+- Privacy and Terms pages, linked from a new footer on every page.
+- A Credits page, and TMDB's logo and notice in the footer, as TMDB's API terms require.
+- Link previews: sharing a TVLens page on X, LinkedIn, Reddit, or in a message now shows a card with the page's title and the TVLens banner.
+
 ## v0.3.0: Oct 21, 2026
 **Highlights**
 - 🏠 **TVLens lives at tvlens.org.** On Day 80 the app moved from app.tvlens.org to the main domain. Old links forward to the same page, and the 80-Day Project stays at tvlens.org/80dp/.

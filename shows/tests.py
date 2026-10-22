@@ -5537,3 +5537,46 @@ class ChangelogTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "v0.1.0 (Beta): Oct 16, 2026")
         self.assertContains(response, "Known issues")
+
+
+class LegalPagesTests(TestCase):
+    TMDB_NOTICE = (
+        "This website uses TMDB and the TMDB APIs but is not endorsed, certified, "
+        "or otherwise approved by TMDB."
+    )
+
+    def test_pages_are_public(self):
+        for name in ("privacy", "terms", "credits"):
+            with self.subTest(name=name):
+                response = self.client.get(reverse(f"shows:{name}"))
+                self.assertEqual(response.status_code, 200)
+
+    def test_footer_links_the_pages_and_carries_the_tmdb_notice(self):
+        response = self.client.get(reverse("shows:changelog"))
+        for name in ("privacy", "terms", "credits"):
+            self.assertContains(response, f'href="{reverse(f"shows:{name}")}"')
+        self.assertContains(response, self.TMDB_NOTICE)
+        self.assertContains(response, "img/tmdb-logo.svg")
+
+    def test_credits_shows_the_tmdb_logo_and_notice(self):
+        response = self.client.get(reverse("shows:credits"))
+        self.assertContains(response, 'alt="The Movie Database (TMDB)"')
+        self.assertContains(response, self.TMDB_NOTICE, count=2)
+
+
+class LinkPreviewTests(TestCase):
+    def test_every_page_has_a_large_card_with_an_absolute_image(self):
+        response = self.client.get(reverse("shows:index"))
+        self.assertContains(response, '<meta name="twitter:card" content="summary_large_image">')
+        self.assertContains(response, '<meta property="og:title" content="TVLens">')
+        self.assertContains(response, '<meta property="og:url" content="http://testserver/">')
+        self.assertContains(response, 'content="http://testserver/static/img/og-image.png"')
+
+    def test_a_page_names_itself_in_its_preview(self):
+        response = self.client.get(reverse("shows:privacy"))
+        self.assertContains(response, '<meta property="og:title" content="Privacy · TVLens">')
+        self.assertContains(
+            response,
+            '<meta property="og:description" '
+            'content="What TVLens collects, why, and who else sees it.">',
+        )
