@@ -35,7 +35,13 @@ if not SECRET_KEY:
 
 ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
 
-# The origins a form may be posted from, e.g. "https://app.tvlens.org".
+# The app's one public hostname, and the old ones that 301 to it (see
+# tvlens/middleware.py). Each old host must also be in ALLOWED_HOSTS, or Django
+# refuses the request before it can be redirected.
+CANONICAL_HOST = os.getenv("CANONICAL_HOST", "")
+REDIRECT_HOSTS = [h for h in os.getenv("REDIRECT_HOSTS", "").split(",") if h]
+
+# The origins a form may be posted from, e.g. "https://tvlens.org".
 # Django 4+ checks them on every HTTPS POST.
 CSRF_TRUSTED_ORIGINS = [o for o in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",") if o]
 
@@ -83,7 +89,8 @@ if importlib.util.find_spec("django_extensions"):
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
-    # Right after SecurityMiddleware, as whitenoise asks: static files are
+    "tvlens.middleware.CanonicalHostMiddleware",
+    # Early, as whitenoise asks (after the host redirect): static files are
     # served before sessions or auth do any work for them.
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",

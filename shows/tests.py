@@ -5455,3 +5455,28 @@ class WeightedRatingTests(TestCase):
 
         mean = catalog_mean_rating()
         self.assertLess(weighted_rating(self.few, mean), weighted_rating(self.many, mean))
+
+
+@override_settings(
+    ALLOWED_HOSTS=["tvlens.org", "app.tvlens.org"],
+    CANONICAL_HOST="tvlens.org",
+    REDIRECT_HOSTS=["app.tvlens.org"],
+)
+class CanonicalHostTests(TestCase):
+    def test_old_host_redirects_keeping_path_and_query(self):
+        response = self.client.get("/search/?q=halo", HTTP_HOST="app.tvlens.org")
+        self.assertEqual(response.status_code, 307)
+        self.assertEqual(response["Location"], "https://tvlens.org/search/?q=halo")
+
+    def test_canonical_host_is_served(self):
+        response = self.client.get("/", HTTP_HOST="tvlens.org")
+        self.assertEqual(response.status_code, 200)
+
+    def test_health_check_is_never_redirected(self):
+        response = self.client.get("/healthz", HTTP_HOST="app.tvlens.org")
+        self.assertEqual(response.status_code, 200)
+
+    @override_settings(REDIRECT_HOSTS=[])
+    def test_no_redirect_hosts_means_no_redirects(self):
+        response = self.client.get("/", HTTP_HOST="app.tvlens.org")
+        self.assertEqual(response.status_code, 200)

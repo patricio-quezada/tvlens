@@ -8,8 +8,14 @@ primary_region = "iad"
   # The database lives on the volume mounted at /data, so it survives deploys
   # and restarts. Everything else in the image is replaced on every deploy.
   DB_NAME = "/data/db.sqlite3"
-  ALLOWED_HOSTS = "app.tvlens.org,tvlens.fly.dev"
-  CSRF_TRUSTED_ORIGINS = "https://app.tvlens.org,https://tvlens.fly.dev"
+  # tvlens.org is the app (since Day 80, Oct 21 2026). Cloudflare proxies it
+  # here, except the 80dp build log, which a Worker serves from Pages.
+  # app.tvlens.org still resolves straight to Fly and redirects to
+  # tvlens.org once it is listed in REDIRECT_HOSTS.
+  ALLOWED_HOSTS = "tvlens.org,app.tvlens.org,tvlens.fly.dev"
+  CSRF_TRUSTED_ORIGINS = "https://tvlens.org,https://app.tvlens.org,https://tvlens.fly.dev"
+  CANONICAL_HOST = "tvlens.org"
+  REDIRECT_HOSTS = ""
   # Fly's proxy ends HTTPS and tells the app so in X-Forwarded-Proto.
   TRUST_PROXY_SSL_HEADER = "True"
   # Password reset mail goes through iCloud custom domain mail. The Apple ID
@@ -47,7 +53,7 @@ primary_region = "iad"
   method = "GET"
   path = "/healthz"
   [http_service.checks.headers]
-    Host = "app.tvlens.org"
+    Host = "tvlens.org"
     X-Forwarded-Proto = "https"
 
 [[vm]]
