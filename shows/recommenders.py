@@ -317,8 +317,8 @@ def similar_by_people(show, limit=12):
     Each result carries `score` and `shared_people`. The page sorts by score
     and displays the count. Ties break on popularity, matching the other
     edges. Computed in Python after fetching rows: the source-side ratio does
-    not inject cleanly into a single ORM annotation, and at catalog scale a
-    materialised edge table is not yet worth its upkeep.
+    not inject cleanly into a single ORM annotation. Requests read the result
+    from the materialized SimilarShow table instead (ADR-07).
 
     When every candidate scores 0.0 the weighted order carries no signal.
     That happens when the source show has no episodes recorded yet (TMDb
@@ -372,7 +372,7 @@ def similar_by_people(show, limit=12):
     # Unlike the Show-side join in similar_by_crew, these filters run on the
     # credit tables directly, so .exclude() drops casting rows and nothing else.
     #
-    # This side keeps the materialised list: scoring needs each person's
+    # This side keeps the materialized list: scoring needs each person's
     # episode_count in Python, so a subquery does not fit (see
     # docs/adr/06-sql-variable-ceiling.md). Instead the person set is chunked
     # so a decades-long soap's tens of thousands of people never cross SQLite's
@@ -974,7 +974,7 @@ def similar_by_cast(show, limit=12):
 
     Returns an empty queryset when the show has no cast recorded.
     """
-    # A subquery, not a materialised id list: the person set is only needed to
+    # A subquery, not a materialized id list: the person set is only needed to
     # join, never in Python, so pushing it into SQL removes both the extra query
     # and SQLite's per-person variable ceiling. An empty subquery yields no
     # rows, so the no-cast case still returns an empty queryset.
@@ -999,7 +999,7 @@ def similar_by_crew(show, limit=12):
 
     Returns an empty queryset when the show has no qualifying crew recorded.
     """
-    # A subquery, not a materialised id list: the person set only feeds the
+    # A subquery, not a materialized id list: the person set only feeds the
     # join, so pushing it into SQL removes both the extra query and SQLite's
     # per-person variable ceiling. The SERVICE_JOBS exclusion stays inside the
     # subquery so casting rows never seed the source set. An empty subquery

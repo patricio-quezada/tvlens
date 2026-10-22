@@ -22,7 +22,7 @@ Patricio's requirement, verbatim: "the catalog changes should be unnoticeable by
 ## Decision
 
 A catalog release is a merge run against the live database, using machinery that already
-existed: `refresh_catalog` re-hydrates stale shows and sweeps Discover, `ingest_show` is
+existed: `refresh_catalog` re-hydrates stale shows and sweeps Discover, and `ingest_show` is
 `update_or_create` on `tmdb_id` with the primary key pinned to it ([ADR-03](03-identifiers.md)), so fresher data
 lands in the same row every user row already points at. A fresh install ships the developer's
 catalog with empty user tables; a live install runs the same commands and keeps everything.
@@ -35,7 +35,9 @@ No tombstones and no orphan policy were built, because the orphan case is unrepr
 
 Updates are deliberate. No scheduler refreshes the catalog behind anyone's back; it changes
 when an operator runs the command, so the home page may move at a known moment and never
-silently overnight. "Unnoticeable" means nothing of theirs moves. Recommendations are allowed
+silently overnight.
+
+> **Note, 2026-10-16.** A nightly GitHub Action now runs the refresh: the 10 stalest shows each night, plus new shows on Sundays. It is still the same deliberate command on a known schedule, not a background process, and the invariant above still holds. "Unnoticeable" means nothing of theirs moves. Recommendations are allowed
 to get better.
 
 Alternatives that lost: shipping the SQLite file wholesale (orphans every rating), a second

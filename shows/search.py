@@ -248,12 +248,12 @@ class ParsedQuery:
 
 
 def _word(field, term):
-    """Match `term` at a word boundary in `field`, cheaply.
+    r"""Match `term` at a word boundary in `field`, cheaply.
 
     Plain icontains is a substring match, and substrings lie. "hbo" matched 46
     shows through cast characters, every one of them the word "neighbour".
     "war" matched 883 through "toward" and "warm". A search that answers a
-    three letter query with garbage is worse than one that answers nothing.
+    three-letter query with garbage is worse than one that answers nothing.
 
     Anchoring with \b alone fixes the results and costs 12x: Django implements
     REGEXP on SQLite as a Python callback, so it pays a function call per row,
@@ -351,7 +351,7 @@ def _title_ids(term):
 
 
 def _fts_query(term):
-    """Turn a raw user term into an FTS5 prefix query, or None.
+    r"""Turn a raw user term into an FTS5 prefix query, or None.
 
     FTS5 MATCH is a query language, not a string match. Double quotes delimit
     phrases, AND, OR and NOT are operators, and a stray hyphen or apostrophe
@@ -446,7 +446,7 @@ def _branch(name, term, main_cast_only=False, user=None):
     foreign keys, each holding far more rows than the catalog has shows
     (238,357 cast rows and 52,602 crew rows behind 249 shows, measured
     2026-09-01); Django compiles a single filter() holding both into one
-    SELECT and SQLite materialises the cross product before DISTINCT
+    SELECT and SQLite materializes the cross product before DISTINCT
     collapses it. Measured, that query does not return a slow answer, it does
     not return.
     """

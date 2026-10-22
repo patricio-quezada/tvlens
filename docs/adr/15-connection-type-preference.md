@@ -41,7 +41,7 @@ said what they thought of each, and the graph already knows what ties them toget
 edge in the catalog is a connection with no verdict attached.
 
 This follows the shaping exactly, and it has a consequence worth stating out loud. The gate is
-not "rate more shows", it is "rate shows that are actually connected". Measured on the catalog:
+not "rate more shows"; it is "rate shows that are actually connected". Measured on the catalog:
 ten shows picked at random have **zero** edges between them, while the real ten-rating user,
 whose ratings cluster by taste, has **twelve**. A reader who rates broadly and shallowly will
 never earn a lean, and should not.
@@ -54,7 +54,7 @@ The edge carries the mean of its two ends' rating signals, on the same `score - 
 rest of Layer 2 uses.
 
 Each type's affinity is then the contribution-weighted mean of those signals: *the average rating
-signal a cast connection earned from you*. This is the identical shape `ShowTag` relevance already
+signal a cast connection earned from this reader*. This is the identical shape `ShowTag` relevance already
 uses in `build_profile`, which is the point. Two shows tied by one whole-run shared lead weigh
 more than two tied by a guest. A reader who rates everything the same gets two equal affinities
 and therefore no lean, which is the correct answer rather than a failure of the method.
@@ -182,9 +182,9 @@ have, and no single number tracks that:
 | 60 | 164 | 3% |
 | 100+ | 400 | 0% |
 
-So the bar is computed per profile. The user's own ratings are reassigned across
-their own rated shows 200 times and the lean recomputed; it is reported only if
-it beats 95% of those shuffles. Twenty edges earns a high bar automatically, four
+So the bar is computed per profile. The code reassigns the user's own ratings
+across their own rated shows 200 times and recomputes the lean each time; it
+reports the lean only if it beats 95% of those shuffles. Twenty edges earns a high bar automatically, four
 hundred a low one, and a catalog change cannot invalidate it.
 
 **The shuffle must be over shows, not edges.** An edge's signal is the mean of
@@ -222,8 +222,8 @@ catalog prune that invalidated every hand-fitted constant.
 Cost is bounded rather than proportional. The split rides on the edge ([ADR-07](07-materialized-recommendations.md)),
 so reading a reader's edges is 400 rows and no graph work, and 200 shuffles is
 200 passes over those rows with no queries behind them. A reader who has rated
-**every show in the catalog** builds their whole home page in 49ms across 22
-queries, down from 579ms when this record was first written.
+**every show in the catalog** builds their whole home page in 49 ms across 22
+queries, down from 579 ms when this record was first written.
 
 Tested in `ConnectionTypePreferenceTests` and `ConnectionTypeNamingTests`: cold
 start, anonymous, a cast-leaning reader, a crew-leaning reader, a low rating

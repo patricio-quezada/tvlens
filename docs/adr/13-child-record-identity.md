@@ -31,7 +31,7 @@ TMDb moves an episode between seasons while keeping its id. The natural key miss
 collides on `tmdb_id`.
 
 **Neither key alone is sufficient, and the two failures are symmetric.** Choosing either one leaves
-the other class of drift unhandled, and both fail as an IntegrityError partway through an ingest
+the other class of drift unhandled, and both fail as an `IntegrityError` partway through an ingest
 that has already written thousands of rows.
 
 This is not a TMDb defect. A catalog that tracks decades of television has to reorganize
@@ -48,9 +48,9 @@ One helper, `Ingestor._upsert_child`, resolves both tables:
 4. Write both keys and every field.
 
 Step three is the uncomfortable one and it is deliberate. The evicted row is a record TMDb has
-stopped acknowledging, and its only remaining function is to make the constraint fail. Nothing user
-generated hangs off a Season or an Episode, so the eviction costs metadata that the same ingest is
-about to rewrite.
+stopped acknowledging, and its only remaining function is to make the constraint fail. Nothing
+user-generated hangs off a Season or an Episode, so the eviction costs metadata that the same
+ingest is about to rewrite.
 
 **[ADR-03](03-identifiers.md) is amended, not overturned.** Its claim holds for `Show`, where `tmdb_id` is genuinely
 stable, because TMDb does not merge or renumber whole series the way it reorganizes their parts.

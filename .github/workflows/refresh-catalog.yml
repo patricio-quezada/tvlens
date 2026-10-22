@@ -2,11 +2,12 @@
 #
 # The app's machine sleeps when nobody visits, and a sleeping machine runs no
 # schedule of its own, so GitHub's clock drives it: wake the machine, keep it
-# awake while the job runs, and run refresh_catalog inside it over fly ssh.
+# awake while the job runs, and run ingest_requests and refresh_catalog inside
+# it over fly ssh.
 #
 # Two cadences, because the two halves cost very different amounts:
 #   nightly  --oldest 10: re-hydrates the 10 stalest shows, ~20 s. The whole
-#            ~250-show catalog comes round about monthly.
+#            ~250-show catalog cycles through in about a month.
 #   Sundays  adds --discover --pages 1: finds shows newly above the vote
 #            floor. A new show is ingested whole, and a long-running one (a
 #            nightly talk show, thousands of episodes) takes minutes on its

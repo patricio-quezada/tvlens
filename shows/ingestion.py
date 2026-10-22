@@ -1,5 +1,5 @@
 """
-Data ingestion pipeline — pulls TV show data from TMDB and upserts into Django models.
+Data ingestion pipeline — pulls TV show data from TMDb and upserts into Django models.
 
 Usage:
     from shows.ingestion import Ingestor
@@ -49,7 +49,7 @@ class Ingestor:
     # ── discover / bulk ───────────────────────────────────────────────────
 
     def ingest_discover(self, pages=5, sort_by="popularity.desc", min_votes=MIN_VOTE_COUNT):
-        """Pull shows from TMDB Discover endpoint, then hydrate details.
+        """Pull shows from the TMDb Discover endpoint, then hydrate details.
 
         Filtered by vote_count at the API, so the shows below the floor are
         never fetched, never hydrated, and never stored. Measured on the first

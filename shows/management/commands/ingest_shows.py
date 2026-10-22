@@ -1,10 +1,10 @@
 """
-Management command to ingest TV shows from TMDB.
+Management command to ingest TV shows from TMDb.
 
 Usage:
     python manage.py ingest_shows                # 5 pages (default)
     python manage.py ingest_shows --pages 20     # 20 pages (~400 shows)
-    python manage.py ingest_shows --show 1396    # single show by TMDB ID
+    python manage.py ingest_shows --show 1396    # single show by TMDb id
     python manage.py ingest_shows --min-votes 0  # no vote floor (the old behaviour)
 
 Discover is filtered to vote_count >= MIN_VOTE_COUNT by default. --show is not:

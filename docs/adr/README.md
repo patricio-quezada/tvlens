@@ -3,15 +3,16 @@
 This folder holds the **why** behind TVLens's significant technical decisions, so a
 future engineer reading the code can find the reasoning without leaving the repo.
 
-- One markdown file per decision, numbered in the **order the decisions were made**
+- One Markdown file per decision, numbered in the **order the decisions were made**
   (`01-...`, `02-...`), so the list reads as the project evolving over time.
 - Only **significant, contested, structural** decisions get an ADR (the ones with real
   alternatives and lasting impact). Not every change. Aim for a handful, not a log.
-- Each record opens with a **bottom line up front**: one or two sentences giving the decision
+- Each record opens with a **bottom line up front** (BLUF): one or two sentences giving the decision
   and its reason before anything else, so a reader who followed a reference from the code can
   stop there.
 - Then three parts: **Context**, **Decision**, and an **After Action Review** (did it work, and
-  what it does for the product).
+  what it does for the product). A later change to a decision is added as a dated amendment;
+  the original text stays as written.
 - Write them to be read. The BLUF serves the reader in a hurry, which frees the body to tell the
   story properly: open on the moment the problem showed up, keep paragraphs short, and prefer a
   concrete picture to a precise abstraction.
@@ -72,13 +73,13 @@ credits; the reasoning is about any graph built from shared entities.
 [11](11-one-visual-identity.md) on the visual identity.
 
 ## Index
-- [01 - Exclude casting roles from crew matching](01-exclude-casting-roles.md)
+- [01 - Exclude casting roles from crew matching](01-exclude-casting-roles.md) *(amended 2026-08-26: the argument covers more than casting)*
 - [02 - Ingest per-episode credits, and record episode counts](02-aggregate-credits-ingest.md)
 - [03 - Three identities: pk, tmdb_id, slug](03-identifiers.md) *(amended 2026-08-30: Show's pk is its tmdb_id)*
-- [04 - Recommend by episode-weighted shared people](04-episode-weighted-people-recommender.md)
+- [04 - Recommend by episode-weighted shared people](04-episode-weighted-people-recommender.md) *(amended 2026-08-26: the weight is superlinear)*
 - [05 - Fall back down a ladder when the people graph has no signal](05-no-signal-fallback-ladder.md)
 - [06 - Lift the SQL variable ceiling in the recommenders](06-sql-variable-ceiling.md)
-- [07 - Precompute the Layer 1 ranking and serve it from a table](07-materialized-recommendations.md)
+- [07 - Precompute the Layer 1 ranking and serve it from a table](07-materialized-recommendations.md) *(amended 2026-08-29: the cast/crew split rides on the edge)*
 - [08 - Layer 2: personalize by re-ranking the graph per user](08-layer2-personalized-reranking.md)
 - [09 - Side Quests: strong connections into genres a user has not rated highly](09-side-quests-cross-genre-edges.md) *(revised twice, then amended 2026-08-27: the genre gate is graded rather than binary)*
 - [10 - Rating saves in place, and TVLens takes its first script](10-rating-saves-in-place.md)
@@ -87,4 +88,4 @@ credits; the reasoning is about any graph built from shared entities.
 - [13 - Resolve seasons and episodes by two keys, because TMDb keeps neither stable](13-child-record-identity.md) *(amends [ADR-03](03-identifiers.md) for Season and Episode)*
 - [14 - Tags are a shared vocabulary applied privately](14-tags-shared-vocabulary.md)
 - [15 - Learn whether a reader is tied to shows by cast or by crew, and name accordingly](15-connection-type-preference.md) *(amended 2026-08-30: the gate is a permutation test, not a threshold)*
-- [16 - Shipping the catalog is a merge, and spoken-for shows are undeletable](16-catalog-ships-as-a-merge.md)
+- [16 - Shipping the catalog is a merge, and spoken-for shows are undeletable](16-catalog-ships-as-a-merge.md) *(noted 2026-10-16: the refresh now runs nightly)*

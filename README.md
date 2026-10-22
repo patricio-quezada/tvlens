@@ -4,18 +4,16 @@
 have seen, track what you are watching, and get recommendations for what to watch next.
 
 I am building it in public to learn engineering and coding, one day at a time, on
-Django and the TMDb API. [tvlens.org](https://tvlens.org) is the public build log and
-decision record, a static site; [I am logging the build day by day](https://tvlens.org/80dp/),
-alongside [the decisions behind it](https://tvlens.org/decisions/). The Django app in
-this repository runs at [tvlens.org](https://tvlens.org) on Fly.io, as an
-invite-only beta: anyone can browse, and an account needs an invite code.
+Django and the TMDb API. The Django app in this repository runs at
+[tvlens.org](https://tvlens.org) on Fly.io as an invite-only beta: anyone can browse,
+and an account needs an invite code. [I am logging the build day by day](https://tvlens.org/80dp/),
+alongside [the decisions behind it](https://tvlens.org/decisions/).
 
-If you want to understand the why behind certain choices for TVLens, you can
-[browse the ADRs](docs/adr/).
+To understand the why behind TVLens's choices, [browse the ADRs](docs/adr/).
 
 ## What is built so far
 
-The first layer of the recommender, the people graph, is built and precomputed
+The first layer of the recommender, the content graph, is built and precomputed
 ([ADR-07](docs/adr/07-materialized-recommendations.md)). On top of it sits
 **Layer 2, personalized re-ranking** ([ADR-08](docs/adr/08-layer2-personalized-reranking.md)):
 each user's ratings bend their lists toward the shows they rate highly, and drive the
@@ -25,10 +23,9 @@ lives in the decision records below.
 ## How it works: the content graph
 
 The recommender is the heart of TVLens, and its first layer is a content graph. Two
-shows are connected when they share people, and the strength of the connection is
-weighted by how much of each show the shared person actually made. A series lead
-counts for a whole show; a one-episode
-guest counts for a sliver. Cast and crew merge into one ranked list. The whole graph is
+shows are connected when they share people, and the connection is weighted by how
+much of each show the shared person actually made. A series lead counts for a whole
+show; a one-episode guest counts for a sliver. Cast and crew merge into one ranked list. The whole graph is
 precomputed and served from a table, so each page load is a fast lookup rather than a live
 computation ([ADR-07](docs/adr/07-materialized-recommendations.md)).
 
@@ -71,12 +68,14 @@ rather than as one query: [ADR-12](docs/adr/12-catalog-search.md).
 
 ## Data model
 
-TMDb-sourced metadata covers shows, seasons, episodes, genres, networks, and people, with separate cast and crew join tables that
-carry per-episode counts. User interactions span ratings, reviews with spoiler flags,
+TMDb-sourced metadata covers shows, seasons, episodes, genres, networks, and people,
+with separate cast and crew join tables that carry per-episode counts. User interactions span ratings, reviews with spoiler flags,
 watchlists with priority, and episode-level watch history. Community tagging uses a
 shared vocabulary plus per-user applied tags with relevance scores: the `Tag` row is
 shared so two readers can agree what "slow burn" means, while the `ShowTag` row belongs
 to one person. A `UserProfile` extends `auth.User` one-to-one for future personalization.
+A `ShowRequest` records a reader asking for a show TMDb has and TVLens does not; a
+nightly job ingests the requested shows. An `InviteUse` row spends one beta invite code.
 
 Layer 1 recommendations are materialized into `SimilarShow`
 ([ADR-07](docs/adr/07-materialized-recommendations.md)) rather than stored per user. A
@@ -91,9 +90,28 @@ quality-based cold-start rather than popularity.
 
 ## Built with
 
-Django 6.1 and SQLite, server-rendered with no JS framework. Data from the TMDb API.
-Runtime dependencies: `python-dotenv` and `requests`. Development adds
+Django 6.1 and SQLite, server-rendered with no JS framework, on Python 3.12 or newer.
+Data from the TMDb API. Runtime dependencies: `python-dotenv` and `requests`, plus
+`gunicorn` and `whitenoise` for serving in production. Development adds
 `django-extensions` and `ruff`.
+
+## Run it locally
+
+You need a free [TMDb API key](https://www.themoviedb.org/settings/api).
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -r requirements-dev.txt
+cp .env.example .env   # then set TMDB_API_KEY
+.venv/bin/python manage.py migrate
+.venv/bin/python manage.py ingest_shows --pages 1   # one Discover page; rebuilds the graph
+.venv/bin/python manage.py createsuperuser
+.venv/bin/python manage.py runserver
+```
+
+`ingest_shows` pulls whole shows from TMDb, so a large catalog takes a while.
+`ingest_show <tmdb_id>` adds one show by id. The checks that CI runs on every push
+are listed in [`CLAUDE.md`](CLAUDE.md).
 
 ## License
 

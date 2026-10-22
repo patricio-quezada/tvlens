@@ -7,7 +7,7 @@ that already had it, which caught three drifts, including a color invented from 
 because the real one was invisible from inside the repo.**
 
 ## Context
-The nav changed color on the walk from the homepage into a show.
+The nav changed color on the walk from the home page into a show.
 
 It is defined once, in `base.html`, so that is not a bug in the nav. It is the nav honestly
 reporting that the page under it had a different palette. TVLens had two looks:
@@ -19,13 +19,13 @@ reporting that the page under it had a different palette. TVLens had two looks:
 
 The show detail page was not the odd one out. It was the only page carrying the look of
 `tvlens.org`. Every other page still wore an older warm-brown palette built around Pantone's
-Cloud Dancer, and it surfaced while verifying
+Cloud Dancer. The split surfaced while verifying
 [#12](https://github.com/patricio-quezada/tvlens/issues/12): the show page had been brought
-into line with the landing page and the homepage had not.
+into line with the landing page and the home page had not.
 
 The mechanism to fix it already existed, and `detail.html` said so in its own comment:
 redefining the shared palette variables on `body.detail` lets the inherited nav and shell adopt
-the cinematic look without a second stylesheet. Everything needed was that same move, one level
+the cinematic look without a second stylesheet. The fix needed only that same move, one level
 up.
 
 ## Decision
@@ -92,7 +92,7 @@ permits redistribution.
 
 **DM Sans upright is the variable file.** One 61 KB download covers every weight from
 100 to 1000. Shipping the three static weights the CSS asks for would have cost 108 KB
-and still synthesized 600 and 700, which base.html uses; those are now real. Italic
+and still synthesized 600 and 700, which `base.html` uses; those are now real. Italic
 stays a single static 300, because that is the only italic in the product, and the
 variable italic is 61 KB on its own.
 
@@ -140,7 +140,7 @@ Still open. Three things are worth watching:
 - **`--error: #e89180` is a salmon inherited from the old palette.** It never sat beside amber
   before, because form errors only appear on pages that were brown. This change does not
   redesign it, and it may clash.
-- **The homepage `h1` now says TVLens directly under a nav logo that says TVLens.** The
+- **The home page `h1` now says TVLens directly under a nav logo that says TVLens.** The
   duplication predates this change and was easy to miss while the two sat in different faces at
   different sizes. In one identity it is obvious.
 - **Contrast on the quieter text.** `--text-secondary: #7a756c` on `#08080a` suited a landing

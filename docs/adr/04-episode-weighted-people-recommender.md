@@ -58,7 +58,7 @@ Three approaches lost:
 
 ## After Action Review
 It worked. For Breaking Bad the top match becomes Better Call Saul, and the show that only
-looked similar because the two share a long list of mostly-minor people drops far down. 96 of
+looked similar because the two share a long list of mostly minor people drops far down. 96 of
 100 shows come back with at least one match, and tests lock the rules in so a later change
 cannot quietly undo them.
 
@@ -155,15 +155,15 @@ House of the Dragon 0.3552, Fargo 0.3418.
 **One consequence worth stating plainly.** The Blacklist beats Malcolm in the Middle by 0.0071.
 Both rest on a single person at a full 1.0: Dave Porter, who scored every episode of both, and
 Bryan Cranston, who led both. They are separated only by tail size, so a composer ties a lead.
-That is the direct cost of keeping composition out of the widened `SERVICE_JOBS`, it was seen
+That is the direct cost of keeping composition out of the widened `SERVICE_JOBS`. It was seen
 and accepted, and `check_ground_truth` prints the margin on every run rather than asserting on
-it, because it is too small to assert on.
+it, because the margin is too small to assert on.
 
 ### Downstream
 
 `RANK_STEP` in `personalization.py` needs no change, and the reasoning is worth recording
-because the obvious move is wrong. Preserving the mean would set it to 0.573. But the mean is
-dragged by blowouts, and the constant's own comment asks that "a blowout edge resists
+because the obvious move is wrong. Preserving the mean would set it to 0.573. But blowouts drag
+the mean, and the constant's own comment asks that "a blowout edge resists
 personalization while the tail reorders freely to taste". The median score falls from 0.44 to
 0.14 while Better Call Saul still contributes 9.75, so the exponent serves that intent better
 than the linear weight did. Re-fitting `RANK_STEP` down would undo the improvement.
@@ -186,7 +186,7 @@ what the [ADR-01](01-exclude-casting-roles.md) amendment is built on.
 
 ### Tests
 
-`SimilarByPeopleTests` fixture was rewritten, not just renumbered. It gave both shows 10
+The `SimilarByPeopleTests` fixture was rewritten, not just renumbered. It gave both shows 10
 episodes and nearly every credit `episode_count=10`, so almost every share was exactly 1.0, and
 `1.0 ** anything` is `1.0`: only two assertions in 248 moved when the exponent went from 1.0 to
 1.375. A fixture that cannot see the thing it exists to freeze is worse than no fixture. Shares
@@ -197,6 +197,6 @@ now span 0.01 to 1.0.
 measured plateau, so 1.5 fails it too.
 
 `check_ground_truth` is a new management command holding the catalog-dependent facts. They are
-not unit tests because the test database is empty and recreating Breaking Bad's 75 shared people
+not unit tests because the test database is empty, and recreating Breaking Bad's 75 shared people
 as a fixture would freeze a copy of the data rather than the data, which is the failure mode it
 exists to prevent. See [ADR-07](07-materialized-recommendations.md).

@@ -8,7 +8,7 @@ status to update on success.
 
 A request is marked failed, and never retried, only when TMDb gives a final
 answer: a 404, or a daily soap or news bulletin. MIN_VOTE_COUNT is the floor
-for bulk ingest, not for requests (his call, 2026-10-18): a reader asking for
+for bulk ingest, not for requests (Patricio's call, 2026-10-18): a reader asking for
 a show by name is the signal the floor stands in for, and Halo: Nightfall has
 97 votes. What the floor was really keeping out are the shows under it with
 thousands of episodes, which take minutes to ingest and connect to nothing, so

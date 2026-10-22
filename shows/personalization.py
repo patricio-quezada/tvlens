@@ -587,8 +587,8 @@ def rated_shows(user, min_score=None):
     Returns Show objects annotated with `.user_score`, `.baseline`, `.lift` and
     `.rated_at` (the rating's updated_at: when the user last said something
     about this show, not when they first did). No meaningful order -- every
-    caller sorts, explicitly, because Show's Meta default is -popularity and
-    ADR-05 forbids ranking by it.
+    caller sorts, explicitly, rather than inheriting Show's alphabetical Meta
+    default.
     """
     if user is None or not user.is_authenticated:
         return []
@@ -683,8 +683,8 @@ def watch_next(user, limit=12, exclude_ids=(), profile=None):
     is exactly the judgement a reader makes for themselves.
 
     This reads the materialized graph in one query rather than calling
-    similar_by_people per seed (ADR-07). Ordering is explicit because Show and
-    SimilarShow both default to -popularity, which ADR-05 forbids ranking by.
+    similar_by_people per seed (ADR-07). Ordering is explicit rather than left to
+    the Meta defaults (Show by name, SimilarShow by source and rank).
 
     The result is filtered by without_watched and then reranked by Layer 2, in
     that order, so a reader's genre and tag preferences reorder a list that
@@ -946,9 +946,8 @@ def side_quests(user, limit=12, exclude_ids=()):
         if current is None or strength > current[0]:
             best[target_id] = (strength, seed_id, raw_score, hops)
 
-    # Hop 1: the seeds' own strong edges. Ordering is explicit because Show and
-    # SimilarShow both carry a different Meta default; Show's is -popularity,
-    # which ADR-05 forbids ranking by.
+    # Hop 1: the seeds' own strong edges. Ordering is explicit rather than left to
+    # the Meta defaults (Show by name, SimilarShow by source and rank).
     #
     # A watched show is not a quest, but it is still a real shared-people
     # connection, so it stays in `bridges` and can carry the walk further out.
@@ -1020,9 +1019,9 @@ def side_quests(user, limit=12, exclude_ids=()):
     if not chosen:
         return SideQuests(seeds_have=len(seed_ids))
 
-    # One fetch for the picks and the seeds they came from. Explicitly ordered:
-    # Show's Meta default is -popularity, and nothing in this path may rank by
-    # it (ADR-05). The order that matters is `chosen`, applied below.
+    # One fetch for the picks and the seeds they came from. Explicitly ordered
+    # rather than left to Show's Meta default (by name). The order that matters
+    # is `chosen`, applied below.
     wanted = {c[1] for c in chosen} | {c[2] for c in chosen}
     by_id = {
         show.id: show

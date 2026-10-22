@@ -69,7 +69,7 @@ TVLens" as a property. That claim is now false, and this change corrects those c
 Worth being precise about what was and was not given up. This is a script, not a framework:
 about 45 lines, inline, no dependency, no build step, no bundler, no vendored file. Every page
 including this one is still server-rendered, and the detail page is fully functional with
-JavaScript disabled. What changed is that TVLens is no longer able to say it has none, and the
+JavaScript disabled. What changed is that TVLens can no longer say it has none, and the
 next request to "just add a little JS" no longer meets a bright line. That is the real cost,
 and it is a cultural one rather than a technical one.
 

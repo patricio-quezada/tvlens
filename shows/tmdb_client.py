@@ -1,5 +1,5 @@
 """
-Thin wrapper around the TMDB v3 REST API.
+Thin wrapper around the TMDb v3 REST API.
 
 Usage:
     from shows.tmdb_client import TMDBClient
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 class TMDBClient:
-    """Handles all HTTP communication with the TMDB API."""
+    """Handles all HTTP communication with the TMDb API."""
 
     def __init__(self, api_key=None, base_url=None):
         self.api_key = api_key or settings.TMDB_API_KEY
@@ -49,7 +49,7 @@ class TMDBClient:
     # ── public API ────────────────────────────────────────────────────────
 
     def get_tv_genres(self):
-        """Return list of TV genre dicts."""
+        """Return a list of TV genre dicts."""
         data = self._get("/genre/tv/list")
         return data.get("genres", []) if data else []
 

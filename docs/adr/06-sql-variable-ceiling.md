@@ -1,7 +1,7 @@
 # 6. Lift the SQL variable ceiling in the recommenders
 
-**Every recommender passed the source show's people to SQLite as one bound variable each, which
-throws a 500 past SQLite's limit. Cast and crew now push the id set down as a subquery and bind
+**Every recommender passed the source show's people to SQLite as one bound variable each, so a
+show with more people than SQLite's limit threw a 500. Cast and crew now push the id set down as a subquery and bind
 nothing; the people path, which needs the ids in Python, runs in batches of 900.**
 
 ## Context
@@ -37,8 +37,8 @@ The inner query is a subquery, a query used as a value inside another query. The
 the whole thing in one pass and binds no per-person variables, so the ceiling stops applying
 rather than moving. The crew version keeps its service-jobs exclusion inside the subquery, so
 casting rows never seed the source set. The intermediate list and its extra round trip are gone
-too, which is leaner than before, and an empty subquery returns no rows, so a show with no cast
-still yields an empty result exactly as the old early return did.
+too. An empty subquery returns no rows, so a show with no cast still yields an empty result,
+exactly as the old early return did.
 
 **People: keep the list, feed it in batches.** `similar_by_people` is different. It weights
 every shared person by episode share, so it needs each person's episode count in Python to

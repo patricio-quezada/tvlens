@@ -1,8 +1,8 @@
 # 1. Exclude casting roles from crew matching
 
 **A casting office works across a studio's whole slate, so two shows sharing a casting director
-says nothing about whether they are alike. Those roles are removed before crew is compared,
-rather than down-weighted.**
+says nothing about whether they are alike. TVLens removes those roles before comparing crew,
+rather than down-weighting them.**
 
 ## Context
 The Boys and Grey's Anatomy came back as similar shows.
@@ -22,7 +22,7 @@ never counts toward two shows being similar.
 
 The ingest keeps an explicit list of casting job titles to exclude rather than matching on the
 word "casting," so the list is easy to check by hand. TMDb occasionally adds a new title that
-slips the list; a review on 2026-08-06 caught eight, including "Extras Casting" and
+slips past the list; a review on 2026-08-06 caught eight, including "Extras Casting" and
 "Location Casting," which the list now carries.
 
 I considered lowering casting's weight instead of removing it. It does not work. A casting
@@ -36,7 +36,7 @@ back-office staff a studio reuses across unrelated titles. The obviously wrong m
 disappeared and genuine ones took their place: shows that really do share a creator, a
 director, and a composer.
 
-The cost is that a couple of shows whose only link was a shared casting office now show no
+The cost is that a couple of shows whose only link was a shared casting office now have no
 match at all. That is the honest answer, and a blank is better than a wrong one.
 
 The same exclusion carries into the full weighted recommender,
@@ -60,11 +60,11 @@ rankings:
 - Miami Vice recommended Real Time with Bill Maher, on one man credited as marine coordinator
   for all 110 episodes of the first and as a writer for all 740 of the second.
 - Elementary recommended Marvel's Daredevil, on a colorist who graded the full run of both.
-- The Apothecary Diaries reached SPY x FAMILY, Frieren and Isekai Office Worker through a sound
+- The Apothecary Diaries reached SPY x FAMILY, Frieren, and Isekai Office Worker through a sound
   director and a music producer. Anime sound houses work a studio slate exactly the way a
   casting office does.
 
-So `SERVICE_JOBS` gains 85 titles in four families, each with one argument, all exact titles in
+So `SERVICE_JOBS` gains 85 titles in four families, each resting on one argument, all exact titles in
 the style already decided above, and all present in the catalog today.
 
 **Sound post, 45 titles.** A sound house or post facility is booked across a slate. This is the
@@ -82,8 +82,8 @@ production. This is the Elementary case.
 animal and marine coordinators. Hired by the production, not part of the show. This is the Miami
 Vice case.
 
-The cost is small because `SERVICE_JOBS` filters credit rows rather than people: a person is
-only lost when the excluded job is their sole credit on that show. The widening removes 1,985 of
+The cost is small because `SERVICE_JOBS` filters credit rows rather than people: a person drops
+out only when the excluded job is their sole credit on that show. The widening removes 1,985 of
 56,787 crew credits (3.5%) and 1,820 of 280,229 person-show links (0.6%). Cast credits are
 untouched. No show loses its last person, and the 409 sources with at least one edge stay 409.
 
@@ -100,21 +100,21 @@ untouched. No show loses its last person, and the 409 sources with at least one 
 | Editor | 4 full-run pairs. Excluding 1,520 credits to fix four is a bad trade |
 | Art Direction, Production Design, Costume Design, Director of Photography, Stunt Coordinator | department heads are genuine creative contributors, 7 pairs between them |
 | Associate Producer, Line Producer | genuinely below the line, but zero full-run pairs, so excluding them buys nothing and widens the blast radius |
-| Hair and Makeup Department Head | the weakest call. Locally hired, and their one pair (Lanterns to The Pitt) is wrong, but they are department heads, so the list stops short of the craft departments |
+| Hair and Makeup Department Head | the weakest call. Locally hired, and its one pair (Lanterns to The Pitt) is wrong, but they are department heads, so the list stops short of the craft departments |
 
 The bare `Producer` row is the one to re-read before widening this list again. The first survey
 of offenders named it the largest problem, and that was an artifact of classifying "below the
 line" as "absent from `MARQUEE_JOBS`", which is a naming list rather than a signal list.
 Re-derived properly, counting only pairs where the job is the person's sole credit on that show,
-`Producer` turned out to be carrying signal rather than noise. See [ADR-04](04-episode-weighted-people-recommender.md)'s correction note.
+`Producer` turned out to be carrying signal rather than noise. See [ADR-04's correction note](04-episode-weighted-people-recommender.md#correction-to-the-record).
 
 ### The audit still applies
 
-The 2026-08-06 instruction above still holds for casting, and the same instruction now applies
-to these families: when touching ingest, look for new variants that slip the exact-title list.
-The catalog has 616 distinct crew job titles today, so a new import can mint one. Four residual
-top picks are still driven by a credit of this kind after the widening, through
-`Costume Design`, `Property Master`, `Editor` and `Animation Director`, all marginal and all
+The 2026-08-06 audit above still holds for casting, and the same rule now covers these
+families: when touching ingest, look for new variants that slip past the exact-title list.
+The catalog has 616 distinct crew job titles today, so a new import can mint one. A credit of this
+kind still drives four residual top picks after the widening, through `Costume Design`,
+`Property Master`, `Editor`, and `Animation Director`, all marginal and all
 deliberately left in.
 
 `test_facility_job_excluded` and `test_composing_is_not_a_facility_job` freeze both sides of the

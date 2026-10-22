@@ -39,7 +39,7 @@ class Command(BaseCommand):
 
         # One transaction so a reader never sees a half-rebuilt store: either the
         # old graph or the new one, never a mix. The delete-then-recompute pass
-        # is cheap at catalog scale (100 shows); an incremental rebuild of only
+        # is cheap at this catalog's scale; an incremental rebuild of only
         # the shows an ingest touched is a future optimization, out of scope for
         # v1 (ADR-07).
         with transaction.atomic():

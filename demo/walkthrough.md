@@ -7,6 +7,7 @@
 >    Rows appear only when the story reaches them.
 > 2. **The end card shows the URL in large text** (tvlens.org), because nobody
 >    can click a link inside a video. Screenshots carry the URL too.
+>
 > The captures under `demo/screenshots/` and `demo/video/` are disposable and
 > ignored by git; `shoot.py`, `record_walkthrough.py`, and `build_video.sh` are
 > the tooling and are tracked.
@@ -35,7 +36,7 @@ above a crowd-pleaser you also liked. Sons of Anarchy, Game of Thrones, House,
 Bluey, The Wire, Westworld. This is the raw material. Everything else on the page
 is built from it.
 
-### 2. Watch next
+### 2. Watch Next
 
 *"Unwatched shows that share people with what you rated highly."*
 
@@ -47,7 +48,7 @@ list toward your taste and drops anything you have already rated.
 On this account it leads with Lost, Private Practice, How to Get Away with Murder,
 The Good Doctor, ER, and Scandal. That cluster is not an accident: the user rated
 Grey's Anatomy and House highly, and those two shows are dense with medical and
-Shondaland crews, so the graph reaches their neighbours first.
+Shondaland crews, so the graph reaches their neighbors first.
 
 ### 3. Open a pick and ask why
 
@@ -65,7 +66,7 @@ highly, reached through people you already like. So it is a stranger with a
 mutual friend, not more of the same. Futurama, Person of Interest, Criminal
 Minds, The Rookie, Psych, House of the Dragon. It stays locked until you have
 rated three shows 4 stars or higher, because there is no "usual path" to step
-off of before then.
+off before then.
 
 ## The rest of the home page
 

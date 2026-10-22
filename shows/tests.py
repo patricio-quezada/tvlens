@@ -1668,7 +1668,7 @@ class SideQuestsTests(TestCase):
         self.assertFalse(quests.locked)
         body = self.client.get(reverse("shows:index")).content.decode()
         self.assertNotIn("Side Quests", body)
-        self.assertNotIn("Side quests locked", body)
+        self.assertNotIn("Side Quests locked", body)
 
     def test_two_seeds_are_not_enough(self):
         # One or two shows say what a person watched, not what they lean
@@ -1702,7 +1702,7 @@ class SideQuestsTests(TestCase):
         # the seed floor, and the copy has to say the rule the code enforces.
         self.assertContains(
             response,
-            "Side quests locked. Rate three shows 4 stars or higher to unlock.",
+            "Side Quests locked. Rate three shows 4 stars or higher to unlock.",
         )
         self.assertContains(response, "0 of 3 logged")
 
@@ -1717,7 +1717,7 @@ class SideQuestsTests(TestCase):
         self.assertFalse(quests.locked)
         self.client.force_login(user)
         body = self.client.get(reverse("shows:index")).content.decode()
-        self.assertNotIn("Side quests locked", body)
+        self.assertNotIn("Side Quests locked", body)
 
     # ── what makes a pick a side quest ──────────────────────────────────────
 
@@ -1848,7 +1848,7 @@ class SideQuestsTests(TestCase):
         response = self.client.get(reverse("shows:index"))
         self.assertContains(response, "Side Quests")
         self.assertContains(response, "FullyNew")
-        self.assertNotContains(response, "Side quests locked")
+        self.assertNotContains(response, "Side Quests locked")
 
 
 class SideQuestsRankingTests(TestCase):
@@ -2769,14 +2769,14 @@ class SearchParseTests(TestCase):
 
 
 class SearchTests(TestCase):
-    """The catalog search, and the two rules that shape it.
+    r"""The catalog search, and the two rules that shape it.
 
     One: a substring match lies. "hbo" matched 46 shows through the word
     "neighbour" before word-boundary matching went in, which is why every
     branch anchors on \\b.
 
     Two: never OR two fan-out relations into one filter(). Cast crossed with
-    crew materialises tens of millions of rows and the query does not return.
+    crew materializes tens of millions of rows and the query does not return.
     The branches stay separate and the ids are unioned in Python.
     """
 
@@ -3512,7 +3512,7 @@ class TaggingTests(TestCase):
 
 
 class RecommendationModelRemovedTests(TestCase):
-    """ADR-07 materialised SimilarShow instead, and nothing ever wrote a
+    """ADR-07 materialized SimilarShow instead, and nothing ever wrote a
     Recommendation row. A dead table with a `reason` field that will never hold
     anything is worse than no table."""
 
@@ -4839,7 +4839,7 @@ class FtsQueryEscapingTests(TestCase):
 
 
 class EpisodeFtsSearchTests(TestCase):
-    """Freezes #29's two decisions: prefix parity and bm25 within the branch.
+    r"""Freezes #29's two decisions: prefix parity and bm25 within the branch.
 
     Prefix matching was measured identical to the \\b regex on every term
     tried, where exact matching silently lost "murderer" and "murders". And

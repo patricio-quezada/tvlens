@@ -3,8 +3,8 @@
 A Django 6.1 TV recommender built on SQLite and TMDb data. It runs on Fly.io as
 the app `tvlens` at tvlens.org (app.tvlens.org redirects there; the 80dp
 build log at tvlens.org/80dp/ is the tvlens-site repo, routed by a Cloudflare
-Worker). Decisions are in `docs/adr/`, and what a
-review checks for is in `REVIEW.md`.
+Worker). Decisions are in `docs/adr/`, and what a review checks for is in
+`REVIEW.md`.
 
 ## Checks (run all of them before every deploy; CI runs them on every push)
 ```

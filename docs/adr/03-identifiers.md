@@ -13,7 +13,7 @@ The tempting move is one nice identifier doing all three. Something branded, lik
 
 ## Decision
 
-> **Amended 2026-08-30.** Show now sets its primary key to the tmdb_id, so two of the three identities share one number, see [The surrogate pk IS the tmdb_id for Show](#the-surrogate-pk-is-the-tmdb_id-for-show).
+> **Amended 2026-08-30.** Show now sets its primary key to the tmdb_id, so two of the three identities share one number; see [The surrogate pk IS the tmdb_id for Show](#the-surrogate-pk-is-the-tmdb_id-for-show).
 
 Keep three identifiers, each with one job.
 
@@ -31,8 +31,8 @@ Keep three identifiers, each with one job.
 ### The surrogate pk IS the tmdb_id for Show
 
 The three identities stand, but for Show two of them are now the same number.
-`Show.id` was a `BigAutoField`, which records the order rows happened to be
-inserted on one machine and means nothing on any other. `tmdb_id` means the
+`Show.id` was a `BigAutoField`, which records the order in which rows happened
+to be inserted on one machine and means nothing on any other. `tmdb_id` means the
 same thing everywhere, forever, and was already unique and indexed.
 
 That difference is harmless while TVLens is one deployment. It stops being
@@ -44,22 +44,22 @@ thing in TVLens that cannot be regenerated. See issue #28.
 
 Done as a data operation rather than a schema migration: no ALTER, no column
 change. `match_show_ids` rewrites the values in two phases, because the ranges
-overlapped, on this catalog at 8 values that were both an existing id and some
-show's tmdb_id. A single pass would have collided mid-flight.
+overlapped: on this catalog, 8 values were both an existing id and some show's
+tmdb_id. A single pass would have collided mid-flight.
 
 The check that mattered ran before and after: every rating had to resolve to
-the same TMDB ID it began with, or nothing committed. 248 shows rewritten, 488
+the same TMDb ID it began with, or nothing committed. 248 shows rewritten, 488
 ratings unchanged, 11 tables followed.
 
 Eleven, not the nine the models declare. The two many-to-many join tables,
-`shows_show_genres` and `shows_show_networks`, have no model of their own and
-were missed by a hand-written list. The integrity check caught it and rolled
+`shows_show_genres` and `shows_show_networks`, have no model of their own, and
+a hand-written list missed them. The integrity check caught it and rolled
 back; the command now reads the foreign keys from the schema, which is the
 version that cannot be incomplete.
 
 **The invariant this creates:** every Show must be created with an explicit
 `id=tmdb_id`. `Ingestor.ingest_show` does it, and `ShowIdentityTests` fails if
-any show in the catalog drifts. Without it an autofield hands out a low integer
+any show in the catalog drifts. Without it, an autofield hands out a low integer
 that collides with a real tmdb_id.
 
 ## After Action Review

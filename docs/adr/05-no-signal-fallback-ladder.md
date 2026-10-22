@@ -5,7 +5,7 @@ database's default order, which is popularity. The list falls back through two w
 instead, and says on the page which one it used.**
 
 ## Context
-Some shows score zero against everything. A brand new or unaired show legitimately has no
+Some shows score zero against everything. A brand-new or unaired show legitimately has no
 episodes, and some shows carry only series-level credits with no per-episode numbers, so the
 weighting in [ADR-04](04-episode-weighted-people-recommender.md) has nothing to weigh.
 
@@ -39,7 +39,7 @@ information there is. I also considered dropping straight to the rating, which s
 candidate-side estimate that is still measurable. The middle step earns its place.
 
 ## After Action Review
-A brand new or barely-recorded show now shows a sensible list instead of a blank space or a
+A brand-new or barely recorded show now gets a sensible list instead of a blank space or a
 popularity chart in disguise, and the list is honest about how sure it is: a full match, an
 estimate, or a quality rating.
 

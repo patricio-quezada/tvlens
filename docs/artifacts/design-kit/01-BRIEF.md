@@ -26,7 +26,7 @@ it should be "oh, these two shows share these people."
 A ranked list of similar shows. For each one:
 - Poster, title, year.
 - **The people who connect it to the current show, named.** e.g. "Connected through Vince
-  Gilligan, Mark Johnson, Giancarlo Esposito, and 75 others." This is the star element,
+  Gilligan, Mark Johnson, Giancarlo Esposito, and 75 others." This is the star element;
   give it real visual weight, not fine print.
 - A quiet strength cue is fine (a score or a "78 shared people" count), but secondary to
   the names.

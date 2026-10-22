@@ -35,7 +35,7 @@ if not SECRET_KEY:
 
 ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
 
-# The app's one public hostname, and the old ones that 301 to it (see
+# The app's one public hostname, and the old ones that redirect to it (see
 # tvlens/middleware.py). Each old host must also be in ALLOWED_HOSTS, or Django
 # refuses the request before it can be redirected.
 CANONICAL_HOST = os.getenv("CANONICAL_HOST", "")
@@ -189,7 +189,7 @@ MEDIA_ROOT = BASE_DIR / "media"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# TMDB API
+# TMDb API
 
 TMDB_API_KEY = os.getenv("TMDB_API_KEY", "")
 TMDB_BASE_URL = "https://api.themoviedb.org/3"
@@ -200,7 +200,7 @@ TMDB_IMAGE_BASE_URL = "https://image.tmdb.org/t/p"
 SHOWS_PER_PAGE = 24
 REVIEWS_PER_PAGE = 10
 
-# Email (console backend in dev — emails print to terminal)
+# Email (console backend in dev — emails print to the terminal)
 
 EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "noreply@tvlens.org")

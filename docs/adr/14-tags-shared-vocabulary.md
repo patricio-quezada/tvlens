@@ -7,7 +7,7 @@ tags.**
 
 ## Context
 Genres come from TMDb and describe what a show *is*. Nothing described what it was *like to watch*,
-which is the judgement a viewer actually trades with other viewers.
+which is the judgment a viewer actually trades with other viewers.
 
 The models had existed since the first schema and held zero rows. `personalization.py` was already
 reading `ShowTag` on two code paths, weighting tag affinity by relevance, so the recommender had a

@@ -47,9 +47,9 @@ stub with no definition; once the definition is surprise measured against demons
 loading the row for a user who has demonstrated nothing is not a feature, it is a
 contradiction. The row is now gated, and the page says so in as many words.
 
-The mechanism survived this. A side quest is still a strong Layer 1 edge reaching somewhere the
-user has not been, and it survived the second revision below too; what changed both times was
-who the row is for and how it is ordered. The file name stays across both, so every reference
+The mechanism survived this change and the second revision below: a side quest is still a
+strong Layer 1 edge reaching somewhere the user has not been. What changed both times was who
+the row is for and how it is ordered. The file name stays across both, so every reference
 to this record from the code and from the other records still resolves.
 
 ### How it changed again: the row was the recommendation row wearing a different title
@@ -57,7 +57,7 @@ The first amendment fixed *who* the row is for. It left the ordering untouched, 
 with the row on the page that turned out to be the larger problem: the row was returning the
 top recommendations of the shows I had rated, when what it should return is edge cases still
 bound by those recommendations, a second-degree connection rather than a first. The cause was
-structural rather than a tuning miss, and there were two faults in it.
+structural rather than a tuning miss, with two faults in it.
 
 **The candidate pool was the recommendation pool.** Walking ranks 0 through 5 out of the
 seeds *is* what a "more like this" row shows. Surprise was then applied only as a re-sort over
@@ -84,7 +84,7 @@ has already watched stay in the walk as *bridges* even though they can never be 
 the user has seen is a real shared-people connection, and treating it as a dead end throws away
 the graph's most reliable edges.
 
-**A show that many seeds reach sinks.** Divided by `(seeds that reached it) **
+**A show that many seeds reach sinks.** Its score is divided by `(seeds that reached it) **
 SIDE_QUEST_CENTRALITY_EXPONENT`. This is the term that most directly answers "edge cases bound
 by our recommendations": a candidate every one of a user's favorites points at sits at the
 *center* of that taste, and centrality is measurable where peripherality was previously only
@@ -114,7 +114,7 @@ has-not, and Layer 2 already keeps a signed number per genre.
 
 ## Decision
 
-> **Note, 2026-08-26.** ADR-04's rescoring tilted the hop decay toward novelty, and the constant stays at 0.5, see [The hop decay is tilted, and left alone](#the-hop-decay-is-tilted-and-left-alone).
+> **Note, 2026-08-26.** ADR-04's rescoring tilted the hop decay toward novelty, and the constant stays at 0.5. See [The hop decay is tilted, and left alone](#the-hop-decay-is-tilted-and-left-alone).
 
 **A side quest is a strong Layer 1 connection, out of a show this user rated highly, that lands
 in genres this user has never rated highly and that few of their favorites point at.** Four
@@ -160,8 +160,8 @@ The only new number is a multiplier on Layer 1's own score. Nothing scores a sho
 second engine runs over the catalog, which keeps this inside [ADR-08](08-layer2-personalized-reranking.md)'s rule that Layer 2
 re-ranks rather than re-scores.
 
-Shows the user has already watched never appear, watched covering rated ([ADR-08](08-layer2-personalized-reranking.md)), and neither
-does anything the home page has already used in Top Picks.
+Shows the user has already watched never appear (a rated show counts as watched,
+[ADR-08](08-layer2-personalized-reranking.md)), and neither does anything the home page has already used in Top Picks.
 
 **Three render states, and the third one matters.** Cards when the walk found something; the
 locked copy when the user is under three seeds; and *nothing at all* when an unlocked user's
@@ -221,7 +221,7 @@ would mean `SIDE_QUEST_HOP_DECAY = 0.33` rather than 0.5.
 **Left at 0.5 deliberately.** This ADR already flags the constant as needing a re-fit at real
 catalog scale, tracked in #20, and it was tuned against a 100-show catalog that no longer
 exists. Re-fitting it inside the rescoring change would mix two adjustments and make neither
-measurable. Side Quests was also expected to give way to Watch Next as the homepage row.
+measurable. Side Quests was also expected to give way to Watch Next as the home page row.
 Watch Next has since shipped (#24) and leads the page, but Side Quests stayed below it, so
 these constants are still live.
 
@@ -229,7 +229,7 @@ The direction of the tilt is toward novelty, which is the axis this row exists t
 percentage points is not a regression. It is written down here so the next person to touch the
 constant knows part of the drift came from Layer 1 rather than from this row.
 
-`[ADR-04](04-episode-weighted-people-recommender.md)` records the same measurement from the other side.
+[ADR-04](04-episode-weighted-people-recommender.md) records the same measurement from the other side.
 
 ## After Action Review
 `shows/tests.py::SideQuestsTests` freezes the definition:

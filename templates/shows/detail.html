@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% load humanize %}
-{% block title %}{{ show.name }} — TVLens{% endblock %}
+{% block title %}{{ show.name }} · TVLens{% endblock %}
 
 {% block body_class %}detail{% endblock %}
 
@@ -190,7 +190,7 @@
        quieter prose that explains how they connect. Each callout sits in its
        own light box (7a wireframe): a faint off-white border and a barely-there
        lighter panel, so the sentence reads as a contained panel on the near
-       black. Light, not amber, so amber stays the one loud color (the names). */
+       black. Light, not amber, so amber stays the one loud colour (the names). */
     .rec-callout {
         margin-top: 0.9rem;
         padding: 0.85rem 1.1rem;
@@ -446,7 +446,7 @@
                 {% for net in show.networks.all %}{% if not forloop.first %}<span class="dot">·</span>{% endif %}<span class="network">{{ net.name }}</span>{% endfor %}
                 {% if show.networks.all and show.number_of_seasons %}<span class="dot">·</span>{% endif %}
                 {% if show.number_of_seasons %}<span>{{ show.number_of_seasons }} season{{ show.number_of_seasons|pluralize }}, {{ show.number_of_episodes }} episode{{ show.number_of_episodes|pluralize }}</span>{% endif %}
-                {% if show.vote_count %}<span class="dot">·</span><span class="rating">★ {{ show.tmdb_score_5|floatformat:1 }}</span><span>from {{ show.vote_count|intcomma }} votes</span>{% endif %}
+                {% if show.vote_count %}<span class="dot">·</span><span class="rating">★ {{ show.tmdb_score_5|floatformat:1 }}</span><span>from {{ show.vote_count|intcomma }} vote{{ show.vote_count|pluralize }}</span>{% endif %}
                 {% if show.status %}<span class="dot">·</span><span class="status">{% if show.status == 'Returning Series' or show.status == 'In Production' %}<span class="dot-live"></span>{% endif %}{{ show.get_status_display }}</span>{% endif %}
             </div>
 
@@ -590,7 +590,7 @@
 
 {% if user.is_authenticated %}
 <script>
-/* The only script in TVLens, and it is optional (ADR-10).
+/* The rating script. Like every script in TVLens, it is optional (ADR-10).
    Without it the stars are ten submit buttons and a plain POST-redirect, which
    saves the rating and reloads the page. With it the same POST goes out over
    fetch, nothing navigates, and the scroll position is therefore never lost --

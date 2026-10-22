@@ -800,7 +800,7 @@ def my_ratings(request):
     it back to the top, which is the honest reading of "what have I been saying
     lately". The sort is explicit rather than inherited. Rating.Meta already
     orders by -updated_at, but rated_shows() hands back Show objects, and
-    Show's own Meta default is -popularity, which ADR-05 forbids ranking by.
+    Show's own Meta default is alphabetical, not recency.
     Name breaks ties so two ratings saved in the same instant stay stable.
     """
     shows = rated_shows(request.user)

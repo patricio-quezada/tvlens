@@ -1,5 +1,5 @@
 """
-Management command to backfill episode counts from TMDB aggregate_credits.
+Management command to backfill episode counts from TMDb aggregate_credits.
 
 Fetches only /tv/{id}/aggregate_credits for each show. It does not re-fetch
 details, seasons, or episodes, so a full catalog pass costs one API call per

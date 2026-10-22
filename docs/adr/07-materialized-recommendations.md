@@ -13,13 +13,13 @@ Then the next visitor opens the same page, and it does all of it again.
 
 The list does not depend on who is looking. It only changes when an ingest changes the credits
 underneath it. So every page load after the first was paying full price for an answer TVLens
-already had, and [ADR-06](06-sql-variable-ceiling.md) had already named it as the open
-follow-up, issue #1, problem 2: the pages run the recommenders on every request with no
+already had, and [ADR-06](06-sql-variable-ceiling.md) had named this as the open
+follow-up (issue #1, problem 2): the pages run the recommenders on every request with no
 caching.
 
 ## Decision
 
-> **Amended 2026-08-29.** Every edge now carries two more columns that split the score into cast and crew contributions, see [The cast/crew split rides on the edge](#the-castcrew-split-rides-on-the-edge).
+> **Amended 2026-08-29.** Every edge now carries two more columns that split the score into cast and crew contributions; see [The cast/crew split rides on the edge](#the-castcrew-split-rides-on-the-edge).
 
 Precompute the whole Layer 1 ranking once and store it, then serve reads from the store.
 
@@ -36,8 +36,8 @@ views and templates downstream do not change.
 ([ADR-05](05-no-signal-fallback-ladder.md)): weighted, estimated, or rating. It belongs to the
 source, not the edge, so every one of a source's edges carries the same value. Storing it per
 edge repeats one small string, but it keeps the whole graph in one table with no second lookup,
-which is the simplest thing that round-trips the `RankedShows` return value. A separate per-
-source table would normalize away the repeat and buy nothing at catalog scale.
+which is the simplest thing that round-trips the `RankedShows` return value. A separate
+per-source table would normalize away the repeat and buy nothing at catalog scale.
 
 **The invalidation is the rebuild.** There is no per-row cache expiry and no read-through
 fallback. A stale store is impossible because ingest owns the refresh: both `ingest_shows` and
@@ -75,7 +75,7 @@ each side.
 They are here for exactly the reason the rest of the row is. Layer 2's
 connection-type preference ([ADR-15](15-connection-type-preference.md)) needs the split per edge, and computing it
 at request time meant a `role_indexes` pass over every show the reader had
-rated. Profiled on the real catalog that was **53% of the entire profile
+rated. Profiled on the real catalog, that pass was **53% of the entire profile
 build**, spent re-deriving numbers that only change on ingest.
 
 Moving it to the edge cut a 249-rating profile from 579ms to 205ms. Removing a
@@ -92,7 +92,7 @@ pass that already computes the ranking, and one full rebuild to backfill.
 
 ## After Action Review
 
-> **Note, 2026-08-26.** The numbers below are dated measurements, and a management command now holds the live record, see [The review is a measurement, not an invariant](#the-review-is-a-measurement-not-an-invariant).
+> **Note, 2026-08-26.** The numbers below are dated measurements, and a management command now holds the live record; see [The review is a measurement, not an invariant](#the-review-is-a-measurement-not-an-invariant).
 
 The store holds the same graph the live recommender produced. Rebuilt against the real 100-show
 catalog it writes 1041 edges across 96 sources that have at least one similar show (4 shows

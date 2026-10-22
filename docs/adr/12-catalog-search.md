@@ -1,15 +1,15 @@
 # 12. Catalog search: one query per branch, matched on word boundaries
 
 **Search never ORs two fan-out relations into a single `filter()`, because that query does not
-return. Every branch runs as its own query and the ids are unioned in Python. Every branch matches
+return. Every branch runs as its own query, and Python unions the ids. Every branch matches
 on a word boundary, using a cheap `LIKE` to prefilter and a regex to decide, because a plain
 substring match answers three-letter queries with garbage.**
 
 ## Context
 
-Issue #8 asked for search over titles, cast, crew, characters, descriptions, genres, networks,
-season names and episode synopses, modeled on a plain-text notes app's advanced search rather than a single
-text box.
+Issue [#8](https://github.com/patricio-quezada/tvlens/issues/8) asked for search over titles,
+cast, crew, characters, descriptions, genres, networks, season names and episode synopses,
+modeled on a plain-text notes app's advanced search rather than a single text box.
 
 The obvious implementation is one `filter()` with every branch ORed together. On the 100-show
 catalog, for a query with sixteen real hits, that query was killed at eight seconds twice and was
@@ -29,7 +29,7 @@ three-letter query with garbage is worse than one that answers nothing.
 
 ## Decision
 
-> **Amended 2026-09-01.** The episode synopsis branch now reads an FTS5 index, chosen for bm25 ranking more than for speed, see [The episode branch reads FTS5, for bm25 more than speed](#the-episode-branch-reads-fts5-for-bm25-more-than-speed).
+> **Amended 2026-09-01.** The episode synopsis branch now reads an FTS5 index, chosen for bm25 ranking more than for speed. See [The episode branch reads FTS5, for bm25 more than speed](#the-episode-branch-reads-fts5-for-bm25-more-than-speed).
 
 **One query per branch, ids unioned in Python.** Nine branches, each touching one relation. The
 same search that would not return runs in 32 ms this way, 74 ms worst case, with identical results.
@@ -57,7 +57,7 @@ build, confirmed by creating a table and matching against it, and would change t
 is not adopted, because there is no latency to recover: the slowest single scan in the catalog is
 Person.name at 5.1 ms across 154,699 rows.
 
-**A year and a season number typed into the box filter, with no operator and no button.** Both are
+**A year and a season number typed into the search box filter, with no operator and no button.** Both are
 lifted out of the string before the text search runs. Leaving them in would run them twice, and
 "Season 3" as free text matches nearly every show in the catalog. A year means *was airing then*,
 not *premiered then*, and a show with no `last_air_date` has not ended.
@@ -106,13 +106,13 @@ on `season_id` as well as `overview`, because TMDb moves episodes between
 seasons while keeping their id, and an overview-only trigger would leave a
 moved episode answering for its old show.
 
-The table carries show_id, season_id and episode_id unindexed, so the season
+The table carries `show_id`, `season_id` and `episode_id` unindexed, so the season
 pivot (#25, #26) becomes a change of SELECT column rather than an index
 rebuild. Tested in `FtsQueryEscapingTests`, `EpisodeFtsSearchTests` and
 `EpisodeFtsTriggerTests`. The Python-side early-exit fallback #29 kept in
 reserve was not needed.
 
-## Consequences
+## After Action Review
 
 **Re-measured 2026-08-30**, on 248 shows and 164,176 episodes after the catalog was filtered and
 pruned. The original figure here was a single number for free text, which turned out to hide the
@@ -139,7 +139,7 @@ the 120-show cap, which is not an answer to anything. A term matching half the c
 power to discriminate, so the branch could be skipped on exactly the terms that make it slow.
 That is a behavior change and belongs in a proposal, not here.
 
-**Cost scales with term frequency, not catalog size.** The catalog since shrank by 46% and the
+**Cost scales with term frequency, not catalog size.** The catalog has since shrunk by 46% and the
 worst case got worse, because the pruned shows were low-signal ones whose synopses matched
 nothing. FTS5 remains the real answer whenever this stops being tolerable.
 

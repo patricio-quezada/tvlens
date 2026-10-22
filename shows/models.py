@@ -1,10 +1,10 @@
 """
-TVLens data models — 17 tables for a MovieLens-inspired TV recommendation platform.
+TVLens data models — 18 tables for a MovieLens-inspired TV recommendation platform.
 
 Tables:
   1. Genre              9. Rating           17. SimilarShow
-  2. Network           10. Review
-  3. Show              11. Watchlist
+  2. Network           10. Review           18. InviteUse
+  3. Show              11. Watchlist        19. ShowRequest
   4. Season            12. WatchHistory
   5. Episode           13. Tag
   6. Person            14. ShowTag
@@ -554,6 +554,9 @@ class InviteUse(models.Model):
 
     def __str__(self):
         return f"{self.code} -> {self.user.username}"
+
+
+# ── 19. ShowRequest ───────────────────────────────────────────────────────────
 
 
 class ShowRequest(models.Model):

@@ -27,7 +27,7 @@ that endpoint. TMDb's `aggregate_credits` returns 348, plus 25 directors.
 - **Remove the `[:25]` cast cap** in ingestion. It silently truncated billing, and it would have
   capped Breaking Bad's 348 cast at 25.
 - Backfill through a `--show <tmdb_id>`-scoped management command that fetches only
-  aggregate_credits, not seasons or episodes, so a catalog pass costs one API call per show.
+  `aggregate_credits`, not seasons or episodes, so a catalog pass costs one API call per show.
 
 ## After Action Review
 The data grew enormously. Cast credits went from about 700 to over 128,000, crew from about

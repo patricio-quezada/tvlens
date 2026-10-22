@@ -21,7 +21,7 @@ Everything is first shifted above max(id, tmdb_id), then brought down onto its
 tmdb_id.
 
 The check that matters runs before and after: every rating must resolve to the
-same TMDB ID it did to begin with. If it does not, nothing is committed.
+same TMDb id it did to begin with. If it does not, nothing is committed.
 
 Usage:
     python manage.py match_show_ids --dry-run
@@ -56,7 +56,7 @@ def child_columns():
 
 
 def rating_fingerprint():
-    """Every user rating keyed by TMDB ID. The thing that must not change."""
+    """Every user rating keyed by TMDb id. The thing that must not change."""
     return sorted(
         (r.user_id, r.show.tmdb_id, r.score) for r in Rating.objects.select_related("show")
     )
