@@ -164,7 +164,7 @@ it, because the margin is too small to assert on.
 `RANK_STEP` in `personalization.py` needs no change, and the reasoning is worth recording
 because the obvious move is wrong. Preserving the mean would set it to 0.573. But blowouts drag
 the mean, and the constant's own comment asks that "a blowout edge resists
-personalization while the tail reorders freely to taste". The median score falls from 0.44 to
+personalization while the tail reorders freely to taste". The median score falls from 0.46 to
 0.14 while Better Call Saul still contributes 9.75, so the exponent serves that intent better
 than the linear weight did. Re-fitting `RANK_STEP` down would undo the improvement.
 

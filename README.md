@@ -115,4 +115,4 @@ are listed in [`CLAUDE.md`](CLAUDE.md).
 
 ## License
 
-MIT
+MIT. See [`LICENSE`](LICENSE).
