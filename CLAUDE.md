@@ -1,7 +1,9 @@
 # TVLens
 
 A Django 6.1 TV recommender built on SQLite and TMDb data. It runs on Fly.io as
-the app `tvlens` at app.tvlens.org. Decisions are in `docs/adr/`, and what a
+the app `tvlens` at tvlens.org (app.tvlens.org redirects there; the 80dp
+build log at tvlens.org/80dp/ is the tvlens-site repo, routed by a Cloudflare
+Worker). Decisions are in `docs/adr/`, and what a
 review checks for is in `REVIEW.md`.
 
 ## Checks (run all of them before every deploy; CI runs them on every push)
@@ -22,7 +24,7 @@ review checks for is in `REVIEW.md`.
   Medium needs, and Patricio says yes before the deploy.
 - Deploy: `mise x flyctl -- fly deploy --remote-only`. Never use Fly's GitHub
   launcher.
-- After a deploy, check the changed page on app.tvlens.org itself.
+- After a deploy, check the changed page on tvlens.org itself.
 - Roll back by redeploying the previous image: `fly releases --image -a tvlens`,
   then `fly deploy --image <ref> -a tvlens`. A rollback does not undo a
   migration, which is another reason migrations stay additive.

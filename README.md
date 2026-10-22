@@ -7,7 +7,7 @@ I am building it in public to learn engineering and coding, one day at a time, o
 Django and the TMDb API. [tvlens.org](https://tvlens.org) is the public build log and
 decision record, a static site; [I am logging the build day by day](https://tvlens.org/80dp/),
 alongside [the decisions behind it](https://tvlens.org/decisions/). The Django app in
-this repository runs at [app.tvlens.org](https://app.tvlens.org) on Fly.io, as an
+this repository runs at [tvlens.org](https://tvlens.org) on Fly.io, as an
 invite-only beta: anyone can browse, and an account needs an invite code.
 
 If you want to understand the why behind certain choices for TVLens, you can
