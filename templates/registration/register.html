@@ -4,7 +4,7 @@
 <div class="form-card">
     <h1>Create your account</h1>
     <p>TVLens is in beta. Anyone can browse, but an account needs an invite code.</p>
-    <p>Need a code? <a href="mailto:support@tvlens.org?subject=TVLens%20invite&amp;body=Hi%2C%20I%20would%20like%20an%20invite%20to%20TVLens.%20Thank%20you!" title="support@tvlens.org">Email us for an invite</a>.</p>
+    <p>Need a code? <a href="mailto:support@tvlens.org?subject=TVLens%20invite&body=Hi%2C%20I%20would%20like%20an%20invite%20to%20TVLens.%20Thank%20you!" title="support@tvlens.org">Email us for an invite</a>.</p>
     <form method="post">{% csrf_token %}{{ form.as_p }}<button type="submit">Sign up</button></form>
     <p>Already have an account? <a href="{% url 'login' %}">Log in</a>.</p>
 </div>
