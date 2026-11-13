@@ -730,6 +730,13 @@ def add_tag(request, slug):
     show = get_object_or_404(Show, slug=slug)
     raw = (request.POST.get("tag") or "").strip()[:TAG_MAX_LENGTH]
     name = " ".join(raw.split())
+    # Tags read as labels: an ASCII first letter becomes a capital ("action"
+    # becomes "Action"), and the rest is kept as typed so "TV" survives.
+    # Only ASCII: SQLite's LIKE folds case for ASCII alone, so "Émotion" would
+    # stop matching a search for "émotion", and "ß".upper() is "SS", which
+    # would change the slug and split the tag.
+    if name[:1].isascii():
+        name = name[:1].upper() + name[1:]
 
     if not name:
         return (

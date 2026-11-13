@@ -3400,6 +3400,20 @@ class TaggingTests(TestCase):
         self.client.post(reverse("shows:add_tag", args=["day-shift"]), {"tag": "slow burn"})
         self.assertEqual(Tag.objects.filter(slug="slow-burn").count(), 1)
 
+    def test_a_new_tag_starts_with_a_capital(self):
+        """Typed "action" is stored as "Action"; the rest keeps its casing."""
+        self.add("action")
+        self.add("tV comfort", slug="day-shift")
+        self.assertEqual(Tag.objects.get(slug="action").name, "Action")
+        self.assertEqual(Tag.objects.get(slug="tv-comfort").name, "TV comfort")
+
+    def test_a_non_ascii_first_letter_is_kept_as_typed(self):
+        """SQLite only folds ASCII case, and "ß".upper() would change the slug."""
+        self.add("émotion")
+        self.add("ßauna", slug="day-shift")
+        self.assertEqual(Tag.objects.get(slug="emotion").name, "émotion")
+        self.assertEqual(Tag.objects.get(slug="auna").name, "ßauna")
+
     def test_the_same_tag_twice_does_not_duplicate(self):
         self.add("comfort watch")
         self.add("comfort watch")
@@ -3444,7 +3458,7 @@ class TaggingTests(TestCase):
         tag = Tag.objects.create(name="theirs", slug="theirs")
         ShowTag.objects.create(user=self.other, show=self.show, tag=tag)
         resp = self.client.get(reverse("shows:detail", args=["night-shift"]))
-        self.assertEqual({t.tag.name for t in resp.context["user_tags"]}, {"mine"})
+        self.assertEqual({t.tag.name for t in resp.context["user_tags"]}, {"Mine"})
 
     def test_the_tag_page_scopes_to_the_signed_in_reader(self):
         self.add("mine")
@@ -3508,7 +3522,7 @@ class TaggingTests(TestCase):
         resp = self.client.get(reverse("shows:tag", args=["mine"]))
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(list(resp.context["shows"]), [])
-        self.assertEqual(resp.context["tag"].name, "mine")
+        self.assertEqual(resp.context["tag"].name, "Mine")
 
 
 class RecommendationModelRemovedTests(TestCase):
