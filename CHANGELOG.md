@@ -6,6 +6,7 @@ Improved, Infrastructure, Known issues, Incidents.
 
 ## v0.3.2: Nov 13, 2026
 **Improved**
+- The sign-up page has a "Need a code?" link: one click opens an email to support@tvlens.org to ask for an invite.
 - Tags start with a capital letter: "action" is saved as "Action". The rest of the tag keeps the reader's typing, so "TV" stays "TV". Existing tags were updated to match.
 
 ## v0.3.1: Oct 22, 2026
