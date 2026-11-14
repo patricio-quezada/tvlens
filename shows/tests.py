@@ -4009,6 +4009,28 @@ class AlreadyWatchedFilterTests(TestCase):
         resp = self.client.get(url)
         return [r["show"] for r in resp.context["recommendations"]]
 
+    def test_a_signed_out_show_page_skips_the_seen_lookup(self):
+        """Signed out, nothing is seen, so no query asks. 14 with the rows on
+        this fixture; one more means the unseen lookup runs for visitors."""
+        url = self.source.get_absolute_url()
+        self.client.get(url)  # warm the per-process caches
+        with self.assertNumQueries(14):
+            self.client.get(url)
+
+    def test_the_genre_page_counts_seen_shows_in_one_query(self):
+        """One COUNT of the reader's seen shows, not two counts subtracted."""
+        drama = Genre.objects.create(tmdb_id=18, name="Drama")
+        for show in self.candidates:
+            show.genres.add(drama)
+        Rating.objects.create(user=self.user, show=self.candidates[0], score=4.0)
+        self.client.login(username="rater", password="pw-rater-123")
+        url = reverse("shows:genre", args=[drama.pk])
+        self.client.get(url)
+        with self.assertNumQueries(8):
+            resp = self.client.get(url)
+        self.assertEqual(resp.context["seen_count"], 1)
+        self.assertNotIn(self.candidates[0], list(resp.context["shows"]))
+
     def test_baseline_order_before_anyone_rates_anything(self):
         """What the row looks like untouched, so the rest of these mean something."""
         self.assertEqual(len(self.shown()), DETAIL_RECOMMENDATION_LIMIT)

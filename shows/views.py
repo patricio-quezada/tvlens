@@ -341,13 +341,12 @@ def genre(request, pk):
     seen_count = 0
     if request.user.is_authenticated:
         favorite_genre_ids = favorite_genre_ids_for(request.user)
-        unseen = shows.unseen_by(request.user)
-        seen_count = shows.count() - unseen.count()
+        seen_count = shows.watched_by(request.user).count()
         if include_seen:
             own = Rating.objects.for_reader(request.user).filter(show=OuterRef("pk"))
             shows = shows.annotate(user_score=Subquery(own.values("score")[:1]))
         else:
-            shows = unseen
+            shows = shows.unseen_by(request.user)
     return render(
         request,
         "shows/genre.html",
@@ -382,7 +381,10 @@ def detail(request, slug):
     # that should only have got shorter. Filtering the whole list here, before
     # the ladder slices a rung off it below, is also what backfills the gap:
     # the reader still sees three, the fourth candidate just moves up.
-    ranked = rerank(request.user, stored_similar(show)).within(Show.objects.unseen_by(request.user))
+    ranked = rerank(request.user, stored_similar(show))
+    if request.user.is_authenticated:
+        # Signed out, nothing is seen, so the lookup is skipped, not run.
+        ranked = ranked.within(Show.objects.unseen_by(request.user))
 
     # TVLens's own rating (distinct from the TMDb vote_average in the hero). The
     # widget shows the signed-in user their current score and lets them change it.
