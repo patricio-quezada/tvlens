@@ -15,6 +15,10 @@ from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
+# The longest a 429's Retry-After is honored, in seconds. The nightly steps
+# must stay bounded in time, and TMDb's header is not ours to trust.
+MAX_RATE_LIMIT_WAIT = 5
+
 
 class _Miss:
     """A TMDb call that returned no data, and why. Falsy, so `if not data`
@@ -66,9 +70,15 @@ class TMDBClient:
                 if resp.status_code == 404:
                     return NotFound
                 if resp.status_code == 429:
-                    wait = int(resp.headers.get("Retry-After", 2))
-                    logger.warning("TMDB rate-limited, waiting %ds", wait)
-                    time.sleep(wait)
+                    # No wait after the last attempt: nothing follows it.
+                    if attempt < retries - 1:
+                        try:
+                            wait = int(resp.headers.get("Retry-After", 2))
+                        except ValueError:
+                            wait = 2
+                        wait = max(0, min(wait, MAX_RATE_LIMIT_WAIT))
+                        logger.warning("TMDB rate-limited, waiting %ds", wait)
+                        time.sleep(wait)
                     continue
                 resp.raise_for_status()
                 return resp.json()

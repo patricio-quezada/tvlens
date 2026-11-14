@@ -68,7 +68,7 @@ from .recommenders import (
 )
 from .search import ParsedQuery, _episode_fts, _fts_query, _word
 from .search import search as run_search
-from .tmdb_client import NotFound, TMDBClient, Unavailable
+from .tmdb_client import MAX_RATE_LIMIT_WAIT, NotFound, TMDBClient, Unavailable
 from .views import DETAIL_RECOMMENDATION_LIMIT
 
 
@@ -5842,6 +5842,19 @@ class TMDBClientMissTests(TestCase):
         client, calls = self.client_answering(FakeTMDbResponse(503))
         self.assertIs(client.get_tv_details(1), Unavailable)
         self.assertEqual(len(calls), 3)
+
+    def test_a_rate_limit_waits_a_bounded_time_and_never_after_the_last_try(self):
+        from unittest.mock import patch
+
+        limited = FakeTMDbResponse(429)
+        limited.headers = {"Retry-After": "3600"}
+        client, calls = self.client_answering(limited)
+        with patch("shows.tmdb_client.time.sleep") as sleep:
+            self.assertIs(client.get_tv_details(1, retries=1), Unavailable)
+            sleep.assert_not_called()
+            self.assertIs(client.get_tv_details(1, retries=3), Unavailable)
+        self.assertEqual([c.args[0] for c in sleep.call_args_list], [MAX_RATE_LIMIT_WAIT] * 2)
+        self.assertEqual(len(calls), 4)
 
     def test_a_timeout_is_unavailable(self):
         import requests
