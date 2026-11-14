@@ -5874,3 +5874,22 @@ class TMDBClientMissTests(TestCase):
         with patch("shows.ingestion.TMDBClient", return_value=client):
             self.assertIsNone(Ingestor().ingest_show(1))
         self.assertFalse(Show.objects.exists())
+
+
+class DocumentedVersionTests(SimpleTestCase):
+    """The Django version the docs name is the one requirements.txt pins.
+
+    The README's "Built with" and the repo CLAUDE.md say "Django X.Y"; the pin
+    is "Django>=X.Y,<...". An upgrade that moves one and not the other fails here.
+    """
+
+    def test_docs_name_the_pinned_django(self):
+        import re
+
+        root = Path(__file__).resolve().parent.parent
+        pin = re.search(r"^Django>=(\d+\.\d+)", (root / "requirements.txt").read_text(), re.M)
+        self.assertIsNotNone(pin, "requirements.txt has no Django>= pin")
+        for doc in ("README.md", "CLAUDE.md"):
+            with self.subTest(doc=doc):
+                named = set(re.findall(r"\bDjango (\d+\.\d+)\b", (root / doc).read_text()))
+                self.assertEqual(named, {pin.group(1)}, f"{doc} names Django {named}")
