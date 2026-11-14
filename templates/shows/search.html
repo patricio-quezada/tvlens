@@ -153,8 +153,8 @@ Nothing here is ingested; a reader's request is, nightly.{% endcomment %}
     </ul>
     <p class="elsewhere-note">
         TVLens holds the shows its recommendation graph can connect. These are
-        not in it yet. {% if user.is_authenticated %}Request one and it's added
-        in the nightly update.{% else %}<a href="{% url 'login' %}?next={{ request.get_full_path|urlencode }}">Log in</a>
+        not in it yet. {% if user.is_authenticated %}Request one to have it
+        added.{% else %}<a href="{% url 'login' %}?next={{ request.get_full_path|urlencode }}">Log in</a>
         to request one.{% endif %}
     </p>
 </div>

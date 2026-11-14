@@ -904,7 +904,7 @@ def request_show(request):
         tmdb_id=tmdb_id,
         defaults={"name": name, "year": request.POST.get("year", "").strip()[:4]},
     )
-    messages.success(request, f"Requested {name}. It's added in the nightly update.")
+    messages.success(request, f"Requested {name}.")
     return redirect(back)
 
 
