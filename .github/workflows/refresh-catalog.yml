@@ -37,7 +37,7 @@ jobs:
       - uses: superfly/flyctl-actions/setup-flyctl@master
 
       - name: Wake the machine
-        run: curl --silent --show-error --fail --retry 5 --retry-delay 5 -o /dev/null https://app.tvlens.org/
+        run: curl --silent --show-error --fail --retry 5 --retry-delay 5 -o /dev/null https://tvlens.org/healthz
 
       - name: Refresh, keeping the machine awake meanwhile
         env:
@@ -48,7 +48,7 @@ jobs:
           if [ "$DISCOVER" = "true" ]; then args="$args --discover --pages 1"; fi
           # Fly stops an idle machine; an SSH session isn't traffic, so a
           # request every 30 seconds keeps it up until the job is done.
-          ( while true; do curl --silent -o /dev/null https://app.tvlens.org/; sleep 30; done ) &
+          ( while true; do curl --silent -o /dev/null https://tvlens.org/healthz; sleep 30; done ) &
           trap 'kill $!' EXIT
           # Readers' requests first, without a rebuild: refresh_catalog
           # rebuilds the graph once for both. Never fatal: a failed request
