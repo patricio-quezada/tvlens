@@ -75,15 +75,15 @@ class Command(BaseCommand):
         # Losing someone's 5.0 because a show got less popular is the one
         # outcome this command must never produce.
         spoken_for = (
-            set(Rating.objects.values_list("show_id", flat=True))
-            | set(Review.objects.values_list("show_id", flat=True))
-            | set(Watchlist.objects.values_list("show_id", flat=True))
-            | set(ShowTag.objects.values_list("show_id", flat=True))
+            set(Rating.objects.across_readers().values_list("show_id", flat=True))
+            | set(Review.objects.across_readers().values_list("show_id", flat=True))
+            | set(Watchlist.objects.across_readers().values_list("show_id", flat=True))
+            | set(ShowTag.objects.across_readers().values_list("show_id", flat=True))
             # A show a reader asked for by name is under the floor on purpose.
             | set(
-                Show.objects.filter(tmdb_id__in=ShowRequest.objects.values("tmdb_id")).values_list(
-                    "id", flat=True
-                )
+                Show.objects.filter(
+                    tmdb_id__in=ShowRequest.objects.across_readers().values("tmdb_id")
+                ).values_list("id", flat=True)
             )
         )
         doomed = Show.objects.filter(vote_count__lt=floor).exclude(id__in=spoken_for)
@@ -100,7 +100,7 @@ class Command(BaseCommand):
             return
 
         episodes = sum(s.n for s in doomed.annotate(n=Count("seasons__episodes")))
-        ratings = Rating.objects.filter(show__in=doomed).count()
+        ratings = Rating.objects.across_readers().filter(show__in=doomed).count()
         edges = (
             (
                 SimilarShow.objects.filter(source__in=doomed)

@@ -5594,3 +5594,99 @@ class LinkPreviewTests(TestCase):
             '<meta property="og:description" '
             'content="What TVLens collects, why, and who else sees it.">',
         )
+
+
+class ReaderScopeTests(TestCase):
+    """A reader never sees another reader's private rows (ADR-14).
+
+    Rating, Review, Watchlist, WatchHistory, ShowTag and ShowRequest belong to
+    one reader each. Their manager is ReaderQuerySet: for_reader(user) is the
+    everyday read, across_readers() the deliberate aggregate. Two readers with
+    a full set of rows each, then every surface asked as one of them.
+    """
+
+    PRIVATE = (Rating, Review, Watchlist, WatchHistory, ShowTag, ShowRequest)
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.show = Show.objects.create(
+            tmdb_id=9801, name="Shared Show", slug="shared-show", vote_count=500
+        )
+        season = Season.objects.create(show=cls.show, tmdb_id=98010, season_number=1)
+        episode = Episode.objects.create(season=season, tmdb_id=980100, episode_number=1)
+        cls.alice = User.objects.create_user("alice-scope", password="pw")
+        cls.bob = User.objects.create_user("bob-scope", password="pw")
+        for user, score, word, tmdb_id in (
+            (cls.alice, 5.0, "Alicesecret", 77001),
+            (cls.bob, 2.0, "Bobword", 77002),
+        ):
+            Rating.objects.create(user=user, show=cls.show, score=score)
+            Review.objects.create(user=user, show=cls.show, title=word, body=word)
+            Watchlist.objects.create(user=user, show=cls.show)
+            WatchHistory.objects.create(user=user, episode=episode)
+            tag = Tag.objects.create(name=word, slug=word.lower())
+            ShowTag.objects.create(user=user, show=cls.show, tag=tag)
+            ShowRequest.objects.create(user=user, tmdb_id=tmdb_id, name=f"{word} request")
+
+    def test_for_reader_returns_only_that_readers_rows(self):
+        for model in self.PRIVATE:
+            with self.subTest(model=model.__name__):
+                rows = list(model.objects.for_reader(self.bob))
+                self.assertEqual(len(rows), 1)
+                self.assertEqual({r.user_id for r in rows}, {self.bob.id})
+
+    def test_for_reader_is_empty_signed_out(self):
+        for model in self.PRIVATE:
+            with self.subTest(model=model.__name__):
+                self.assertEqual(list(model.objects.for_reader(AnonymousUser())), [])
+                self.assertEqual(list(model.objects.for_reader(None)), [])
+
+    def test_across_readers_is_every_reader_on_purpose(self):
+        for model in self.PRIVATE:
+            with self.subTest(model=model.__name__):
+                users = set(model.objects.across_readers().values_list("user_id", flat=True))
+                self.assertEqual(users, {self.alice.id, self.bob.id})
+
+    def test_related_managers_carry_the_scope_methods(self):
+        self.assertEqual(self.show.ratings.across_readers().count(), 2)
+        self.assertEqual(self.show.ratings.for_reader(self.bob).get().score, 2.0)
+
+    def test_the_show_page_shows_only_this_readers_rating_and_tags(self):
+        self.client.login(username="bob-scope", password="pw")
+        response = self.client.get(reverse("shows:detail", args=["shared-show"]))
+        self.assertEqual(response.context["user_rating"], 2.0)
+        self.assertEqual([t.tag.name for t in response.context["user_tags"]], ["Bobword"])
+        # The average is the deliberate aggregate: both readers, no names.
+        self.assertEqual(response.context["rating_count"], 2)
+
+    def test_my_ratings_lists_only_this_readers_ratings_and_tags(self):
+        self.client.login(username="bob-scope", password="pw")
+        response = self.client.get(reverse("shows:my_ratings"))
+        self.assertEqual([s.user_score for s in response.context["shows"]], [2.0])
+        self.assertEqual([t.name for t in response.context["tags"]], ["Bobword"])
+        self.assertEqual(response.context["tagged_count"], 1)
+        self.assertNotContains(response, "Alicesecret")
+
+    def test_another_readers_tag_page_is_empty(self):
+        self.client.login(username="bob-scope", password="pw")
+        response = self.client.get(reverse("shows:tag", args=["alicesecret"]))
+        self.assertEqual(list(response.context["shows"]), [])
+
+    def test_the_tag_operator_finds_nothing_on_another_readers_word(self):
+        self.assertEqual(list(run_search("tag:alicesecret", user=self.bob)[0]), [])
+        self.assertEqual(
+            {s.name for s in run_search("tag:bobword", user=self.bob)[0]}, {"Shared Show"}
+        )
+
+    def test_clearing_a_rating_removes_only_this_readers_row(self):
+        self.client.login(username="bob-scope", password="pw")
+        self.client.post(reverse("shows:rate", args=["shared-show"]), {"clear": "1"})
+        self.assertEqual(
+            list(Rating.objects.across_readers().values_list("user_id", flat=True)),
+            [self.alice.id],
+        )
+
+    def test_removing_a_tag_cannot_touch_another_readers_row(self):
+        self.client.login(username="bob-scope", password="pw")
+        self.client.post(reverse("shows:remove_tag", args=["shared-show"]), {"tag": "alicesecret"})
+        self.assertTrue(ShowTag.objects.for_reader(self.alice).exists())

@@ -84,7 +84,7 @@ class Command(BaseCommand):
 
         if options["remove"]:
             n = existing.count()
-            ratings = Rating.objects.filter(user__in=existing).count()
+            ratings = Rating.objects.across_readers().filter(user__in=existing).count()
             existing.delete()
             self.stdout.write(
                 self.style.SUCCESS(f"Removed {n} synthetic profiles and {ratings} ratings.")
@@ -204,7 +204,7 @@ class Command(BaseCommand):
             return
         self.stdout.write("\nsynthetic profiles:")
         for u in users.order_by("username"):
-            scores = list(Rating.objects.filter(user=u).values_list("score", flat=True))
+            scores = list(Rating.objects.for_reader(u).values_list("score", flat=True))
             if not scores:
                 self.stdout.write(f"  {u.username:<24}   0 ratings")
                 continue

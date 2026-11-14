@@ -48,6 +48,31 @@ class Network(models.Model):
         return self.name
 
 
+# ── Reader-private rows ───────────────────────────────────────────────────────
+
+
+class ReaderQuerySet(models.QuerySet):
+    """Rows that belong to one reader (ADR-14): ratings, tags, history, requests.
+
+    Every read of these models names whose rows it wants. for_reader(user) is
+    the everyday read; across_readers() is the deliberate aggregate (a show's
+    average rating, the nightly job's queue), spelled out so a reviewer and
+    the reader-scope test (shows/tests.py, ReaderScopeCheckTests) can tell it
+    from a forgotten filter. Writes that name the user (create,
+    get_or_create(user=...)) need neither.
+    """
+
+    def for_reader(self, user):
+        """Only this reader's rows; none for an anonymous visitor."""
+        if user is None or not user.is_authenticated:
+            return self.none()
+        return self.filter(user=user)
+
+    def across_readers(self):
+        """Every reader's rows, on purpose: for aggregates and the nightly jobs."""
+        return self.all()
+
+
 # ── 3. Show ───────────────────────────────────────────────────────────────────
 
 
@@ -75,8 +100,8 @@ class ShowQuerySet(models.QuerySet):
         """
         if not user.is_authenticated:
             return self.none()
-        rated = Rating.objects.filter(user=user).values("show_id")
-        logged = WatchHistory.objects.filter(user=user).values("episode__season__show_id")
+        rated = Rating.objects.for_reader(user).values("show_id")
+        logged = WatchHistory.objects.for_reader(user).values("episode__season__show_id")
         return self.filter(models.Q(id__in=rated) | models.Q(id__in=logged))
 
 
@@ -201,7 +226,7 @@ class Show(models.Model):
 
     @property
     def average_rating(self):
-        avg = self.ratings.aggregate(models.Avg("score"))["score__avg"]
+        avg = self.ratings.across_readers().aggregate(models.Avg("score"))["score__avg"]
         return round(avg, 1) if avg else None
 
     def is_watched_by(self, user):
@@ -338,6 +363,8 @@ class Rating(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    objects = ReaderQuerySet.as_manager()
+
     class Meta:
         unique_together = ["user", "show"]
         ordering = ["-updated_at"]
@@ -362,6 +389,8 @@ class Review(models.Model):
     helpful_count = models.IntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    objects = ReaderQuerySet.as_manager()
 
     class Meta:
         unique_together = ["user", "show"]
@@ -389,6 +418,8 @@ class Watchlist(models.Model):
     priority = models.CharField(max_length=10, choices=Priority.choices, default=Priority.MEDIUM)
     added_at = models.DateTimeField(auto_now_add=True)
 
+    objects = ReaderQuerySet.as_manager()
+
     class Meta:
         unique_together = ["user", "show"]
         ordering = ["-added_at"]
@@ -410,6 +441,8 @@ class WatchHistory(models.Model):
     watched_at = models.DateTimeField(auto_now_add=True)
     completed = models.BooleanField(default=True)
     progress_seconds = models.IntegerField(default=0)
+
+    objects = ReaderQuerySet.as_manager()
 
     class Meta:
         verbose_name_plural = "watch histories"
@@ -452,6 +485,8 @@ class ShowTag(models.Model):
         help_text="How relevant this tag is to the show (0.0–1.0)",
     )
     created_at = models.DateTimeField(auto_now_add=True)
+
+    objects = ReaderQuerySet.as_manager()
 
     class Meta:
         unique_together = ["user", "show", "tag"]
@@ -581,6 +616,8 @@ class ShowRequest(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
     failed = models.BooleanField(default=False)
+
+    objects = ReaderQuerySet.as_manager()
 
     class Meta:
         unique_together = ["user", "tmdb_id"]

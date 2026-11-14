@@ -58,7 +58,8 @@ def child_columns():
 def rating_fingerprint():
     """Every user rating keyed by TMDb id. The thing that must not change."""
     return sorted(
-        (r.user_id, r.show.tmdb_id, r.score) for r in Rating.objects.select_related("show")
+        (r.user_id, r.show.tmdb_id, r.score)
+        for r in Rating.objects.across_readers().select_related("show")
     )
 
 
@@ -87,9 +88,10 @@ class Command(BaseCommand):
         self.stdout.write(f"  ids that collide with some tmdb_id: {len(overlap)}")
         self.stdout.write(f"  shift offset: {offset}")
         self.stdout.write(
-            f"  rows following them: {Rating.objects.count()} ratings, "
-            f"{Review.objects.count()} reviews, {Watchlist.objects.count()} watchlist, "
-            f"{ShowTag.objects.count()} tags"
+            f"  rows following them: {Rating.objects.across_readers().count()} ratings, "
+            f"{Review.objects.across_readers().count()} reviews, "
+            f"{Watchlist.objects.across_readers().count()} watchlist, "
+            f"{ShowTag.objects.across_readers().count()} tags"
         )
 
         before = rating_fingerprint()

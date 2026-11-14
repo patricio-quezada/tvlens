@@ -402,7 +402,7 @@ def build_profile(user):
     rating_count = 0
 
     if user is not None and user.is_authenticated:
-        rated = dict(Rating.objects.filter(user=user).values_list("show_id", "score"))
+        rated = dict(Rating.objects.for_reader(user).values_list("show_id", "score"))
         rating_count = len(rated)
 
         # Watched-but-unrated shows: a weak, unsigned positive. watched_by (ADR-08)
@@ -433,9 +433,11 @@ def build_profile(user):
             # you rated is not evidence about YOUR vocabulary and must not be
             # learned as if it were.
             t_sum, t_relsum = {}, {}
-            for show_id, tag_id, relevance in ShowTag.objects.filter(
-                user=user, show_id__in=show_ids
-            ).values_list("show_id", "tag_id", "relevance"):
+            for show_id, tag_id, relevance in (
+                ShowTag.objects.for_reader(user)
+                .filter(show_id__in=show_ids)
+                .values_list("show_id", "tag_id", "relevance")
+            ):
                 signal = signal_by_show[show_id]
                 t_sum[tag_id] = t_sum.get(tag_id, 0.0) + signal * relevance
                 t_relsum[tag_id] = t_relsum.get(tag_id, 0.0) + relevance
@@ -536,9 +538,11 @@ def rerank(user, ranked, profile=None):
     # no tag affinities either, so the branch is skipped rather than queried.
     tags_by_show = {}
     if n and user is not None and user.is_authenticated:
-        for show_id, tag_id, relevance in ShowTag.objects.filter(
-            user=user, show_id__in=[s.id for s in ranked]
-        ).values_list("show_id", "tag_id", "relevance"):
+        for show_id, tag_id, relevance in (
+            ShowTag.objects.for_reader(user)
+            .filter(show_id__in=[s.id for s in ranked])
+            .values_list("show_id", "tag_id", "relevance")
+        ):
             tags_by_show.setdefault(show_id, []).append((tag_id, relevance))
 
     for position, show in enumerate(ranked):
@@ -593,7 +597,7 @@ def rated_shows(user, min_score=None):
     if user is None or not user.is_authenticated:
         return []
 
-    ratings = Rating.objects.filter(user=user)
+    ratings = Rating.objects.for_reader(user)
     if min_score is not None:
         ratings = ratings.filter(score__gte=min_score)
     rated = list(ratings.select_related("show").prefetch_related("show__genres"))
@@ -603,7 +607,8 @@ def rated_shows(user, min_score=None):
     others = {
         row["show_id"]: row
         for row in (
-            Rating.objects.filter(show_id__in=[r.show_id for r in rated])
+            Rating.objects.across_readers()
+            .filter(show_id__in=[r.show_id for r in rated])
             .exclude(user=user)
             .values("show_id")
             .annotate(avg=Avg("score"), n=Count("id"))
@@ -910,7 +915,8 @@ def side_quests(user, limit=12, exclude_ids=()):
         return SideQuests()
 
     seed_ids = list(
-        Rating.objects.filter(user=user, score__gte=SIDE_QUEST_SEED_FLOOR)
+        Rating.objects.for_reader(user)
+        .filter(score__gte=SIDE_QUEST_SEED_FLOOR)
         .order_by("show_id")
         .values_list("show_id", flat=True)
     )

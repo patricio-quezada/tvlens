@@ -51,7 +51,11 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         have = set(Show.objects.values_list("tmdb_id", flat=True))
         pending = []
-        for tmdb_id in ShowRequest.objects.filter(failed=False).values_list("tmdb_id", flat=True):
+        for tmdb_id in (
+            ShowRequest.objects.across_readers()
+            .filter(failed=False)
+            .values_list("tmdb_id", flat=True)
+        ):
             if tmdb_id not in have and tmdb_id not in pending:
                 pending.append(tmdb_id)
         pending = pending[: options["limit"]]
@@ -97,5 +101,5 @@ class Command(BaseCommand):
             call_command("rebuild_similar_shows")
 
     def fail(self, tmdb_id, reason):
-        ShowRequest.objects.filter(tmdb_id=tmdb_id).update(failed=True)
+        ShowRequest.objects.across_readers().filter(tmdb_id=tmdb_id).update(failed=True)
         self.stdout.write(self.style.WARNING(f"Not adding {tmdb_id}: {reason}"))

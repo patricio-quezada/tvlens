@@ -227,9 +227,9 @@ def index(request):
     if request.user.is_authenticated:
         requested = list(
             base_qs.filter(
-                tmdb_id__in=ShowRequest.objects.filter(user=request.user, failed=False).values(
-                    "tmdb_id"
-                ),
+                tmdb_id__in=ShowRequest.objects.for_reader(request.user)
+                .filter(failed=False)
+                .values("tmdb_id"),
                 created_at__gte=timezone.now() - timedelta(days=REQUEST_NOTICE_DAYS),
             )
             .exclude(pk__in=Show.objects.watched_by(request.user).values("pk"))
@@ -345,7 +345,7 @@ def genre(request, pk):
         seen = Show.objects.watched_by(request.user).filter(genres=genre).values("id")
         seen_count = seen.count()
         if include_seen:
-            own = Rating.objects.filter(user=request.user, show=OuterRef("pk"))
+            own = Rating.objects.for_reader(request.user).filter(show=OuterRef("pk"))
             shows = shows.annotate(user_score=Subquery(own.values("score")[:1]))
         else:
             shows = shows.exclude(id__in=seen)
@@ -390,7 +390,8 @@ def detail(request, slug):
     user_rating = None
     if request.user.is_authenticated:
         user_rating = (
-            Rating.objects.filter(user=request.user, show=show)
+            Rating.objects.for_reader(request.user)
+            .filter(show=show)
             .values_list("score", flat=True)
             .first()
         )
@@ -467,9 +468,10 @@ def detail(request, slug):
             "user_rating": user_rating,
             "star_steps": star_steps(user_rating),
             "average_rating": show.average_rating,
-            "rating_count": show.ratings.count(),
+            "rating_count": show.ratings.across_readers().count(),
             "user_tags": (
-                ShowTag.objects.filter(user=request.user, show=show)
+                ShowTag.objects.for_reader(request.user)
+                .filter(show=show)
                 .select_related("tag")
                 .order_by("tag__name")
                 if request.user.is_authenticated
@@ -590,9 +592,9 @@ def search(request):
     requested_ids = set()
     if elsewhere and request.user.is_authenticated:
         requested_ids = set(
-            ShowRequest.objects.filter(
-                user=request.user, tmdb_id__in=[e["tmdb_id"] for e in elsewhere]
-            ).values_list("tmdb_id", flat=True)
+            ShowRequest.objects.for_reader(request.user)
+            .filter(tmdb_id__in=[e["tmdb_id"] for e in elsewhere])
+            .values_list("tmdb_id", flat=True)
         )
 
     return render(
@@ -667,7 +669,7 @@ def tag_suggestions_for(user, show):
     suggesting them offers a no-op.
     """
     mine = (
-        set(ShowTag.objects.filter(user=user, show=show).values_list("tag_id", flat=True))
+        set(ShowTag.objects.for_reader(user).filter(show=show).values_list("tag_id", flat=True))
         if user.is_authenticated
         else set()
     )
@@ -705,7 +707,8 @@ def _tag_panel(request, show):
                 "shows/_tags.html",
                 {
                     "show": show,
-                    "user_tags": ShowTag.objects.filter(user=request.user, show=show)
+                    "user_tags": ShowTag.objects.for_reader(request.user)
+                    .filter(show=show)
                     .select_related("tag")
                     .order_by("tag__name"),
                     "others_tagged": others_tagged,
@@ -770,8 +773,8 @@ def add_tag(request, slug):
 @require_POST
 def remove_tag(request, slug):
     show = get_object_or_404(Show, slug=slug)
-    ShowTag.objects.filter(
-        user=request.user, show=show, tag__slug=request.POST.get("tag", "")
+    ShowTag.objects.for_reader(request.user).filter(
+        show=show, tag__slug=request.POST.get("tag", "")
     ).delete()
     if request.headers.get("X-Requested-With") == "fetch":
         return _tag_panel(request, show)
@@ -797,8 +800,8 @@ def tag(request, slug):
         # already yields one row per show and there is nothing to dedupe.
         shows = [
             link.show
-            for link in ShowTag.objects.filter(tag=tag_obj, user=request.user).select_related(
-                "show"
+            for link in (
+                ShowTag.objects.for_reader(request.user).filter(tag=tag_obj).select_related("show")
             )
         ]
         shows.sort(key=lambda s: (-(s.vote_average or 0), s.name))
@@ -848,7 +851,7 @@ def my_ratings(request):
             # Distinct shows, not summed tag uses: a show carrying three tags
             # must count once here or the copy that says "across N shows"
             # lies whenever a reader's own tags overlap on the same show.
-            "tagged_count": ShowTag.objects.filter(user=request.user)
+            "tagged_count": ShowTag.objects.for_reader(request.user)
             .values("show_id")
             .distinct()
             .count(),
@@ -881,7 +884,8 @@ def request_show(request):
         return redirect(back)
     have = Show.objects.values("tmdb_id")
     open_requests = (
-        ShowRequest.objects.filter(user=request.user, failed=False)
+        ShowRequest.objects.for_reader(request.user)
+        .filter(failed=False)
         .exclude(tmdb_id__in=have)
         .exclude(tmdb_id=tmdb_id)
     )
@@ -930,7 +934,7 @@ def rate(request, slug):
     # Deleting the row is the clear: an absent rating and a rating of nothing
     # are the same fact, and there is only one way to store it.
     if "clear" in request.POST:
-        Rating.objects.filter(user=request.user, show=show).delete()
+        Rating.objects.for_reader(request.user).filter(show=show).delete()
         score = None
     else:
         try:
@@ -958,7 +962,7 @@ def rate(request, slug):
                     "shows/_rate_meta.html",
                     {
                         "average_rating": show.average_rating,
-                        "rating_count": show.ratings.count(),
+                        "rating_count": show.ratings.across_readers().count(),
                     },
                     request=request,
                 ),
