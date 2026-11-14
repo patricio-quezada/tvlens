@@ -673,7 +673,8 @@ def tag_suggestions_for(user, show):
         else set()
     )
 
-    on_this_show = list(
+    # Every reader's rows on purpose, counted into tag names and nothing more.
+    on_this_show = list(  # reader-scope: ok
         Tag.objects.filter(show_tags__show=show)
         .exclude(id__in=mine)
         .annotate(readers=Count("show_tags__user", distinct=True))
@@ -681,7 +682,7 @@ def tag_suggestions_for(user, show):
     )
 
     seen = {t.id for t in on_this_show} | mine
-    in_general_use = list(
+    in_general_use = list(  # reader-scope: ok
         Tag.objects.exclude(id__in=seen)
         .annotate(uses=Count("show_tags"))
         .filter(uses__gt=0)

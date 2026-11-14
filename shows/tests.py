@@ -7,12 +7,13 @@ data, fails loudly here instead of silently reranking the catalog.
 
 import math
 from io import StringIO
+from pathlib import Path
 
 from django.contrib.auth.models import AnonymousUser, User
 from django.core import mail
 from django.core.management import call_command
 from django.db.models import Max
-from django.test import TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 
 from .ingestion import MIN_VOTE_COUNT, Ingestor
@@ -49,6 +50,7 @@ from .personalization import (
     top_picks,
     watch_next,
 )
+from .reader_scope import app_sources, check_source, check_tree
 from .recommenders import (
     INVOLVEMENT_EXPONENT,
     SQLITE_MAX_VARS_SAFE,
@@ -5720,3 +5722,67 @@ class ReaderScopeTests(TestCase):
         self.client.login(username="bob-scope", password="pw")
         self.client.post(reverse("shows:remove_tag", args=["shared-show"]), {"tag": "alicesecret"})
         self.assertTrue(ShowTag.objects.for_reader(self.alice).exists())
+
+
+class ReaderScopeCheckTests(SimpleTestCase):
+    """No new unscoped read of a reader's private rows reaches main (ADR-14).
+
+    shows/reader_scope.py reads the app's source and flags any read of Rating,
+    Review, Watchlist, WatchHistory, ShowTag or ShowRequest that names no
+    reader. Fix a failure with for_reader(user), or across_readers() for a
+    deliberate aggregate; "# reader-scope: ok" only where neither fits.
+    """
+
+    def test_the_app_has_no_unscoped_private_reads(self):
+        root = Path(__file__).resolve().parent.parent
+        self.assertTrue(list(app_sources(root)), "the check found no source to read")
+        findings = [f"{path}:{line}: {message}" for path, line, message in check_tree(root)]
+        self.assertEqual(findings, [], "\n".join(findings))
+
+    def flagged(self, source):
+        return [line for line, _ in check_source(source)]
+
+    def test_an_unscoped_model_read_fails(self):
+        self.assertEqual(self.flagged("Rating.objects.filter(show=show)\n"), [1])
+        self.assertEqual(self.flagged("x = set(ShowTag.objects.values_list('tag_id'))\n"), [1])
+        self.assertEqual(self.flagged("Rating.objects.filter(user=u).count()\n"), [1])
+
+    def test_a_scoped_or_deliberate_model_read_passes(self):
+        for source in (
+            "Rating.objects.for_reader(user).filter(show=show)\n",
+            "ShowRequest.objects.across_readers().count()\n",
+            "Rating.objects.create(user=u, show=s, score=4)\n",
+            "ShowTag.objects.get_or_create(user=u, show=s, tag=t)\n",
+            "Show.objects.filter(pk=1)\n",
+        ):
+            with self.subTest(source=source):
+                self.assertEqual(self.flagged(source), [])
+
+    def test_a_related_manager_needs_a_scope_unless_it_hangs_off_a_user(self):
+        self.assertEqual(self.flagged("show.ratings.count()\n"), [1])
+        self.assertEqual(self.flagged("show.ratings.across_readers().count()\n"), [])
+        self.assertEqual(self.flagged("request.user.show_tags.all()\n"), [])
+
+    def test_a_lookup_through_a_private_relation_needs_its_user(self):
+        self.assertEqual(self.flagged("Tag.objects.filter(show_tags__show=s)\n"), [1])
+        self.assertEqual(self.flagged("Tag.objects.annotate(n=Count('show_tags'))\n"), [1])
+        self.assertEqual(
+            self.flagged(
+                "Genre.objects.filter(shows__ratings__user=u, shows__ratings__score__gte=4)\n"
+            ),
+            [],
+        )
+        self.assertEqual(
+            self.flagged("Tag.objects.filter(show_tags__user=u).annotate(n=Count('show_tags'))\n"),
+            [],
+        )
+        self.assertEqual(
+            self.flagged(
+                "Show.objects.filter(_word('user_tags__tag__name', t), user_tags__user=u)\n"
+            ),
+            [],
+        )
+
+    def test_the_pragma_waives_a_whole_statement(self):
+        source = "x = list(  # reader-scope: ok\n    Tag.objects.filter(show_tags__show=s)\n)\n"
+        self.assertEqual(self.flagged(source), [])
