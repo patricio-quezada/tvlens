@@ -28,7 +28,6 @@ from .personalization import (
     side_quests,
     top_picks,
     watch_next,
-    without_watched,
 )
 from .recommenders import (
     catalog_mean_rating,
@@ -232,7 +231,7 @@ def index(request):
                 .values("tmdb_id"),
                 created_at__gte=timezone.now() - timedelta(days=REQUEST_NOTICE_DAYS),
             )
-            .exclude(pk__in=Show.objects.watched_by(request.user).values("pk"))
+            .unseen_by(request.user)
             .order_by("-created_at")[:12]
         )
         for show in requested:
@@ -342,13 +341,13 @@ def genre(request, pk):
     seen_count = 0
     if request.user.is_authenticated:
         favorite_genre_ids = favorite_genre_ids_for(request.user)
-        seen = Show.objects.watched_by(request.user).filter(genres=genre).values("id")
-        seen_count = seen.count()
+        unseen = shows.unseen_by(request.user)
+        seen_count = shows.count() - unseen.count()
         if include_seen:
             own = Rating.objects.for_reader(request.user).filter(show=OuterRef("pk"))
             shows = shows.annotate(user_score=Subquery(own.values("score")[:1]))
         else:
-            shows = shows.exclude(id__in=seen)
+            shows = unseen
     return render(
         request,
         "shows/genre.html",
@@ -383,7 +382,7 @@ def detail(request, slug):
     # that should only have got shorter. Filtering the whole list here, before
     # the ladder slices a rung off it below, is also what backfills the gap:
     # the reader still sees three, the fourth candidate just moves up.
-    ranked = without_watched(request.user, rerank(request.user, stored_similar(show)))
+    ranked = rerank(request.user, stored_similar(show)).within(Show.objects.unseen_by(request.user))
 
     # TVLens's own rating (distinct from the TMDb vote_average in the hero). The
     # widget shows the signed-in user their current score and lets them change it.
@@ -423,7 +422,7 @@ def detail(request, slug):
     indexes = role_indexes([show, *shown])
     source_index = indexes[show.id]
     # rerank hangs the reader's profile on the list it returns, and
-    # without_watched carries it through. It orders the people named below by
+    # within() carries it through. It orders the people named below by
     # the reader's learned cast-versus-crew preference (issue #7); an anonymous
     # visitor has none and gets the unchanged order.
     profile = getattr(ranked, "profile", None)

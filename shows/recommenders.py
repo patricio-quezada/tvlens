@@ -253,6 +253,28 @@ class RankedShows(list):
         super().__init__(shows)
         self.mode = mode
 
+    def within(self, queryset):
+        """This list, keeping only the shows also in `queryset`, in the same order.
+
+        The ranked-list side of Show.objects.unseen_by (#27): a caller drops
+        what a reader has seen with ranked.within(Show.objects.unseen_by(user)).
+        Filter the WHOLE list before slicing a page off it, so a row backfills
+        rather than shrinks. The lookup is scoped to these candidates, not the
+        whole catalog (0.9ms against 32ms on 464 shows). The mode and the
+        attributes rerank hangs on its result (profile, personalized) carry
+        over, so this composes either side of rerank.
+        """
+        if not self:
+            return self
+        keep = set(queryset.filter(id__in=[s.id for s in self]).values_list("id", flat=True))
+        if len(keep) == len({s.id for s in self}):
+            return self
+        result = RankedShows([show for show in self if show.id in keep], mode=self.mode)
+        for carried in ("profile", "personalized"):
+            if hasattr(self, carried):
+                setattr(result, carried, getattr(self, carried))
+        return result
+
 
 # How many votes a TMDb rating needs before it is taken at face value. Fewer
 # than this and it is pulled toward the catalog mean, the IMDb Top 250 formula:

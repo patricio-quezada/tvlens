@@ -48,7 +48,6 @@ from .personalization import (
     side_quests,
     top_picks,
     watch_next,
-    without_watched,
 )
 from .recommenders import (
     INVOLVEMENT_EXPONENT,
@@ -1249,6 +1248,37 @@ class WatchedSignalTests(TestCase):
         anon = AnonymousUser()
         self.assertFalse(self.rated.is_watched_by(anon))
         self.assertEqual(list(Show.objects.watched_by(anon)), [])
+
+    def test_unseen_by_is_the_exact_complement_of_watched_by(self):
+        """unseen_by is the one way to leave seen shows out (#27). It must drop
+        both signals, rated and logged, and keep everything else."""
+        unseen = set(Show.objects.unseen_by(self.user).values_list("pk", flat=True))
+        self.assertEqual(unseen, {self.untouched.pk})
+        watched = set(Show.objects.watched_by(self.user).values_list("pk", flat=True))
+        self.assertEqual(unseen | watched, set(Show.objects.values_list("pk", flat=True)))
+        self.assertFalse(unseen & watched)
+
+    def test_unseen_by_chains_and_ignores_other_readers(self):
+        stranger = User.objects.create_user("unseen-stranger", password="pw")
+        Rating.objects.create(user=stranger, show=self.untouched, score=5.0)
+        self.assertEqual(
+            list(Show.objects.filter(name__startswith="Un").unseen_by(self.user)),
+            [self.untouched],
+        )
+        self.assertEqual(set(Show.objects.unseen_by(stranger)), {self.rated, self.watched})
+
+    def test_unseen_by_an_anonymous_reader_is_every_show(self):
+        self.assertEqual(Show.objects.unseen_by(AnonymousUser()).count(), Show.objects.count())
+
+    def test_within_drops_seen_shows_and_keeps_the_order(self):
+        ranked = RankedShows([self.untouched, self.rated, self.watched], mode="estimated")
+        ranked.profile = "kept"
+        kept = ranked.within(Show.objects.unseen_by(self.user))
+        self.assertEqual(list(kept), [self.untouched])
+        self.assertEqual(kept.mode, "estimated")
+        self.assertEqual(kept.profile, "kept")
+        everyone = ranked.within(Show.objects.unseen_by(AnonymousUser()))
+        self.assertIs(everyone, ranked)
 
 
 class Layer2ProfileTests(TestCase):
@@ -4079,12 +4109,12 @@ class AlreadyWatchedFilterTests(TestCase):
         watched_pks = set(Show.objects.watched_by(self.user).values_list("pk", flat=True))
         self.assertFalse(quest_pks & watched_pks)
 
-    def test_without_watched_keeps_the_ranked_shape(self):
+    def test_within_unseen_keeps_the_ranked_shape(self):
         """It composes either side of rerank, so mode and the re-rank's own
         attributes have to survive the filter."""
         Rating.objects.create(user=self.user, show=self.candidates[0], score=4.5)
         ranked = rerank(self.user, stored_similar(self.source))
-        filtered = without_watched(self.user, ranked)
+        filtered = ranked.within(Show.objects.unseen_by(self.user))
         self.assertEqual(filtered.mode, ranked.mode)
         self.assertEqual(filtered.personalized, ranked.personalized)
         self.assertIs(filtered.profile, ranked.profile)

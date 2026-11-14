@@ -100,9 +100,27 @@ class ShowQuerySet(models.QuerySet):
         """
         if not user.is_authenticated:
             return self.none()
-        rated = Rating.objects.for_reader(user).values("show_id")
-        logged = WatchHistory.objects.for_reader(user).values("episode__season__show_id")
-        return self.filter(models.Q(id__in=rated) | models.Q(id__in=logged))
+        return self.filter(_seen(user))
+
+    def unseen_by(self, user):
+        """These shows less the ones this reader has seen (#27): THE way to leave
+        seen shows out of a row, a page, or a candidate list.
+
+        Seen is watched_by's rule, rating OR logged episodes (ADR-08), from the
+        same two subqueries, so the two can never disagree. A ranked Python
+        list goes through RankedShows.within(Show.objects.unseen_by(user)).
+        Anonymous readers have seen nothing, so they get every show.
+        """
+        if not user.is_authenticated:
+            return self.all()
+        return self.exclude(_seen(user))
+
+
+def _seen(user):
+    """The Q behind watched_by and unseen_by: rated, or any episode logged."""
+    rated = Rating.objects.for_reader(user).values("show_id")
+    logged = WatchHistory.objects.for_reader(user).values("episode__season__show_id")
+    return models.Q(id__in=rated) | models.Q(id__in=logged)
 
 
 class Show(models.Model):

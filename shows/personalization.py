@@ -466,48 +466,6 @@ def build_profile(user):
     )
 
 
-def without_watched(user, ranked):
-    """Drop shows this user has already seen from a ranked candidate list (#27).
-
-    A rating is a statement that you have seen the show, so recommending it
-    back is the recommender telling someone to watch what they just finished.
-    Reads Show.objects.watched_by, which is rating OR logged episodes (ADR-08),
-    rather than Rating directly: WatchHistory is empty today so the two agree,
-    but they are not the same question and only one of them stays right.
-
-    This filters the WHOLE candidate list before the caller slices a page off
-    it, which is what makes the row backfill instead of shrink: a reader shown
-    three of twelve candidates still gets three once one is dropped, because
-    the fourth moves up. The list only gets shorter when the candidates
-    genuinely run out, and the caller recomputes what is available from the
-    length it gets back, so no rung is ever offered with nothing behind it.
-
-    The watched lookup is scoped to these candidates rather than asked of the
-    whole catalog: measured on the 464-show catalog that is 0.9ms against 32ms,
-    because the unscoped form joins every episode row.
-
-    Anonymous users have nothing watched, so they get the list unchanged.
-    Returns a new RankedShows carrying the same mode and the attributes rerank
-    hangs on its result, so this composes either side of it.
-    """
-    if not ranked or not user.is_authenticated:
-        return ranked
-
-    seen = set(
-        Show.objects.watched_by(user)
-        .filter(id__in=[s.id for s in ranked])
-        .values_list("id", flat=True)
-    )
-    if not seen:
-        return ranked
-
-    result = RankedShows([show for show in ranked if show.id not in seen], mode=ranked.mode)
-    for carried in ("profile", "personalized"):
-        if hasattr(ranked, carried):
-            setattr(result, carried, getattr(ranked, carried))
-    return result
-
-
 def rerank(user, ranked, profile=None):
     """Re-order a Layer 1 RankedShows for `user`, preserving its mode and rows.
 
@@ -691,7 +649,7 @@ def watch_next(user, limit=12, exclude_ids=(), profile=None):
     similar_by_people per seed (ADR-07). Ordering is explicit rather than left to
     the Meta defaults (Show by name, SimilarShow by source and rank).
 
-    The result is filtered by without_watched and then reranked by Layer 2, in
+    The result is filtered by unseen_by (RankedShows.within) and then reranked by Layer 2, in
     that order, so a reader's genre and tag preferences reorder a list that
     already contains nothing they have seen. Returns a RankedShows so the
     template can caption it the same way every other row is captioned; empty for
@@ -742,7 +700,7 @@ def watch_next(user, limit=12, exclude_ids=(), profile=None):
         shows[show_id].score = total
 
     ranked = RankedShows(sorted(shows.values(), key=lambda s: (-s.score, s.name)), mode="weighted")
-    ranked = without_watched(user, ranked)
+    ranked = ranked.within(Show.objects.unseen_by(user))
     if not ranked:
         return empty(has_seeds=True)
 
@@ -934,10 +892,11 @@ def side_quests(user, limit=12, exclude_ids=()):
     familiarity = {genre_id: count / len(seed_ids) for genre_id, count in seed_genre_counts.items()}
     demonstrated = set(seed_genre_counts)
 
-    # No quest you have already been on: watched covers rated (ADR-08).
-    blocked = set(exclude_ids) | set(
-        Show.objects.watched_by(user).order_by("id").values_list("id", flat=True)
-    )
+    # No quest you have already been on: unseen_by leaves out rated and
+    # logged alike (ADR-08). A target is blocked when the caller excluded it or
+    # it is not in the reader's unseen set.
+    blocked = set(exclude_ids)
+    unseen = set(Show.objects.unseen_by(user).values_list("id", flat=True))
     seed_set = set(seed_ids)
 
     # best[target_id] = (strength, seed_id, raw_score, hops); the strongest path
@@ -969,7 +928,7 @@ def side_quests(user, limit=12, exclude_ids=()):
         by_seed = bridges.setdefault(target_id, {})
         if by_seed.get(source_id, -1.0) < strength:
             by_seed[source_id] = strength
-        if target_id not in blocked:
+        if target_id not in blocked and target_id in unseen:
             offer(target_id, strength, source_id, score, 1)
 
     # Hop 2: the strong edges out of those bridges. seed_ids is bounded by the
@@ -984,7 +943,7 @@ def side_quests(user, limit=12, exclude_ids=()):
                 .order_by("-score", "target__name", "source__name")
                 .values_list("source_id", "target_id", "score")
             ):
-                if target_id in seed_set or target_id in blocked:
+                if target_id in seed_set or target_id in blocked or target_id not in unseen:
                     continue
                 second = math.log1p(score)
                 for seed_id, first in bridges[bridge_id].items():
