@@ -892,11 +892,12 @@ def side_quests(user, limit=12, exclude_ids=()):
     familiarity = {genre_id: count / len(seed_ids) for genre_id, count in seed_genre_counts.items()}
     demonstrated = set(seed_genre_counts)
 
-    # No quest you have already been on: unseen_by leaves out rated and
-    # logged alike (ADR-08). A target is blocked when the caller excluded it or
-    # it is not in the reader's unseen set.
-    blocked = set(exclude_ids)
-    unseen = set(Show.objects.unseen_by(user).values_list("id", flat=True))
+    # No quest you have already been on: watched covers rated and logged alike
+    # (ADR-08), the same rule unseen_by applies. The reader's watched ids, not
+    # the unseen ones: the set that blocks is the small one, not the catalog.
+    blocked = set(exclude_ids) | set(
+        Show.objects.watched_by(user).order_by("id").values_list("id", flat=True)
+    )
     seed_set = set(seed_ids)
 
     # best[target_id] = (strength, seed_id, raw_score, hops); the strongest path
@@ -928,7 +929,7 @@ def side_quests(user, limit=12, exclude_ids=()):
         by_seed = bridges.setdefault(target_id, {})
         if by_seed.get(source_id, -1.0) < strength:
             by_seed[source_id] = strength
-        if target_id not in blocked and target_id in unseen:
+        if target_id not in blocked:
             offer(target_id, strength, source_id, score, 1)
 
     # Hop 2: the strong edges out of those bridges. seed_ids is bounded by the
@@ -943,7 +944,7 @@ def side_quests(user, limit=12, exclude_ids=()):
                 .order_by("-score", "target__name", "source__name")
                 .values_list("source_id", "target_id", "score")
             ):
-                if target_id in seed_set or target_id in blocked or target_id not in unseen:
+                if target_id in seed_set or target_id in blocked:
                     continue
                 second = math.log1p(score)
                 for seed_id, first in bridges[bridge_id].items():
