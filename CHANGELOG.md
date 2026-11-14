@@ -7,7 +7,7 @@ Improved, Infrastructure, Known issues, Incidents.
 ## v0.3.3: Nov 14, 2026
 **Infrastructure**
 - Your ratings, tags, watch history and requests are read through one door that always names whose they are. A deliberate total, such as a show's average rating, has to say so, and an automatic check fails the build if new code reads anyone's private data without naming the reader.
-- Shows you've already seen are left out the same way everywhere: Recently Added, genre pages, a show's recommendations, Watch Next and Side Quests.
+- Shows you've already seen are left out by one shared rule wherever they were left out before: the "You requested this" picks, genre pages, a show's recommendations, Watch Next and Side Quests.
 - The nightly job tells "TMDb has no such show" from "TMDb is down right now", so a brief outage never marks your request as failed.
 - The nightly job wakes the app through tvlens.org instead of the old app.tvlens.org address.
 - A test keeps the Django version in the README in step with the one the app installs.
