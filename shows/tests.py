@@ -68,6 +68,7 @@ from .recommenders import (
 )
 from .search import ParsedQuery, _episode_fts, _fts_query, _word
 from .search import search as run_search
+from .tmdb_client import NotFound, TMDBClient, Unavailable
 from .views import DETAIL_RECOMMENDATION_LIMIT
 
 
@@ -5176,15 +5177,14 @@ class ShowRequestTests(TestCase):
         from types import SimpleNamespace
         from unittest.mock import patch
 
-        def fake_get(url, timeout):
+        def fake_get(url, params=None, timeout=None):
             status, votes, *rest = statuses[int(url.rsplit("/", 1)[1])]
             body = {"vote_count": votes, "number_of_episodes": rest[0] if rest else 10}
-            return SimpleNamespace(status_code=status, ok=status < 400, json=lambda: body)
+            return FakeTMDbResponse(status, body)
 
         def fake_init(ingestor):
-            ingestor.client = SimpleNamespace(
-                base_url="https://tmdb", session=SimpleNamespace(get=fake_get)
-            )
+            ingestor.client = TMDBClient(api_key="test", base_url="https://tmdb")
+            ingestor.client.session = SimpleNamespace(get=fake_get)
 
         def fake_ingest(_self, tmdb_id):
             return Show.objects.create(tmdb_id=tmdb_id, name=f"Show {tmdb_id}")
@@ -5786,3 +5786,91 @@ class ReaderScopeCheckTests(SimpleTestCase):
     def test_the_pragma_waives_a_whole_statement(self):
         source = "x = list(  # reader-scope: ok\n    Tag.objects.filter(show_tags__show=s)\n)\n"
         self.assertEqual(self.flagged(source), [])
+
+
+class FakeTMDbResponse:
+    """Just enough of requests.Response for TMDBClient._get."""
+
+    def __init__(self, status, body=None):
+        self.status_code = status
+        self.headers = {}
+        self._body = body or {}
+
+    def raise_for_status(self):
+        import requests
+
+        if self.status_code >= 400:
+            raise requests.HTTPError(f"{self.status_code}")
+
+    def json(self):
+        return self._body
+
+
+class TMDBClientMissTests(TestCase):
+    """A 404 and an outage are different answers (REVIEW.md used to carry this
+    as a rule because _get returned None for both). Only NotFound is final."""
+
+    def client_answering(self, *answers):
+        from types import SimpleNamespace
+
+        calls = []
+
+        def get(url, params=None, timeout=None):
+            calls.append(url)
+            answer = answers[min(len(calls), len(answers)) - 1]
+            if isinstance(answer, Exception):
+                raise answer
+            return answer
+
+        client = TMDBClient(api_key="test", base_url="https://tmdb")
+        client.session = SimpleNamespace(get=get)
+        return client, calls
+
+    def setUp(self):
+        from unittest.mock import patch
+
+        patcher = patch("shows.tmdb_client.time.sleep")
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_a_404_is_not_found_at_once(self):
+        client, calls = self.client_answering(FakeTMDbResponse(404))
+        self.assertIs(client.get_tv_details(1), NotFound)
+        self.assertEqual(len(calls), 1)
+
+    def test_a_5xx_is_unavailable_after_the_retries(self):
+        client, calls = self.client_answering(FakeTMDbResponse(503))
+        self.assertIs(client.get_tv_details(1), Unavailable)
+        self.assertEqual(len(calls), 3)
+
+    def test_a_timeout_is_unavailable(self):
+        import requests
+
+        client, _ = self.client_answering(requests.Timeout("slow"))
+        self.assertIs(client.get_tv_details(1, retries=1), Unavailable)
+
+    def test_a_retry_that_succeeds_returns_the_data(self):
+        client, _ = self.client_answering(FakeTMDbResponse(502), FakeTMDbResponse(200, {"id": 1}))
+        self.assertEqual(client.get_tv_details(1), {"id": 1})
+
+    def test_both_misses_are_falsy_so_if_not_data_still_holds(self):
+        for miss in (NotFound, Unavailable):
+            with self.subTest(miss=miss):
+                self.assertFalse(miss)
+                self.assertEqual(miss.get("results", []), [])
+
+    def test_search_and_genres_read_a_miss_as_empty(self):
+        client, _ = self.client_answering(FakeTMDbResponse(500))
+        self.assertEqual(client.search_tv("severance"), [])
+        self.assertEqual(client.get_tv_genres(), [])
+
+    def test_an_outage_ingests_nothing_and_keeps_nothing(self):
+        """ingest_show on the real client: an unreachable TMDb is a no-op."""
+        from unittest.mock import patch
+
+        import requests
+
+        client, _ = self.client_answering(requests.ConnectionError("down"))
+        with patch("shows.ingestion.TMDBClient", return_value=client):
+            self.assertIsNone(Ingestor().ingest_show(1))
+        self.assertFalse(Show.objects.exists())

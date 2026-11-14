@@ -16,6 +16,31 @@ from django.conf import settings
 logger = logging.getLogger(__name__)
 
 
+class _Miss:
+    """A TMDb call that returned no data, and why. Falsy, so `if not data`
+    still means "nothing to use"; compare with `is` to learn whether to give up.
+    """
+
+    def __init__(self, name):
+        self.name = name
+
+    def __bool__(self):
+        return False
+
+    def __repr__(self):
+        return self.name
+
+    def get(self, key, default=None):
+        return default
+
+
+# TMDb answered 404: the id names nothing. Final; a request for it can fail.
+NotFound = _Miss("NotFound")
+# A timeout, a connection error, a 5xx, or rate limiting that outlasted the
+# retries: TMDb could not answer just now. Never final; try again tomorrow.
+Unavailable = _Miss("Unavailable")
+
+
 class TMDBClient:
     """Handles all HTTP communication with the TMDb API."""
 
@@ -28,11 +53,18 @@ class TMDBClient:
     # ── helpers ───────────────────────────────────────────────────────────
 
     def _get(self, endpoint, params=None, retries=3):
-        """GET with simple retry + back-off."""
+        """GET with simple retry + back-off.
+
+        Returns the decoded JSON, NotFound for a 404 (at once, no retry: the
+        answer will not change), or Unavailable once the retries run out on
+        anything else. Only NotFound means the thing does not exist.
+        """
         url = f"{self.base_url}{endpoint}"
         for attempt in range(retries):
             try:
                 resp = self.session.get(url, params=params, timeout=15)
+                if resp.status_code == 404:
+                    return NotFound
                 if resp.status_code == 429:
                     wait = int(resp.headers.get("Retry-After", 2))
                     logger.warning("TMDB rate-limited, waiting %ds", wait)
@@ -44,7 +76,7 @@ class TMDBClient:
                 logger.error("TMDB request failed (attempt %d): %s", attempt + 1, exc)
                 if attempt < retries - 1:
                     time.sleep(2**attempt)
-        return None
+        return Unavailable
 
     # ── public API ────────────────────────────────────────────────────────
 
@@ -76,11 +108,16 @@ class TMDBClient:
         data = self._get("/search/tv", {"query": query.strip()}) or {}
         return data.get("results", [])[:limit]
 
-    def get_tv_details(self, tv_id, append_to_response="credits,videos"):
-        """Full details for a single show including credits."""
+    def get_tv_details(self, tv_id, append_to_response="credits,videos", retries=3):
+        """Full details for a single show including credits.
+
+        append_to_response=None asks for the bare record (requests drops a None
+        parameter), which is all the nightly request check needs.
+        """
         return self._get(
             f"/tv/{tv_id}",
             params={"append_to_response": append_to_response},
+            retries=retries,
         )
 
     def get_tv_aggregate_credits(self, tv_id):

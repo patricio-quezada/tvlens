@@ -26,6 +26,7 @@ from django.core.management.base import BaseCommand
 
 from shows.ingestion import MIN_VOTE_COUNT, Ingestor
 from shows.models import Show, ShowRequest
+from shows.tmdb_client import NotFound, Unavailable
 
 # A requested show under the bulk floor is refused only when it is this long:
 # the daily soaps and news bulletins the floor was built to keep out.
@@ -67,18 +68,19 @@ class Command(BaseCommand):
         client = ingestor.client
         added = 0
         for tmdb_id in pending:
+            # One try, as before: a miss waits for tomorrow rather than
+            # stretching a step that runs ahead of the night's refresh.
             try:
-                resp = client.session.get(f"{client.base_url}/tv/{tmdb_id}", timeout=15)
+                data = client.get_tv_details(tmdb_id, append_to_response=None, retries=1)
             except Exception as exc:
                 self.stdout.write(self.style.WARNING(f"TMDb unreachable for {tmdb_id}: {exc}"))
                 continue
-            if resp.status_code == 404:
+            if data is NotFound:
                 self.fail(tmdb_id, "TMDb has no such show")
                 continue
-            if not resp.ok:
-                self.stdout.write(self.style.WARNING(f"TMDb {resp.status_code} for {tmdb_id}"))
+            if data is Unavailable or not data:
+                self.stdout.write(self.style.WARNING(f"TMDb unavailable for {tmdb_id}"))
                 continue
-            data = resp.json()
             votes = data.get("vote_count") or 0
             episodes = data.get("number_of_episodes") or 0
             if votes < MIN_VOTE_COUNT and episodes > MAX_LOW_VOTE_EPISODES:

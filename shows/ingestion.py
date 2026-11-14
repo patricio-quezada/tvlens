@@ -21,7 +21,7 @@ from .models import (
     Season,
     Show,
 )
-from .tmdb_client import TMDBClient
+from .tmdb_client import NotFound, TMDBClient
 
 # Below this, a show is a news bulletin, a soap, or a game show: thousands of
 # episode rows, a vote_count in the teens, and nothing the people graph can
@@ -99,7 +99,10 @@ class Ingestor:
         """Fetch full details for one show and upsert everything."""
         data = self.client.get_tv_details(tmdb_id)
         if not data:
-            logger.warning("No data for show %s", tmdb_id)
+            if data is NotFound:
+                logger.warning("TMDb has no show %s", tmdb_id)
+            else:
+                logger.warning("TMDb unavailable for show %s; it stays as it was", tmdb_id)
             return None
 
         # id IS the tmdb_id, deliberately. A BigAutoField records the order
